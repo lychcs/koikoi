@@ -3,6 +3,8 @@ koi-game/
 │   └── src/com/koigame/
 │       ├── KoiGame.java          # Game-Lifecycle & Asset-Manager
 │       ├── model/                # Reine Daten & Regeln (Headless testbar)
+│       │   ├── Season.java
+│       │   ├── Rank.java
 │       │   ├── Card.java         # Season, Rank, TextureRegion
 │       │   ├── Deck.java         # Ziehstapel, Ablagestapel, Shuffle
 │       │   ├── YakuDetector.java # Pattern-Matching Logik
@@ -17,4 +19,4 @@ koi-game/
 │       └── screens/              # Screens (MenuScreen, GameScreen, ShopScreen)
 ├── android/                      # Android-Launcher, AndroidManifest, Gradle
 ├── ios/                          # RoboVM-Konfiguration & iOS-Launcher
-└── desktop/                      # Desktop-Launcher (Für sofortiges Testen in IDE)
+└── lwjgl3/                      # Desktop-Launcher (Für sofortiges Testen in IDE)
