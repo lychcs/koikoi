@@ -1,0 +1,20 @@
+koi-game/
+├── core/                         # Gesamte Spiellogik & UI (Reines Java)
+│   └── src/com/koigame/
+│       ├── KoiGame.java          # Game-Lifecycle & Asset-Manager
+│       ├── model/                # Reine Daten & Regeln (Headless testbar)
+│       │   ├── Card.java         # Season, Rank, TextureRegion
+│       │   ├── Deck.java         # Ziehstapel, Ablagestapel, Shuffle
+│       │   ├── YakuDetector.java # Pattern-Matching Logik
+│       │   └── Talisman.java     # Modifikatoren & Event-Hooks
+│       ├── state/                # Zustandsverwaltung
+│       │   ├── GameState.java    # Pot, Score, Turns, Discards
+│       │   └── RunManager.java   # Blinds, Ante-Progression, Shop
+│       ├── ui/                   # libGDX Scene2D UI
+│       │   ├── CardActor.java    # Touch, Drag-to-Play, Animationen
+│       │   ├── HandGroup.java    # Fächer-Berechnung & Layout
+│       │   └── PotWidget.java    # Pulsierende Punkteanzeige
+│       └── screens/              # Screens (MenuScreen, GameScreen, ShopScreen)
+├── android/                      # Android-Launcher, AndroidManifest, Gradle
+├── ios/                          # RoboVM-Konfiguration & iOS-Launcher
+└── desktop/                      # Desktop-Launcher (Für sofortiges Testen in IDE)
