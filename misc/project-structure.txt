@@ -3,6 +3,8 @@ koi-game/
 │   └── src/com/koigame/
 │       ├── KoiGame.java          # Game-Lifecycle & Asset-Manager
 │       ├── model/                # Reine Daten & Regeln (Headless testbar)
+│       │   ├── Season.java
+│       │   ├── Rank.java
 │       │   ├── Card.java         # Season, Rank, TextureRegion
 │       │   ├── Deck.java         # Ziehstapel, Ablagestapel, Shuffle
 │       │   ├── YakuDetector.java # Pattern-Matching Logik
