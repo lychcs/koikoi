@@ -17,4 +17,4 @@ koi-game/
 │       └── screens/              # Screens (MenuScreen, GameScreen, ShopScreen)
 ├── android/                      # Android-Launcher, AndroidManifest, Gradle
 ├── ios/                          # RoboVM-Konfiguration & iOS-Launcher
-└── desktop/                      # Desktop-Launcher (Für sofortiges Testen in IDE)
+└── lwjgl3/                      # Desktop-Launcher (Für sofortiges Testen in IDE)
