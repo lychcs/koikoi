@@ -10,43 +10,38 @@ public class Deck {
         cards.clear();
 
         // === SPRING ===
-        addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm");
-        addCard(CardID.SPRING_BEAST_KOI, Season.SPRING, Rank.BEAST, "Koi");
-        addCard(CardID.SPRING_BEAST_CRANE, Season.SPRING, Rank.BEAST, "Crane");
-        addMultiple(CardID.SPRING_RIBBON_DEFAULT, Season.SPRING, Rank.RIBBON, "Spring Ribbon", 3);
-        addMultiple(CardID.SPRING_PETAL_DEFAULT, Season.SPRING, Rank.PETAL, "Spring Petal", 6);
+        addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm", 1);
+        addCard(CardID.SPRING_BEAST_KOI, Season.SPRING, Rank.BEAST, "Koi", 1);
+        addCard(CardID.SPRING_BEAST_CRANE, Season.SPRING, Rank.BEAST, "Crane", 1);
+        addCard(CardID.SPRING_RIBBON_DEFAULT, Season.SPRING, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.SPRING_PETAL_DEFAULT, Season.SPRING, Rank.PETAL, "Petal", 6);
 
         // === SUMMER ===
-        addCard(CardID.SUMMER_HIKARI_GLAZING_SUN, Season.SUMMER, Rank.HIKARI, "Glazing Sun");
-        addCard(CardID.SUMMER_BEAST_MOUNTAIN_MONKEY, Season.SUMMER, Rank.BEAST, "Mountain Monkey");
-        addCard(CardID.SUMMER_BEAST_SERPENT, Season.SUMMER, Rank.BEAST, "Serpent");
-        addMultiple(CardID.SUMMER_RIBBON_DEFAULT, Season.SUMMER, Rank.RIBBON, "Summer Ribbon", 3);
-        addMultiple(CardID.SUMMER_PETAL_DEFAULT, Season.SUMMER, Rank.PETAL, "Summer Petal", 6);
+        addCard(CardID.SUMMER_HIKARI_GLAZING_SUN, Season.SUMMER, Rank.HIKARI, "Glazing Sun", 1);
+        addCard(CardID.SUMMER_BEAST_MOUNTAIN_MONKEY, Season.SUMMER, Rank.BEAST, "Mountain Monkey", 1);
+        addCard(CardID.SUMMER_BEAST_SERPENT, Season.SUMMER, Rank.BEAST, "Serpent", 1);
+        addCard(CardID.SUMMER_RIBBON_DEFAULT, Season.SUMMER, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.SUMMER_PETAL_DEFAULT, Season.SUMMER, Rank.PETAL, "Petal", 6);
 
         // === AUTUMN ===
-        addCard(CardID.AUTUMN_HIKARI_RED_MOON, Season.AUTUMN, Rank.HIKARI, "Red Moon");
-        addCard(CardID.AUTUMN_BEAST_BOAR, Season.AUTUMN, Rank.BEAST, "Boar");
-        addCard(CardID.AUTUMN_BEAST_DEER, Season.AUTUMN, Rank.BEAST, "Deer");
-        addMultiple(CardID.AUTUMN_RIBBON_DEFAULT, Season.AUTUMN, Rank.RIBBON, "Autumn Ribbon", 3);
-        addMultiple(CardID.AUTUMN_PETAL_DEFAULT, Season.AUTUMN, Rank.PETAL, "Autumn Petal", 6);
+        addCard(CardID.AUTUMN_HIKARI_RED_MOON, Season.AUTUMN, Rank.HIKARI, "Red Moon", 1);
+        addCard(CardID.AUTUMN_BEAST_BOAR, Season.AUTUMN, Rank.BEAST, "Boar", 1);
+        addCard(CardID.AUTUMN_BEAST_DEER, Season.AUTUMN, Rank.BEAST, "Deer", 1);
+        addCard(CardID.AUTUMN_RIBBON_DEFAULT, Season.AUTUMN, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.AUTUMN_PETAL_DEFAULT, Season.AUTUMN, Rank.PETAL, "Petal", 6);
 
         // === WINTER ===
-        addCard(CardID.WINTER_HIKARI_POLAR_LIGHT, Season.WINTER, Rank.HIKARI, "Polar Light");
-        addCard(CardID.WINTER_BEAST_ARCTIC_FOX, Season.WINTER, Rank.BEAST, "Arctic Fox");
-        addCard(CardID.WINTER_BEAST_WHITE_OWL, Season.WINTER, Rank.BEAST, "White Owl");
-        addMultiple(CardID.WINTER_RIBBON_DEFAULT, Season.WINTER, Rank.RIBBON, "Winter Ribbon", 3);
-        addMultiple(CardID.WINTER_PETAL_DEFAULT, Season.WINTER, Rank.PETAL, "Winter Petal", 6);
+        addCard(CardID.WINTER_HIKARI_POLAR_LIGHT, Season.WINTER, Rank.HIKARI, "Polar Light", 1);
+        addCard(CardID.WINTER_BEAST_ARCTIC_FOX, Season.WINTER, Rank.BEAST, "Arctic Fox", 1);
+        addCard(CardID.WINTER_BEAST_WHITE_OWL, Season.WINTER, Rank.BEAST, "White Owl", 1);
+        addCard(CardID.WINTER_RIBBON_DEFAULT, Season.WINTER, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.WINTER_PETAL_DEFAULT, Season.WINTER, Rank.PETAL, "Petal", 6);
     }
 
-    // Hilfsmethode für einzigartige Einzelkarten (Hikari, Beast, Yami)
-    private void addCard(CardID id, Season season, Rank rank, String name) {
-        cards.add(new Card(id, season, rank, name));
-    }
-
-    // Hilfsmethode für Standardkarten (generiert das "#1", "#2" im Namen)
-    private void addMultiple(CardID id, Season season, Rank rank, String baseName, int count) {
+    // Hilfsmethode für Standardkarten
+    private void addCard(CardID id, Season season, Rank rank, String baseName, int count) {
         for (int i = 1; i <= count; i++) {
-            cards.add(new Card(id, season, rank, baseName + " #" + i));
+            cards.add(new Card(id, season, rank, season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i));
         }
     }
 

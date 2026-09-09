@@ -157,6 +157,11 @@ public class GameScreen extends ScreenAdapter {
     private void initUiElements() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
 
+        TooltipManager tooltipManager = TooltipManager.getInstance();
+        tooltipManager.initialTime = 0.2f;     // 0.2 Sekunden warten bis zum Aufploppen
+        tooltipManager.subsequentTime = 0.1f;  // Wenn man schnell von Karte zu Karte wischt
+
+        skin = new Skin(Gdx.files.internal("uiskin.json"));
         playButton = new TextButton("Play Hand", skin);
         discardButton = new TextButton("Discard", skin);
         koiKoiButton = new TextButton("KOI KOI!", skin);
@@ -438,6 +443,9 @@ public class GameScreen extends ScreenAdapter {
         for (Card card : playerHand) {
             TextureRegionDrawable image = getCardImage(card);
             Button cardView = (image != null) ? new ImageButton(image) : new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
+
+            TextTooltip tooltip = new TextTooltip(card.name(), skin);
+            cardView.addListener(tooltip);
 
             cardView.addListener(new ClickListener() {
                 @Override
