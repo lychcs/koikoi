@@ -112,7 +112,6 @@ public class GameScreen extends ScreenAdapter {
     // HILFSMETHODEN FÜR SPIELLOGIK
     // =========================================================================
 
-    // NEU: Startet einen komplett neuen Boss-Kampf (Resettet Score, Hands, Discards)
     private void startEncounter() {
         currentRoundScore = 0;
         discardsRemaining = maxDiscards;
@@ -126,7 +125,6 @@ public class GameScreen extends ScreenAdapter {
         resetBoardAfterBank();
     }
 
-    // NEU: Setzt nur das Deck und den Tisch zurück (wird nach "Bank" aufgerufen)
     private void resetBoardAfterBank() {
         deck.initializeDeck();
         Collections.shuffle(deck.getCards());
@@ -273,6 +271,15 @@ public class GameScreen extends ScreenAdapter {
         ScreenUtils.clear(0.15f, 0.17f, 0.21f, 1f);
         stage.act(delta);
         stage.draw();
+    }
+
+    // =========================================================================
+    // FENSTER-SKALIERUNG (Für Vollbildmodus & Resizing)
+    // =========================================================================
+
+    @Override
+    public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
     }
 
     // =========================================================================
