@@ -7,35 +7,34 @@ public final class ScoreCalculator {
     private ScoreCalculator() {}
 
     public static CalculationBreakdown calculate(ScoreContext context) {
-        // Sicherer Abruf über den Context (verhindert NPE, falls bestYaku null ist)
         int yakuChips = context.getYakuBaseChips();
         int yakuBaseMult = context.getYakuBaseMult();
         String yakuName = context.bestYaku() != null ? context.bestYaku().type().getDisplayName() : "High Card";
 
-        // 1. Base Setup
-        int startingChips = context.floatingBank() + yakuChips;
-        int startingMult = Math.max(1, yakuBaseMult); // Fallback auf 1
+        // 1. Base Setup (NEU: floatingBank wird hier NICHT mehr reingemischt!)
+        int startingChips = yakuChips;
+        int startingMult = Math.max(1, yakuBaseMult);
 
         ScoreAccumulator acc = new ScoreAccumulator(startingChips, startingMult);
-        acc.addChips("Base " + yakuName, 0); // Initiales Event fürs UI
+        acc.addChips("Base " + yakuName, 0);
 
-        // 2. Card Effects (effectMult / Foil etc.)
+        // 2. Card Effects (Foil etc.)
         for (var card : context.hand().getAllCards()) {
-            // Platzhalter für Editionen
         }
 
-        // 3. Omamori (Joker) Evaluierung (Left-to-Right)
+        // 3. Omamori (Joker) Evaluierung
         for (var omamori : context.omamoris()) {
             omamori.evaluate(context.hand(), acc);
         }
 
-        // 4. Koi-Koi Push-Your-Luck Multiplikator
+        // 4. Koi-Koi Push-Your-Luck Multiplikator (Wirkt nur noch auf DIESE Hand!)
         if (context.koiKoiMult() > 1.0) {
             acc.multiplyMult("Koi-Koi Risk", context.koiKoiMult());
         }
 
-        // 5. Final Payout
-        long finalPayout = (long) acc.getChips() * acc.getMult();
+        // 5. Final Payout (NEU: floatingBank wird erst ganz am Ende addiert)
+        long handPayout = (long) acc.getChips() * acc.getMult();
+        long finalPayout = context.floatingBank() + handPayout;
 
         return new CalculationBreakdown(
             context.floatingBank(),
