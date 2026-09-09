@@ -8,7 +8,6 @@ buildscript {
   }
   dependencies {
 
-
   }
 }
 
@@ -68,3 +67,9 @@ subprojects {
 }
 
 eclipse.project.name = 'koikoi' + '-parent'
+
+project(":lwjgl3") {
+  dependencies {
+    implementation "com.badlogicgames.gdx:gdx-tools:$gdxVersion"
+  }
+}

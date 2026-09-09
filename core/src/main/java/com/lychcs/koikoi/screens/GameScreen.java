@@ -4,6 +4,8 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.TextureAtlas;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
@@ -80,6 +82,7 @@ public class GameScreen extends ScreenAdapter {
     // =========================================================================
     private final Stage stage;
     private Skin skin;
+    private TextureAtlas atlas;
     private final Map<String, TextureRegionDrawable> cardTextures = new HashMap<>();
 
     private Table omamoriTable;
@@ -101,6 +104,11 @@ public class GameScreen extends ScreenAdapter {
     public GameScreen() {
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
         this.deck = new Deck();
+
+        this.atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
+        for (Texture tex : atlas.getTextures()) {
+            tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        }
 
         initUiElements();
         startEncounter();
@@ -319,22 +327,18 @@ public class GameScreen extends ScreenAdapter {
         String fileName = card.id().name();
 
         if (!cardTextures.containsKey(fileName)) {
-            FileHandle file = Gdx.files.internal("cards/" + fileName + ".png");
-            if (!file.exists()) {
-                file = Gdx.files.internal("assets/cards/" + fileName + ".png");
-            }
+            // NEU: Region aus dem Atlas holen!
+            TextureRegion region = atlas.findRegion(fileName);
 
-            if (file.exists()) {
-                Texture tex = new Texture(file);
-                tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-                cardTextures.put(fileName, new TextureRegionDrawable(tex));
+            if (region != null) {
+                cardTextures.put(fileName, new TextureRegionDrawable(region));
             } else {
+                System.out.println("WARNUNG: Textur nicht im Atlas gefunden: " + fileName);
                 return null;
             }
         }
         return cardTextures.get(fileName);
     }
-
     // =========================================================================
     // GAMEPLAY LOGIK
     // =========================================================================
@@ -481,18 +485,39 @@ public class GameScreen extends ScreenAdapter {
         omamoriTable.clearChildren();
 
         for (Omamori omamori : activeOmamoris) {
-            TextButton omamoriView = new TextButton(omamori.getName(), skin);
+            // 1. Automatische Namensgenerierung!
+            // Holt den Klassennamen (z.B. "InoshishiTusk" oder "TeruTeruBozu")
+            String className = omamori.getClass().getSimpleName();
+
+            // Macht aus "InoshishiTusk" -> "INOSHISHI_TUSK" und hängt "OMAMORI_" davor
+            String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
+            String regionName = "OMAMORI_" + snakeCaseName;
+
+            // 2. Region aus dem Atlas abrufen
+            TextureRegion region = atlas.findRegion(regionName);
+
+            Actor omamoriView;
+            if (region != null) {
+                omamoriView = new Image(region);
+            } else {
+                System.out.println("WARNUNG: Omamori-Textur nicht im Atlas gefunden: " + regionName);
+                omamoriView = new TextButton(omamori.getName(), skin); // Fallback
+            }
+
+            // 3. Tooltip und Animation hinzufügen
+            TextTooltip tooltip = new TextTooltip(omamori.getName(), skin);
+            omamoriView.addListener(tooltip);
+
             omamoriView.addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     triggerPunchAnimation(omamoriView);
                 }
             });
-            omamoriTable.add(omamoriView).width(100).height(150).pad(10);
-        }
-    }
 
-    private void updateLivePreview() {
+            omamoriTable.add(omamoriView).width(96).height(128).pad(10);
+        }
+    }    private void updateLivePreview() {
         HandContext hand = new HandContext(selectedCards);
         YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
 
@@ -584,11 +609,9 @@ public class GameScreen extends ScreenAdapter {
     public void dispose() {
         stage.dispose();
         if (skin != null) skin.dispose();
-        for (TextureRegionDrawable drawable : cardTextures.values()) {
-            if (drawable.getRegion() != null && drawable.getRegion().getTexture() != null) {
-                drawable.getRegion().getTexture().dispose();
-            }
-        }
+
+        if (atlas != null) atlas.dispose();
+
         cardTextures.clear();
     }
 }
