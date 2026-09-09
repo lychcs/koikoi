@@ -1,4 +1,4 @@
-package com.lychcs.koikoi;
+package com.lychcs.koikoi.screens;
 
 import com.badlogic.gdx.Screen;
 

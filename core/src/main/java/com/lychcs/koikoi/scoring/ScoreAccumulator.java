@@ -37,5 +37,3 @@ public class ScoreAccumulator {
     public List<ScoringEvent> getEvents() { return events; }
 }
 
-// Event-Log für JavaFX (Wer hat wann was gemacht?)
-record ScoringEvent(String sourceName, int addedChips, int addedMult, double xMult) {}

@@ -17,7 +17,7 @@ public final class HandContext {
     private final Set<CardID> cardIds = EnumSet.noneOf(CardID.class);
     private final List<Card> allCards;
 
-    HandContext(List<Card> cards) {
+    public HandContext(List<Card> cards) {
         this.allCards = List.copyOf(cards);
 
         // Pre-fill bucket collections to avoid null checks later
