@@ -13,14 +13,13 @@ public class Deck {
         addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm");
         addCard(CardID.SPRING_BEAST_KOI, Season.SPRING, Rank.BEAST, "Koi");
         addCard(CardID.SPRING_BEAST_CRANE, Season.SPRING, Rank.BEAST, "Crane");
-        // addCard(CardID.SPRING_OFUDA_GENKAKU, Season.SPRING, Rank.OFUDA, "Ofuda Genkaku"); // (Einkommentieren, falls Ofuda genutzt wird)
         addMultiple(CardID.SPRING_RIBBON_DEFAULT, Season.SPRING, Rank.RIBBON, "Spring Ribbon", 3);
         addMultiple(CardID.SPRING_PETAL_DEFAULT, Season.SPRING, Rank.PETAL, "Spring Petal", 6);
 
         // === SUMMER ===
         addCard(CardID.SUMMER_HIKARI_GLAZING_SUN, Season.SUMMER, Rank.HIKARI, "Glazing Sun");
-        addCard(CardID.SUMMER_BEAST_BUTTERFLY, Season.SUMMER, Rank.BEAST, "Butterfly");
-        addCard(CardID.SUMMER_BEAST_CICADA, Season.SUMMER, Rank.BEAST, "Cicada");
+        addCard(CardID.SUMMER_BEAST_MOUNTAIN_MONKEY, Season.SUMMER, Rank.BEAST, "Mountain Monkey");
+        addCard(CardID.SUMMER_BEAST_SERPENT, Season.SUMMER, Rank.BEAST, "Serpent");
         addMultiple(CardID.SUMMER_RIBBON_DEFAULT, Season.SUMMER, Rank.RIBBON, "Summer Ribbon", 3);
         addMultiple(CardID.SUMMER_PETAL_DEFAULT, Season.SUMMER, Rank.PETAL, "Summer Petal", 6);
 
@@ -32,13 +31,10 @@ public class Deck {
         addMultiple(CardID.AUTUMN_PETAL_DEFAULT, Season.AUTUMN, Rank.PETAL, "Autumn Petal", 6);
 
         // === WINTER ===
-        // Wenn du YAMI als eigenen Rang im Rank-Enum hast:
-        addCard(CardID.WINTER_YAMI_YUKI_ONNA, Season.WINTER, Rank.YAMI, "Yuki Onna");
         addCard(CardID.WINTER_HIKARI_POLAR_LIGHT, Season.WINTER, Rank.HIKARI, "Polar Light");
         addCard(CardID.WINTER_BEAST_ARCTIC_FOX, Season.WINTER, Rank.BEAST, "Arctic Fox");
         addCard(CardID.WINTER_BEAST_WHITE_OWL, Season.WINTER, Rank.BEAST, "White Owl");
-        // Wir ziehen hier ein Ribbon ab, um Platz für die Yami-Karte zu machen (damit es 12 Karten bleiben)
-        addMultiple(CardID.WINTER_RIBBON_DEFAULT, Season.WINTER, Rank.RIBBON, "Winter Ribbon", 2);
+        addMultiple(CardID.WINTER_RIBBON_DEFAULT, Season.WINTER, Rank.RIBBON, "Winter Ribbon", 3);
         addMultiple(CardID.WINTER_PETAL_DEFAULT, Season.WINTER, Rank.PETAL, "Winter Petal", 6);
     }
 
