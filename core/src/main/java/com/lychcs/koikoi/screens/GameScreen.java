@@ -48,6 +48,7 @@ public class GameScreen extends ScreenAdapter {
     private static final float CARD_SELECT_OFFSET_Y = 20f;
     private static final float ANIMATION_SPEED = 0.1f;
     private static final int INITIAL_MAX_DISCARDS = 3;
+    private static final int INITIAL_MAX_HANDS = 4;
 
     // =========================================================================
     // 2. SPIEL-ZUSTAND (Model/State)
@@ -62,9 +63,11 @@ public class GameScreen extends ScreenAdapter {
     private int floatingBank = 0;
     private double currentKoiKoiMult = 1.0;
 
-    //Discard-Tracking Variablen
+    // Limits
     private int maxDiscards = INITIAL_MAX_DISCARDS;
     private int discardsRemaining = maxDiscards;
+    private int maxHands = INITIAL_MAX_HANDS;
+    private int handsRemaining = maxHands;
 
     // =========================================================================
     // 3. UI-ELEMENTE & RESSOURCEN (View)
@@ -73,16 +76,20 @@ public class GameScreen extends ScreenAdapter {
     private Skin skin;
     private final Map<String, TextureRegionDrawable> cardTextures = new HashMap<>();
     private final Map<String, Actor> actorRegistry = new HashMap<>();
-
+    private Table omamoriTable;
     private Table handTable;
     private TextButton playButton;
     private TextButton discardButton;
     private TextButton koiKoiButton;
     private TextButton bankButton;
+
     private Label chipsLabel;
     private Label multLabel;
     private Label floatingBankLabel;
     private Label discardLabel;
+    private Label handsLabel;
+    private Label yakuNameLabel;
+    private Label koiKoiMultLabel;
 
     public GameScreen() {
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
@@ -91,6 +98,7 @@ public class GameScreen extends ScreenAdapter {
         initUiElements();
         startNewRound();
         dealCardsToUI();
+        renderOmamoris();
     }
 
     // =========================================================================
@@ -104,9 +112,14 @@ public class GameScreen extends ScreenAdapter {
         playerHand.clear();
         selectedCards.clear();
 
-        // refill discards
+        // Limits zurücksetzen
         discardsRemaining = maxDiscards;
+        handsRemaining = maxHands;
+
+        // UI aktualisieren
         if (discardLabel != null) discardLabel.setText("Discards: " + discardsRemaining);
+        if (handsLabel != null) handsLabel.setText("Hands: " + handsRemaining);
+        if (koiKoiMultLabel != null) koiKoiMultLabel.setText("Koi-Mult: " + currentKoiKoiMult + "x");
 
         drawCardsToHand(MAX_HAND_SIZE);
     }
@@ -184,25 +197,46 @@ public class GameScreen extends ScreenAdapter {
         multLabel = new Label("0", skin);
         floatingBankLabel = new Label("Pot: 0", skin);
         discardLabel = new Label("Discards: " + discardsRemaining, skin);
+        handsLabel = new Label("Hands: " + handsRemaining, skin);
+        koiKoiMultLabel = new Label("Koi-Mult: " + currentKoiKoiMult + "x", skin);
 
         chipsLabel.setFontScale(2f);
         multLabel.setFontScale(2f);
         floatingBankLabel.setFontScale(1.5f);
         discardLabel.setFontScale(1.5f);
+        handsLabel.setFontScale(1.5f);
+        koiKoiMultLabel.setFontScale(1.5f);
+
+        yakuNameLabel = new Label("", skin);
+        yakuNameLabel.setFontScale(1.5f);
 
         Table topTable = new Table();
         topTable.setFillParent(true);
         topTable.top().padTop(50);
 
+        // Reihe 1: Chips und Mult
         topTable.add(chipsLabel).padRight(20);
         topTable.add(new Label(" X ", skin)).padRight(20);
         topTable.add(multLabel);
+
+        topTable.row().padTop(5);
+        topTable.add(yakuNameLabel).colspan(3).center();
+
         topTable.row().padTop(20);
-        topTable.add(floatingBankLabel).colspan(2).padRight(20);
-        topTable.add(discardLabel).colspan(1);
+
+        // Reihe 2: HUD Anzeige (Hands -> Discards -> Pot -> Koi-Mult)
+        topTable.add(handsLabel).padRight(20);
+        topTable.add(discardLabel).padRight(20);
+        topTable.add(floatingBankLabel).padRight(20);
+        topTable.add(koiKoiMultLabel);
 
         stage.addActor(topTable);
         stage.addActor(table);
+
+        omamoriTable = new Table();
+        omamoriTable.setFillParent(true);
+        omamoriTable.top().padTop(130);
+        stage.addActor(omamoriTable);
 
         handTable = new Table();
         handTable.setFillParent(true);
@@ -254,60 +288,92 @@ public class GameScreen extends ScreenAdapter {
     // =========================================================================
 
     public void onPlayHandSubmitted() {
-        if (currentState != GameState.WAITING_FOR_INPUT || selectedCards.isEmpty()) return;
+        if (currentState != GameState.WAITING_FOR_INPUT || selectedCards.isEmpty() || handsRemaining <= 0) return;
 
-        currentState = GameState.SCORING_ANIMATION;
+        // 1. Zähler verringern (Spielen kostet immer eine Hand)
+        handsRemaining--;
+        handsLabel.setText("Hands: " + handsRemaining);
 
-        HandContext hand = new HandContext(selectedCards);
         YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
+
+        // 2. BUST-LOGIK: Wenn es kein Yaku ist
+        if (bestYaku == null) {
+            System.out.println("Bust! Kein Yaku gefunden. Pot geht verloren.");
+
+            floatingBank = 0;
+            currentKoiKoiMult = 1.0;
+
+            floatingBankLabel.setText("Pot: 0");
+            koiKoiMultLabel.setText("Koi-Mult: 1.0x");
+
+            playerHand.removeAll(selectedCards);
+            selectedCards.clear();
+
+            if (handsRemaining <= 0) {
+                onBankClicked();
+            } else {
+                drawCardsToHand(MAX_HAND_SIZE);
+                resetUiForNextTurn();
+            }
+            return;
+        }
+
+        // 3. Wenn es ein Yaku ist: Normal abrechnen
+        currentState = GameState.SCORING_ANIMATION;
+        HandContext hand = new HandContext(selectedCards);
         ScoreContext context = new ScoreContext(floatingBank, hand, bestYaku, activeOmamoris, currentKoiKoiMult);
         CalculationBreakdown breakdown = ScoreCalculator.calculate(context);
 
+        playerHand.removeAll(selectedCards);
+        selectedCards.clear();
+        drawCardsToHand(MAX_HAND_SIZE); // Zieht vom restlichen Deck nach
+        dealCardsToUI();
+        updateLivePreview();
+        // ------------------------------------------------------------------
+
         playScoringSequence(breakdown);
     }
-
     private void onDiscardClicked() {
-        // Nichts tun, wenn gerade abgerechnet wird, nichts ausgewählt ist, oder keine Discards mehr übrig sind
         if (currentState != GameState.WAITING_FOR_INPUT || selectedCards.isEmpty() || discardsRemaining <= 0) {
             return;
         }
 
-        // 1. Zähler verringern & UI aktualisieren
         discardsRemaining--;
         discardLabel.setText("Discards: " + discardsRemaining);
 
-        // 2. Karten aus der Hand entfernen
         playerHand.removeAll(selectedCards);
         selectedCards.clear();
 
-        // 3. Hand wieder auffüllen, Karten neu rendern und Preview auf resetten
         drawCardsToHand(MAX_HAND_SIZE);
         dealCardsToUI();
         updateLivePreview();
     }
 
     private void onBankClicked() {
-        if (currentState != GameState.KOI_KOI_DECISION) return;
+        if (currentState != GameState.KOI_KOI_DECISION && currentState != GameState.WAITING_FOR_INPUT) return;
 
         totalRunScore += floatingBank;
         System.out.println("Neuer Gesamt-Score: " + totalRunScore);
 
         floatingBank = 0;
         currentKoiKoiMult = 1.0;
-        floatingBankLabel.setText("Pot: 0");
 
-        startNewRound(); // Füllt jetzt auch die Discards wieder auf
+        floatingBankLabel.setText("Pot: 0");
+        koiKoiMultLabel.setText("Koi-Mult: 1.0x");
+
+        startNewRound();
         resetUiForNextTurn();
     }
 
     private void onKoiKoiClicked() {
         if (currentState != GameState.KOI_KOI_DECISION) return;
 
+        // Mult erhöhen
         currentKoiKoiMult += 1.0;
-        playerHand.removeAll(selectedCards);
-        selectedCards.clear();
+        koiKoiMultLabel.setText("Koi-Mult: " + currentKoiKoiMult + "x");
 
-        drawCardsToHand(MAX_HAND_SIZE);
+        // Die gespielten Karten wurden schon entfernt und nachgezogen!
+        // Wir müssen hier nur das UI zurücksetzen und den State ändern.
         resetUiForNextTurn();
     }
 
@@ -345,6 +411,26 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
+    private void renderOmamoris() {
+        omamoriTable.clearChildren();
+
+        for (Omamori omamori : activeOmamoris) {
+            // Später laden wir hier natürlich echte Bilder für die Omamoris!
+            // Für den Anfang nehmen wir einen TextButton.
+            TextButton omamoriView = new TextButton(omamori.getName(), skin);
+
+            // Ein Omamori wackelt z.B., wenn man drauf klickt
+            omamoriView.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    triggerPunchAnimation(omamoriView);
+                }
+            });
+
+            omamoriTable.add(omamoriView).width(100).height(150).pad(10);
+        }
+    }
+
     private void updateLivePreview() {
         HandContext hand = new HandContext(selectedCards);
         YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
@@ -353,14 +439,29 @@ public class GameScreen extends ScreenAdapter {
         chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
         multLabel.setText(String.valueOf(previewCtx.getYakuBaseMult()));
 
-        // Optisches Feedback: Den Discard-Knopf ausgrauen, wenn man nicht abwerfen kann
-        if (selectedCards.isEmpty() || discardsRemaining <= 0) {
-            discardButton.getColor().a = 0.5f; // Halb transparent
+        if (selectedCards.isEmpty()) {
+            yakuNameLabel.setText(""); // Nichts ausgewählt
+        } else if (bestYaku != null) {
+            // Zeigt den Namen des Yakus an
+            yakuNameLabel.setText(bestYaku.type().getDisplayName());
         } else {
-            discardButton.getColor().a = 1.0f; // Voll sichtbar
+            yakuNameLabel.setText("");
+        }
+        // ---------------------------------
+
+        // Optisches Feedback für die Knöpfe
+        if (selectedCards.isEmpty() || discardsRemaining <= 0) {
+            discardButton.getColor().a = 0.5f;
+        } else {
+            discardButton.getColor().a = 1.0f;
+        }
+
+        if (selectedCards.isEmpty() || handsRemaining <= 0) {
+            playButton.getColor().a = 0.5f;
+        } else {
+            playButton.getColor().a = 1.0f;
         }
     }
-
     private void playScoringSequence(CalculationBreakdown breakdown) {
         var sequence = Actions.sequence();
         final int[] currentChips = { breakdown.yakuChips() };
@@ -368,7 +469,7 @@ public class GameScreen extends ScreenAdapter {
 
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
-            discardButton.getColor().a = 0f; // NEU: Discard Knopf in der Animation verstecken
+            discardButton.getColor().a = 0f;
             chipsLabel.setText(String.valueOf(currentChips[0]));
             multLabel.setText(String.valueOf(currentMult[0]));
         }));
@@ -403,8 +504,31 @@ public class GameScreen extends ScreenAdapter {
 
     private void enterKoiKoiDecision() {
         currentState = GameState.KOI_KOI_DECISION;
+        if (handsRemaining <= 0) {
+            onBankClicked();
+            return;
+        }
+
         koiKoiButton.getColor().a = 1f;
         bankButton.getColor().a = 1f;
+    }
+
+    private void triggerPunchAnimation(Actor actor) {
+        // Den Mittelpunkt für die Drehung und Skalierung setzen
+        actor.setOrigin(actor.getWidth() / 2f, actor.getHeight() / 2f);
+        actor.clearActions();
+
+        // Die Wackel-Animation
+        actor.addAction(Actions.sequence(
+            Actions.parallel(
+                Actions.scaleTo(1.25f, 1.25f, 0.08f, Interpolation.fastSlow),
+                Actions.rotateBy(4f, 0.08f)
+            ),
+            Actions.parallel(
+                Actions.scaleTo(1.0f, 1.0f, 0.15f, Interpolation.bounceOut),
+                Actions.rotateTo(0f, 0.15f)
+            )
+        ));
     }
 
     // =========================================================================
@@ -414,11 +538,7 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void dispose() {
         stage.dispose();
-
-        if (skin != null) {
-            skin.dispose();
-        }
-
+        if (skin != null) skin.dispose();
         for (TextureRegionDrawable drawable : cardTextures.values()) {
             if (drawable.getRegion() != null && drawable.getRegion().getTexture() != null) {
                 drawable.getRegion().getTexture().dispose();
