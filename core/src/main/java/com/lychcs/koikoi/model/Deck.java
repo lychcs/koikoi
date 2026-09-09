@@ -13,29 +13,29 @@ public class Deck {
         addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm", 1);
         addCard(CardID.SPRING_BEAST_KOI, Season.SPRING, Rank.BEAST, "Koi", 1);
         addCard(CardID.SPRING_BEAST_CRANE, Season.SPRING, Rank.BEAST, "Crane", 1);
-        addCard(CardID.SPRING_RIBBON_DEFAULT, Season.SPRING, Rank.RIBBON, "Ribbon", 3);
-        addCard(CardID.SPRING_PETAL_DEFAULT, Season.SPRING, Rank.PETAL, "Petal", 6);
+        addCard(CardID.SPRING_RIBBON, Season.SPRING, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.SPRING_PETAL, Season.SPRING, Rank.PETAL, "Petal", 6);
 
         // === SUMMER ===
         addCard(CardID.SUMMER_HIKARI_GLAZING_SUN, Season.SUMMER, Rank.HIKARI, "Glazing Sun", 1);
         addCard(CardID.SUMMER_BEAST_MOUNTAIN_MONKEY, Season.SUMMER, Rank.BEAST, "Mountain Monkey", 1);
         addCard(CardID.SUMMER_BEAST_SERPENT, Season.SUMMER, Rank.BEAST, "Serpent", 1);
-        addCard(CardID.SUMMER_RIBBON_DEFAULT, Season.SUMMER, Rank.RIBBON, "Ribbon", 3);
-        addCard(CardID.SUMMER_PETAL_DEFAULT, Season.SUMMER, Rank.PETAL, "Petal", 6);
+        addCard(CardID.SUMMER_RIBBON, Season.SUMMER, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.SUMMER_PETAL, Season.SUMMER, Rank.PETAL, "Petal", 6);
 
         // === AUTUMN ===
         addCard(CardID.AUTUMN_HIKARI_RED_MOON, Season.AUTUMN, Rank.HIKARI, "Red Moon", 1);
         addCard(CardID.AUTUMN_BEAST_BOAR, Season.AUTUMN, Rank.BEAST, "Boar", 1);
         addCard(CardID.AUTUMN_BEAST_DEER, Season.AUTUMN, Rank.BEAST, "Deer", 1);
-        addCard(CardID.AUTUMN_RIBBON_DEFAULT, Season.AUTUMN, Rank.RIBBON, "Ribbon", 3);
-        addCard(CardID.AUTUMN_PETAL_DEFAULT, Season.AUTUMN, Rank.PETAL, "Petal", 6);
+        addCard(CardID.AUTUMN_RIBBON, Season.AUTUMN, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.AUTUMN_PETAL, Season.AUTUMN, Rank.PETAL, "Petal", 6);
 
         // === WINTER ===
         addCard(CardID.WINTER_HIKARI_POLAR_LIGHT, Season.WINTER, Rank.HIKARI, "Polar Light", 1);
         addCard(CardID.WINTER_BEAST_ARCTIC_FOX, Season.WINTER, Rank.BEAST, "Arctic Fox", 1);
         addCard(CardID.WINTER_BEAST_WHITE_OWL, Season.WINTER, Rank.BEAST, "White Owl", 1);
-        addCard(CardID.WINTER_RIBBON_DEFAULT, Season.WINTER, Rank.RIBBON, "Ribbon", 3);
-        addCard(CardID.WINTER_PETAL_DEFAULT, Season.WINTER, Rank.PETAL, "Petal", 6);
+        addCard(CardID.WINTER_RIBBON, Season.WINTER, Rank.RIBBON, "Ribbon", 3);
+        addCard(CardID.WINTER_PETAL, Season.WINTER, Rank.PETAL, "Petal", 6);
     }
 
     // Hilfsmethode für Standardkarten
