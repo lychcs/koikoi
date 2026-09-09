@@ -47,9 +47,10 @@ public class GameScreen extends ScreenAdapter {
     private static final float CARD_HEIGHT = 192f;
     private static final float CARD_SELECT_OFFSET_Y = 20f;
     private static final float ANIMATION_SPEED = 0.1f;
+    private static final int INITIAL_MAX_DISCARDS = 3;
 
     // =========================================================================
-    // 2. GAME-STATE
+    // 2. SPIEL-ZUSTAND (Model/State)
     // =========================================================================
     private final Deck deck;
     private final List<Card> playerHand = new ArrayList<>();
@@ -61,6 +62,10 @@ public class GameScreen extends ScreenAdapter {
     private int floatingBank = 0;
     private double currentKoiKoiMult = 1.0;
 
+    //Discard-Tracking Variablen
+    private int maxDiscards = INITIAL_MAX_DISCARDS;
+    private int discardsRemaining = maxDiscards;
+
     // =========================================================================
     // 3. UI-ELEMENTE & RESSOURCEN (View)
     // =========================================================================
@@ -71,20 +76,19 @@ public class GameScreen extends ScreenAdapter {
 
     private Table handTable;
     private TextButton playButton;
+    private TextButton discardButton;
     private TextButton koiKoiButton;
     private TextButton bankButton;
     private Label chipsLabel;
     private Label multLabel;
     private Label floatingBankLabel;
-
+    private Label discardLabel;
 
     public GameScreen() {
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
         this.deck = new Deck();
 
         initUiElements();
-
-        // Nutzt jetzt die neue DRY-Hilfsmethode
         startNewRound();
         dealCardsToUI();
     }
@@ -100,6 +104,10 @@ public class GameScreen extends ScreenAdapter {
         playerHand.clear();
         selectedCards.clear();
 
+        // refill discards
+        discardsRemaining = maxDiscards;
+        if (discardLabel != null) discardLabel.setText("Discards: " + discardsRemaining);
+
         drawCardsToHand(MAX_HAND_SIZE);
     }
 
@@ -113,6 +121,7 @@ public class GameScreen extends ScreenAdapter {
         koiKoiButton.getColor().a = 0f;
         bankButton.getColor().a = 0f;
         playButton.getColor().a = 1f;
+        discardButton.getColor().a = 1f;
 
         dealCardsToUI();
         updateLivePreview();
@@ -127,8 +136,9 @@ public class GameScreen extends ScreenAdapter {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
 
         playButton = new TextButton("Play Hand", skin);
+        discardButton = new TextButton("Discard", skin);
         koiKoiButton = new TextButton("KOI KOI!", skin);
-        bankButton = new TextButton("Bank (Shobu)", skin);
+        bankButton = new TextButton("Bank", skin);
 
         koiKoiButton.getColor().a = 0f;
         bankButton.getColor().a = 0f;
@@ -137,6 +147,13 @@ public class GameScreen extends ScreenAdapter {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 onPlayHandSubmitted();
+            }
+        });
+
+        discardButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                onDiscardClicked();
             }
         });
 
@@ -157,17 +174,21 @@ public class GameScreen extends ScreenAdapter {
         Table table = new Table();
         table.setFillParent(true);
         table.bottom().padBottom(50);
+
         table.add(playButton).width(200).height(60).pad(10);
+        table.add(discardButton).width(200).height(60).pad(10);
         table.add(koiKoiButton).width(200).height(60).pad(10);
         table.add(bankButton).width(200).height(60).pad(10);
 
         chipsLabel = new Label("0", skin);
         multLabel = new Label("0", skin);
         floatingBankLabel = new Label("Pot: 0", skin);
+        discardLabel = new Label("Discards: " + discardsRemaining, skin);
 
         chipsLabel.setFontScale(2f);
         multLabel.setFontScale(2f);
         floatingBankLabel.setFontScale(1.5f);
+        discardLabel.setFontScale(1.5f);
 
         Table topTable = new Table();
         topTable.setFillParent(true);
@@ -177,7 +198,8 @@ public class GameScreen extends ScreenAdapter {
         topTable.add(new Label(" X ", skin)).padRight(20);
         topTable.add(multLabel);
         topTable.row().padTop(20);
-        topTable.add(floatingBankLabel).colspan(3);
+        topTable.add(floatingBankLabel).colspan(2).padRight(20);
+        topTable.add(discardLabel).colspan(1);
 
         stage.addActor(topTable);
         stage.addActor(table);
@@ -244,6 +266,26 @@ public class GameScreen extends ScreenAdapter {
         playScoringSequence(breakdown);
     }
 
+    private void onDiscardClicked() {
+        // Nichts tun, wenn gerade abgerechnet wird, nichts ausgewählt ist, oder keine Discards mehr übrig sind
+        if (currentState != GameState.WAITING_FOR_INPUT || selectedCards.isEmpty() || discardsRemaining <= 0) {
+            return;
+        }
+
+        // 1. Zähler verringern & UI aktualisieren
+        discardsRemaining--;
+        discardLabel.setText("Discards: " + discardsRemaining);
+
+        // 2. Karten aus der Hand entfernen
+        playerHand.removeAll(selectedCards);
+        selectedCards.clear();
+
+        // 3. Hand wieder auffüllen, Karten neu rendern und Preview auf resetten
+        drawCardsToHand(MAX_HAND_SIZE);
+        dealCardsToUI();
+        updateLivePreview();
+    }
+
     private void onBankClicked() {
         if (currentState != GameState.KOI_KOI_DECISION) return;
 
@@ -254,7 +296,7 @@ public class GameScreen extends ScreenAdapter {
         currentKoiKoiMult = 1.0;
         floatingBankLabel.setText("Pot: 0");
 
-        startNewRound();
+        startNewRound(); // Füllt jetzt auch die Discards wieder auf
         resetUiForNextTurn();
     }
 
@@ -310,6 +352,13 @@ public class GameScreen extends ScreenAdapter {
 
         chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
         multLabel.setText(String.valueOf(previewCtx.getYakuBaseMult()));
+
+        // Optisches Feedback: Den Discard-Knopf ausgrauen, wenn man nicht abwerfen kann
+        if (selectedCards.isEmpty() || discardsRemaining <= 0) {
+            discardButton.getColor().a = 0.5f; // Halb transparent
+        } else {
+            discardButton.getColor().a = 1.0f; // Voll sichtbar
+        }
     }
 
     private void playScoringSequence(CalculationBreakdown breakdown) {
@@ -319,6 +368,7 @@ public class GameScreen extends ScreenAdapter {
 
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
+            discardButton.getColor().a = 0f; // NEU: Discard Knopf in der Animation verstecken
             chipsLabel.setText(String.valueOf(currentChips[0]));
             multLabel.setText(String.valueOf(currentMult[0]));
         }));
@@ -357,21 +407,6 @@ public class GameScreen extends ScreenAdapter {
         bankButton.getColor().a = 1f;
     }
 
-    private void triggerPunchAnimation(Actor actor) {
-        actor.setOrigin(actor.getWidth() / 2f, actor.getHeight() / 2f);
-        actor.clearActions();
-        actor.addAction(Actions.sequence(
-            Actions.parallel(
-                Actions.scaleTo(1.25f, 1.25f, 0.08f, Interpolation.fastSlow),
-                Actions.rotateBy(4f, 0.08f)
-            ),
-            Actions.parallel(
-                Actions.scaleTo(1.0f, 1.0f, 0.15f, Interpolation.bounceOut),
-                Actions.rotateTo(0f, 0.15f)
-            )
-        ));
-    }
-
     // =========================================================================
     // MEMORY MANAGEMENT
     // =========================================================================
@@ -380,12 +415,10 @@ public class GameScreen extends ScreenAdapter {
     public void dispose() {
         stage.dispose();
 
-        // 1. Skin aus dem VRAM löschen
         if (skin != null) {
             skin.dispose();
         }
 
-        // 2. Alle gecachten Texturen von der Grafikkarte löschen
         for (TextureRegionDrawable drawable : cardTextures.values()) {
             if (drawable.getRegion() != null && drawable.getRegion().getTexture() != null) {
                 drawable.getRegion().getTexture().dispose();
