@@ -1,5 +1,8 @@
 package com.lychcs.koikoi.scoring;
 
+import com.badlogic.gdx.math.MathUtils;
+import com.lychcs.koikoi.model.hanko.HankoEffect;
+
 import java.util.List;
 
 public final class ScoreCalculator {
@@ -18,9 +21,33 @@ public final class ScoreCalculator {
         ScoreAccumulator acc = new ScoreAccumulator(startingChips, startingMult);
         acc.addChips("Base " + yakuName, 0);
 
-        // 2. Card Effects (Foil etc. - aktuell noch leer, aber vorbereitet)
+        // 2. Card Effects (Hankos / Seals)
         for (var card : context.hand().getAllCards()) {
-            // Später kommen hier Karten-Upgrades hin!
+            switch (card.effect()) {
+                case WHITE_SEAL -> {
+                    // Beispiel: +30 Base Chips
+                    acc.addChips(card.name() + " (White Seal)", 30);
+                }
+                case BLACK_SEAL -> {
+                    // Beispiel: +4 Base Mult
+                    acc.addMult(card.name() + " (Black Seal)", 4);
+                }
+                case GOLDEN_SEAL -> {
+                    if (MathUtils.random(1, 4) == 1) {
+                        acc.addMon(card.name() + " (Gold Seal)", 3);
+                    }
+                    if (MathUtils.random(1, 20) == 1) {
+                        acc.addMon(card.name() + " (Jackpot Seal)", 10);
+                    }
+                }
+                case YAMI_SEAL -> {
+                    // Optional: Die Karte zerstört sich gleich, geben wir ihr
+                    // als Entschädigung noch einen massiven Punkte-Boost!
+                    acc.addChips(card.name() + " (Blood Sacrifice)", 50);
+                }
+                default -> {
+                } // NONE, STONE und POLYCHROME geben hier keine direkten extra Punkte
+            }
         }
 
         // 3. Omamori (Joker) Evaluierung

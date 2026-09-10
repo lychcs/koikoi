@@ -20,6 +20,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Deck;
+import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.* ;
 import com.lychcs.koikoi.scoring.*;
 
@@ -358,8 +359,32 @@ public class GameScreen extends ScreenAdapter {
             floatingBankLabel.setText("Pot: 0");
             koiKoiMultLabel.setText("Koi-Mult: 1.0x");
 
+            // Kopie der gespielten Karten machen, damit wir iterieren können
+            List<Card> playedCards = new ArrayList<>(selectedCards);
+
+            // Default
             playerHand.removeAll(selectedCards);
             selectedCards.clear();
+
+            // Post-Play-Effects
+            for (Card playedCard : playedCards) {
+                if (playedCard.effect() == HankoEffect.STONE_SEAL) {
+                    // STONE SEAL
+                    // (Stempel entfernen)
+                    Card strippedCard = new Card(
+                        playedCard.id(), playedCard.season(), playedCard.rank(),
+                        playedCard.name(), HankoEffect.NONE
+                    );
+                    playerHand.add(strippedCard);
+                    System.out.println("Stone Seal aktiviert: " + playedCard.name() + " kehrt zurück!");
+
+                } else if (playedCard.effect() == HankoEffect.YAMI_SEAL) {
+                    // YAMI SEAL
+                    deck.getCards().remove(playedCard);
+                    System.out.println("Yami Seal aktiviert: " + playedCard.name() + " wurde verbrannt!");
+                    // (später: einen Partikel-Effekt abspielen)
+                }
+            }
 
             if (handsRemaining <= 0) {
                 onBankClicked();

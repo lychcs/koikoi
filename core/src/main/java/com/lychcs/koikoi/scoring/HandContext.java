@@ -1,6 +1,7 @@
 package com.lychcs.koikoi.scoring;
 
 import com.lychcs.koikoi.model.*;
+import com.lychcs.koikoi.model.hanko.HankoEffect;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,7 +32,17 @@ public final class HandContext {
         // Single pass aggregation
         for (Card card : cards) {
             cardsByRank.get(card.rank()).add(card);
-            cardsBySeason.get(card.season()).add(card);
+
+            // Polychrome Logik
+            if (card.effect() == HankoEffect.POLYCHROME_SEAL) {
+                // Diese Karte zählt als Frühling, Sommer, Herbst und Winter!
+                for (Season season : Season.values()) {
+                    cardsBySeason.get(season).add(card);
+                }
+            } else {
+                cardsBySeason.get(card.season()).add(card);
+            }
+
             cardIds.add(card.id());
         }
     }
