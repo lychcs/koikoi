@@ -1,5 +1,7 @@
 package com.lychcs.koikoi.model;
 
+import com.lychcs.koikoi.model.hanko.HankoEffect;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,7 +43,7 @@ public class Deck {
     // Hilfsmethode für Standardkarten
     private void addCard(CardID id, Season season, Rank rank, String baseName, int count) {
         for (int i = 1; i <= count; i++) {
-            cards.add(new Card(id, season, rank, season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i));
+            cards.add(new Card(id, season, rank, season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i, HankoEffect.NONE));
         }
     }
 

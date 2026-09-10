@@ -12,10 +12,10 @@ public class AssetPacker {
         settings.filterMin = com.badlogic.gdx.graphics.Texture.TextureFilter.Linear;
         settings.filterMag = com.badlogic.gdx.graphics.Texture.TextureFilter.Linear;
 
+        settings.flattenPaths = true;
+
         System.out.println("Packe Texturen aus assets_solo...");
-
         TexturePacker.process(settings, "assets_solo", "assets/packed", "game_assets");
-
         System.out.println("Packen abgeschlossen!");
     }
 }
