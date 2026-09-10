@@ -16,14 +16,15 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
-import com.lychcs.koikoi.model.*;
+import com.lychcs.koikoi.model.Card;
+import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
+import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
-
-import java.util.Random;
 
 public class ShopScreen extends ScreenAdapter {
     private final Stage stage;
@@ -31,15 +32,12 @@ public class ShopScreen extends ScreenAdapter {
     private Skin skin;
     private TextureAtlas atlas;
 
-    // UI Assets
     private Texture background;
     private Texture boosterPackTexture;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
     private Label monLabel;
-
-    // NEU: Das Overlay für das Booster Pack!
     private Table boosterOverlay;
     private TextureRegionDrawable darkOverlayBackground;
 
@@ -57,15 +55,20 @@ public class ShopScreen extends ScreenAdapter {
     private void initAssets() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
 
-        // TextureAtlas für die Spielkarten laden
         atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
         for (Texture tex : atlas.getTextures()) {
-            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // WICHTIG FÜR PIXEL ART!
+            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
+        // 1. DYNAMISCHER JAHRESZEITEN-HINTERGRUND
+        String bgPath = "backgrounds/SHOP_AUTUMN.jpg"; // Fallback
+        if (runSession.getCurrentSeason() == GameSeason.SPRING) bgPath = "backgrounds/SHOP_SPRING.jpg";
+        if (runSession.getCurrentSeason() == GameSeason.SUMMER) bgPath = "backgrounds/SHOP_SUMMER.jpg";
+        if (runSession.getCurrentSeason() == GameSeason.AUTUMN) bgPath = "backgrounds/SHOP_AUTUMN.jpg";
+        if (runSession.getCurrentSeason() == GameSeason.WINTER) bgPath = "backgrounds/SHOP_WINTER.jpg";
 
-        // DEIN NEUES BOOSTER BILD (dithered)
+        background = new Texture(Gdx.files.internal(bgPath));
+
         boosterPackTexture = new Texture(Gdx.files.internal("backgrounds/BOOSTER_PACK.png"));
         boosterPackTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
@@ -73,15 +76,12 @@ public class ShopScreen extends ScreenAdapter {
         panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 40, 40, 40, 40));
 
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
-        NinePatchDrawable buttonDrawable = new NinePatchDrawable(new NinePatch(buttonTex, 50, 50, 20, 20));
-
         indieButtonStyle = new TextButton.TextButtonStyle();
-        indieButtonStyle.up = buttonDrawable;
-        indieButtonStyle.down = buttonDrawable.tint(Color.LIGHT_GRAY);
+        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 50, 50, 20, 20));
+        indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
 
-        // Generiert programmtechnisch ein halbtransparentes schwarzes Bild für das Overlay
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(new Color(0, 0, 0, 0.85f));
         pixmap.fill();
@@ -92,99 +92,156 @@ public class ShopScreen extends ScreenAdapter {
     private void buildShopUi() {
         Table root = new Table();
         root.setFillParent(true);
-        root.pad(30);
 
-        // --- TOP ZONE ---
-        Table headerTable = new Table();
-        headerTable.setBackground(panelBackground);
+        // ==========================================
+        // DIE 3 SPALTEN (Regale auf dem Holz)
+        // ==========================================
+        Table shelves = new Table();
+        // Padding, damit die Items nicht über die Deko an den Rändern ragen
+        shelves.padTop(80).padBottom(120).padLeft(120).padRight(120);
+        shelves.setFillParent(true);
 
-        Label title = new Label("--- YOKAI BLACK MARKET ---", skin);
-        title.setFontScale(1.5f);
-        monLabel = new Label("Mon: " + runSession.getMon(), skin);
-        monLabel.setFontScale(1.5f);
-        monLabel.setColor(Color.GOLD);
+        Table column1 = new Table(); // Omamoris
+        Table column2 = new Table(); // Booster Packs
+        Table column3 = new Table(); // Fukus
 
-        headerTable.add(title).pad(20).expandX().left();
-        headerTable.add(monLabel).pad(20).right();
-        root.add(headerTable).expandX().fillX().padBottom(30).row();
+        // --- SPALTE 1: Omamoris ---
+        column1.add(createItemCard("Wood Omamori", "Start with +1 Wood Season.", 150, () -> {
+            // runSession.getActiveOmamoris().add(new WoodOmamori());
+            buyItem(150);
+        })).padBottom(20).row();
 
-        // --- MIDDLE ZONE (REGALE) ---
-        Table shelfTable = new Table();
+        column1.add(createItemCard("Fox Mask", "Increases Animal Yaku by X2.", 200, () -> {
+            buyItem(200);
+        }));
 
-        Table fukuShelf = createItemCard("Fuku: Senba Zuru", "+1 Hand, +1 Discard permanent.", 50, () -> {
+        // --- SPALTE 2: Booster Packs ---
+        column2.add(createItemCard("Ema Booster Pack", "Get 1 of 3 rare Cards.", 80, () -> {
+            if (runSession.getMon() >= 80) {
+                runSession.addMon(-80);
+                updateMonDisplay();
+                startBoosterSequence("EMA"); // Öffnet Karten-Auswahl
+            }
+        })).padBottom(20).row();
+
+        column2.add(createItemCard("Hanko Booster Pack", "Get a random Seal for your run.", 60, () -> {
+            if (runSession.getMon() >= 60) {
+                runSession.addMon(-60);
+                updateMonDisplay();
+                // Für Hankos könnten wir später auch ein Overlay machen, vorerst direkt ins Inventar
+                runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
+                System.out.println("Hanko gezogen!");
+            }
+        }));
+
+        // --- SPALTE 3: Fukus ---
+        column3.add(createItemCard("Fuku: Senba Zuru", "+1 Hand, +1 Discard.", 50, () -> {
             if (runSession.getMon() >= 50) {
                 runSession.addMon(-50);
                 runSession.addMaxHands(1);
                 runSession.addMaxDiscards(1);
                 updateMonDisplay();
             }
-        });
+        }));
 
-        Table hankoShelf = createItemCard("Hanko: Golden Seal", "Gain Mon on play.", 30, () -> {
-            if (runSession.getMon() >= 30) {
-                runSession.addMon(-30);
-                runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
-                updateMonDisplay();
-            }
-        });
+        // Füge die Spalten in das Hauptregal ein (expandX verteilt sie gleichmäßig)
+        shelves.add(column1).expandX().fillX().top().padRight(40);
+        shelves.add(column2).expandX().fillX().top().padRight(40);
+        shelves.add(column3).expandX().fillX().top();
 
-        Table boosterShelf = createItemCard("Mythic Pack", "Open to choose 1 of 3 rare Cards.", 80, () -> {
-            if (runSession.getMon() >= 80) {
-                runSession.addMon(-80);
-                updateMonDisplay();
-                startBoosterSequence(); // STARTET DAS OVERLAY!
-            }
-        });
+        stage.addActor(shelves);
 
-        shelfTable.add(fukuShelf).width(350).height(350).pad(15);
-        shelfTable.add(hankoShelf).width(350).height(350).pad(15);
-        shelfTable.add(boosterShelf).width(350).height(350).pad(15);
-        root.add(shelfTable).expand().fill().row();
+        // ==========================================
+        // DIE BOTTOM BAR (Angepasst an die Grafik)
+        // ==========================================
+        Table bottomBar = new Table();
+        bottomBar.setFillParent(true);
+        bottomBar.bottom().padBottom(35); // Höhe anpassen, damit es exakt auf der Grafik liegt
 
-        // --- BOTTOM ZONE ---
-        TextButton leaveButton = new TextButton("Next Round", indieButtonStyle);
-        leaveButton.addListener(new ClickListener() {
+        // Refresh-Button (Grafik hat links einen)
+        TextButton refreshButton = new TextButton("Refresh (-10)", indieButtonStyle);
+
+        // Mon Anzeige (Mittig platziert über dem "1250" Kasten)
+        monLabel = new Label(String.valueOf(runSession.getMon()), skin);
+        monLabel.setFontScale(2f);
+        monLabel.setColor(Color.WHITE);
+        monLabel.setAlignment(Align.center);
+
+        // Exit-Button (Grafik hat rechts ein X)
+        TextButton exitButton = new TextButton("Leave Market", indieButtonStyle);
+        exitButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
             }
         });
-        root.add(leaveButton).width(300).height(80).padTop(20);
 
-        stage.addActor(root);
+        // Die Breiten hier eventuell leicht anpassen, bis sie exakt über den Buttons im Bild liegen
+        bottomBar.add(refreshButton).width(200).height(60).padLeft(80);
+        bottomBar.add(monLabel).expandX().center();
+        bottomBar.add(exitButton).width(200).height(60).padRight(80);
+
+        stage.addActor(bottomBar);
+    }
+
+    private void buyItem(int cost) {
+        if (runSession.getMon() >= cost) {
+            runSession.addMon(-cost);
+            updateMonDisplay();
+        }
+    }
+
+    private Table createItemCard(String name, String desc, int price, Runnable onBuy) {
+        Table card = new Table();
+        card.setBackground(panelBackground);
+
+        Label nameLabel = new Label(name, skin);
+        Label descLabel = new Label(desc, skin);
+        descLabel.setWrap(true);
+        descLabel.setAlignment(Align.center);
+
+        TextButton buyButton = new TextButton(price + " Mon", indieButtonStyle);
+        buyButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                onBuy.run();
+            }
+        });
+
+        card.add(nameLabel).padTop(15).padBottom(5).row();
+        card.add(descLabel).expand().fill().pad(5).row();
+        card.add(buyButton).width(160).height(50).padBottom(15);
+
+        return card;
     }
 
     private void buildBoosterOverlay() {
         boosterOverlay = new Table();
         boosterOverlay.setFillParent(true);
         boosterOverlay.setBackground(darkOverlayBackground);
-        boosterOverlay.setVisible(false); // Ist am Anfang unsichtbar
-        stage.addActor(boosterOverlay); // Liegt über der normalen Shop-Stage
+        boosterOverlay.setVisible(false);
+        stage.addActor(boosterOverlay);
     }
 
-    private void startBoosterSequence() {
+    private void startBoosterSequence(String type) {
         boosterOverlay.clearChildren();
-        boosterOverlay.setVisible(true); // Mach es dunkel!
+        boosterOverlay.setVisible(true);
 
-        // 1. Das Booster Pack als Button in die Mitte legen
         ImageButton packButton = new ImageButton(new TextureRegionDrawable(boosterPackTexture));
         packButton.setTransform(true);
-        packButton.setOrigin(150, 250); // Mitte für die Wackel-Animation (ca. anpassen)
+        packButton.setOrigin(150, 250);
 
-        // Wackel-Animation (Es pulsiert leicht)
         packButton.addAction(Actions.forever(Actions.sequence(
             Actions.rotateTo(3f, 0.1f), Actions.rotateTo(-3f, 0.1f)
         )));
 
-        // 2. Klick-Logik auf das Pack
         packButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 packButton.clearActions();
-                // Explosion/Verschwinden
                 packButton.addAction(Actions.sequence(
                     Actions.parallel(Actions.scaleTo(1.5f, 1.5f, 0.2f), Actions.fadeOut(0.2f)),
-                    Actions.run(() -> showCardChoices()) // Nach der Animation: Karten zeigen!
+                    Actions.run(() -> showCardChoices())
                 ));
             }
         });
@@ -194,7 +251,7 @@ public class ShopScreen extends ScreenAdapter {
         instruction.setColor(Color.WHITE);
 
         boosterOverlay.add(instruction).padBottom(50).row();
-        boosterOverlay.add(packButton).width(300).height(500); // Maße deines Packs anpassen
+        boosterOverlay.add(packButton).width(300).height(500);
     }
 
     private void showCardChoices() {
@@ -204,12 +261,9 @@ public class ShopScreen extends ScreenAdapter {
         instruction.setFontScale(1.5f);
         boosterOverlay.add(instruction).colspan(3).padBottom(50).row();
 
-        // ==============================================================
-        // DER FIX: Wir holen uns 3 echte, zufällige Karten aus dem Pool!
-        // ==============================================================
         Deck tempDeck = new Deck();
-        tempDeck.initializeDeck(); // Generiert alle Standard-Karten
-        java.util.Collections.shuffle(tempDeck.getCards()); // Mischen
+        tempDeck.initializeDeck();
+        java.util.Collections.shuffle(tempDeck.getCards());
 
         Card[] choices = new Card[]{
             tempDeck.getCards().get(0),
@@ -222,7 +276,6 @@ public class ShopScreen extends ScreenAdapter {
             Button cardBtn = (region != null) ? new ImageButton(new TextureRegionDrawable(region))
                 : new TextButton(card.name(), skin);
 
-            // Pop-In Animation der Karten
             cardBtn.setTransform(true);
             cardBtn.setScale(0f);
             cardBtn.addAction(Actions.scaleTo(1f, 1f, 0.5f, Interpolation.elasticOut));
@@ -230,11 +283,7 @@ public class ShopScreen extends ScreenAdapter {
             cardBtn.addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    // 1. Karte zum Deck hinzufügen!
                     runSession.getPlayerDeck().getCards().add(card);
-                    System.out.println(card.name() + " zum Deck hinzugefügt!");
-
-                    // 2. Overlay schließen
                     boosterOverlay.setVisible(false);
                 }
             });
@@ -243,31 +292,8 @@ public class ShopScreen extends ScreenAdapter {
         }
     }
 
-    private Table createItemCard(String name, String desc, int price, Runnable onBuy) {
-        Table card = new Table();
-        card.setBackground(panelBackground);
-
-        Label nameLabel = new Label(name, skin);
-        Label descLabel = new Label(desc, skin);
-        descLabel.setWrap(true);
-
-        TextButton buyButton = new TextButton("Buy (" + price + " Mon)", indieButtonStyle);
-        buyButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                onBuy.run();
-            }
-        });
-
-        card.add(nameLabel).padTop(20).padBottom(10).row();
-        card.add(descLabel).expand().fill().pad(10).row();
-        card.add(buyButton).width(200).height(60).padBottom(20);
-
-        return card;
-    }
-
     private void updateMonDisplay() {
-        monLabel.setText("Mon: " + runSession.getMon());
+        monLabel.setText(String.valueOf(runSession.getMon()));
     }
 
     @Override

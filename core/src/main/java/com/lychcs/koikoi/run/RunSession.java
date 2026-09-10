@@ -3,11 +3,15 @@ package com.lychcs.koikoi.run;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.fuku.FukuContext;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
+import com.lychcs.koikoi.model.omamori.Omamori;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class RunSession implements FukuContext {
+
+    private GameSeason currentSeason = GameSeason.AUTUMN; // Start-Saison
+    private final List<Omamori> activeOmamoris = new ArrayList<>();
 
     private int mon = 0;
     private int maxInterestCap = 5;
@@ -51,7 +55,7 @@ public class RunSession implements FukuContext {
     @Override
     public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
 
-    // --- Getter ---
+    // --- Getter & Setter ---
     public int getBaseHands() { return baseHands; }
     public int getBaseDiscards() { return baseDiscards; }
     public int getMaxInterestCap() { return maxInterestCap; }
@@ -61,4 +65,8 @@ public class RunSession implements FukuContext {
     public List<HankoEffect> getPurchasedHankos() {
         return purchasedHankos;
     }
+    public GameSeason getCurrentSeason() { return currentSeason; }
+    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
+
+    public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }
 }
