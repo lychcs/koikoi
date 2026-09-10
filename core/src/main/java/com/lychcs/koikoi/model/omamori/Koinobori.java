@@ -8,6 +8,9 @@ public class Koinobori implements Omamori {
     public String getName() { return "Koinobori"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }
 
     @Override

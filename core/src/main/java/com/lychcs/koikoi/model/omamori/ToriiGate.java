@@ -10,6 +10,9 @@ public class ToriiGate implements Omamori {
     public String getName() { return "Torii Gate"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }
 
     @Override

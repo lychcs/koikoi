@@ -8,6 +8,9 @@ public class JohariMirror implements Omamori {
     public String getName() { return "Johari no Kagami"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.LEGENDARY; }
 
     @Override

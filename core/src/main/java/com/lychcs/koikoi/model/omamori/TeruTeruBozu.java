@@ -11,6 +11,9 @@ public class TeruTeruBozu implements Omamori {
     public String getName() { return "Teru Teru Bozu"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }
 
     @Override

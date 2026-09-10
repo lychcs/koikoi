@@ -9,6 +9,9 @@ public class InoshishiTusk implements Omamori {
     public String getName() { return "Inoshishi Tusk"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }
 
     @Override

@@ -10,6 +10,9 @@ public class MatchaWhisk implements Omamori {
     public String getName() { return "Matcha Whisk"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.COMMON; }
 
     @Override

@@ -9,6 +9,9 @@ public class HanamiDango implements Omamori {
     public String getName() { return "Hanami Dango"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.COMMON; }
 
     @Override

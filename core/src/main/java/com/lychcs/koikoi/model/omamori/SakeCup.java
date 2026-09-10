@@ -9,6 +9,9 @@ public class SakeCup implements Omamori {
     public String getName() { return "Sake Cup"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.COMMON; }
 
     @Override

@@ -11,6 +11,9 @@ public class Furin implements Omamori {
     public String getName() { return "Wind Chime (Furin)"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }
 
     @Override

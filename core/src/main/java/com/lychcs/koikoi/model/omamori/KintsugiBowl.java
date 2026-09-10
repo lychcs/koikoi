@@ -8,6 +8,9 @@ public class KintsugiBowl implements Omamori {
     public String getName() { return "Kintsugi Bowl"; }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.RARE; }
 
     @Override

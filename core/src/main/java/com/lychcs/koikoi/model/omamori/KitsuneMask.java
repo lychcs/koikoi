@@ -12,6 +12,9 @@ public class KitsuneMask implements Omamori {
     }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.COMMON; }
 
     @Override

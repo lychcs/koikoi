@@ -3,16 +3,20 @@ package com.lychcs.koikoi.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -22,6 +26,7 @@ import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.* ;
+import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.scoring.*;
 
 import java.util.ArrayList;
@@ -48,14 +53,13 @@ public class GameScreen extends ScreenAdapter {
     private static final float WORLD_HEIGHT = 720f;
     private static final int MAX_HAND_SIZE = 8;
     private static final int MAX_SELECTED_CARDS = 5;
-    private static final float CARD_WIDTH = 120f;
-    private static final float CARD_HEIGHT = 192f;
+    private static final float CARD_WIDTH = 90f;
+    private static final float CARD_HEIGHT = 144f;
     private static final float CARD_SELECT_OFFSET_Y = 20f;
     private static final float ANIMATION_SPEED = 0.1f;
-
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
-    private static final int INITIAL_TARGET_SCORE = 25000;
+    private static final int INITIAL_TARGET_SCORE = 2000;
 
     // =========================================================================
     // 2. SPIEL-ZUSTAND (Model/State)
@@ -81,17 +85,23 @@ public class GameScreen extends ScreenAdapter {
     // =========================================================================
     // 3. UI-ELEMENTE & RESSOURCEN (View)
     // =========================================================================
+    private Table infoPopup;
     private final Stage stage;
     private Skin skin;
     private TextureAtlas atlas;
     private final Map<String, TextureRegionDrawable> cardTextures = new HashMap<>();
+    private final RunSession runSession;
+    private NinePatchDrawable panelBackground;
+    private TextButton.TextButtonStyle indieButtonStyle;
 
+    private Table hankoTable;
     private Table omamoriTable;
     private Table handTable;
     private TextButton playButton;
     private TextButton discardButton;
     private TextButton koiKoiButton;
     private TextButton bankButton;
+    private Texture background;
 
     private Label scoreProgressLabel;
     private Label chipsLabel;
@@ -102,9 +112,13 @@ public class GameScreen extends ScreenAdapter {
     private Label yakuNameLabel;
     private Label koiKoiMultLabel;
 
-    public GameScreen() {
+    public GameScreen(RunSession runSession) {
+        this.runSession = runSession;
+
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
         this.deck = new Deck();
+
+        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
 
         this.atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
         for (Texture tex : atlas.getTextures()) {
@@ -123,8 +137,8 @@ public class GameScreen extends ScreenAdapter {
 
     private void startEncounter() {
         currentRoundScore = 0;
-        discardsRemaining = maxDiscards;
-        handsRemaining = maxHands;
+        discardsRemaining = runSession.getBaseDiscards();
+        handsRemaining = runSession.getBaseHands();
 
         if (scoreProgressLabel != null) scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
         if (discardLabel != null) discardLabel.setText("Discards: " + discardsRemaining);
@@ -168,141 +182,148 @@ public class GameScreen extends ScreenAdapter {
     // =========================================================================
 
     private void initUiElements() {
-        // Tooltips schneller machen
-        TooltipManager tooltipManager = TooltipManager.getInstance();
-        tooltipManager.initialTime = 0.2f;
-        tooltipManager.subsequentTime = 0.1f;
-
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        loadIndieAssets();
 
-        playButton = new TextButton("Play Hand", skin);
-        discardButton = new TextButton("Discard", skin);
-        koiKoiButton = new TextButton("KOI KOI!", skin);
-        bankButton = new TextButton("Bank", skin);
+        // ACTION & SORT BUTTONS
+        playButton = new TextButton("Play Hand", indieButtonStyle);
+        discardButton = new TextButton("Discard", indieButtonStyle);
+        koiKoiButton = new TextButton("KOI KOI!", indieButtonStyle);
+        bankButton = new TextButton("Bank", indieButtonStyle);
+        TextButton sortSeasonButton = new TextButton("Sort: Season", indieButtonStyle);
+        TextButton sortRankButton = new TextButton("Sort: Rank", indieButtonStyle);
 
         koiKoiButton.getColor().a = 0f;
         bankButton.getColor().a = 0f;
 
-        playButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                onPlayHandSubmitted();
-            }
-        });
-
-        discardButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                onDiscardClicked();
-            }
-        });
-
-        koiKoiButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                onKoiKoiClicked();
-            }
-        });
-
-        bankButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                onBankClicked();
-            }
-        });
-
-        // Sortier-Buttons
-        TextButton sortSeasonButton = new TextButton("Sort: Season", skin);
-        TextButton sortRankButton = new TextButton("Sort: Rank", skin);
+        playButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onPlayHandSubmitted(); } });
+        discardButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onDiscardClicked(); } });
+        koiKoiButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onKoiKoiClicked(); } });
+        bankButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onBankClicked(); } });
 
         sortSeasonButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
+            @Override public void clicked(InputEvent e, float x, float y) {
                 if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
                 playerHand.sort(Comparator.comparing(Card::season).thenComparing(Card::rank));
-                dealCardsToUI();
-                updateLivePreview();
+                dealCardsToUI(); updateLivePreview();
             }
         });
-
         sortRankButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
+            @Override public void clicked(InputEvent e, float x, float y) {
                 if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
                 playerHand.sort(Comparator.comparing(Card::rank, Comparator.reverseOrder()).thenComparing(Card::season));
-                dealCardsToUI();
-                updateLivePreview();
+                dealCardsToUI(); updateLivePreview();
             }
         });
 
-        Table table = new Table();
-        table.setFillParent(true);
-        table.bottom().padBottom(50);
-
-        Table sortTable = new Table();
-        sortTable.add(sortSeasonButton).width(150).height(40).padRight(20);
-        sortTable.add(sortRankButton).width(150).height(40);
-
-        table.add(sortTable).colspan(4).center().padBottom(15);
-        table.row();
-
-        table.add(playButton).width(200).height(60).pad(10);
-        table.add(discardButton).width(200).height(60).pad(10);
-        table.add(koiKoiButton).width(200).height(60).pad(10);
-        table.add(bankButton).width(200).height(60).pad(10);
-
-        scoreProgressLabel = new Label("Score: 0 / " + currentTargetScore, skin);
-        scoreProgressLabel.setFontScale(2.5f);
-
+        // LABELS
+        scoreProgressLabel = new Label("0 / " + currentTargetScore, skin);
         chipsLabel = new Label("0", skin);
         multLabel = new Label("0", skin);
         floatingBankLabel = new Label("Pot: 0", skin);
         discardLabel = new Label("Discards: " + discardsRemaining, skin);
         handsLabel = new Label("Hands: " + handsRemaining, skin);
         koiKoiMultLabel = new Label("Koi-Mult: " + currentKoiKoiMult + "x", skin);
-
-        chipsLabel.setFontScale(2f);
-        multLabel.setFontScale(2f);
-        floatingBankLabel.setFontScale(1.5f);
-        discardLabel.setFontScale(1.5f);
-        handsLabel.setFontScale(1.5f);
-        koiKoiMultLabel.setFontScale(1.5f);
-
         yakuNameLabel = new Label("", skin);
-        yakuNameLabel.setFontScale(1.5f);
 
-        Table topTable = new Table();
-        topTable.setFillParent(true);
-        topTable.top().padTop(20);
+        // Labels leicht verkleinern für die kompakten Boxen
+        scoreProgressLabel.setFontScale(1.2f);
+        chipsLabel.setFontScale(1.5f);
+        multLabel.setFontScale(1.5f);
 
-        topTable.add(scoreProgressLabel).colspan(4).center().padBottom(20);
-        topTable.row();
+        // =========================================================
+        // DIE LINKE SPALTE (Getrennte Boxen)
+        // =========================================================
+        Table leftColumn = new Table();
+        leftColumn.top().pad(20);
 
-        topTable.add(chipsLabel).padRight(20).right();
-        topTable.add(new Label(" X ", skin)).center();
-        topTable.add(multLabel).padLeft(20).left();
+        Table scoreBox = new Table();
+        scoreBox.setBackground(panelBackground);
+        scoreBox.add(new Label("Target Score", skin)).padBottom(5).row();
+        scoreBox.add(scoreProgressLabel).pad(15);
+        leftColumn.add(scoreBox).width(240).padBottom(15).row();
 
-        topTable.row().padTop(5);
-        topTable.add(yakuNameLabel).colspan(3).center();
-        topTable.row().padTop(20);
+        Table yakuBox = new Table();
+        yakuBox.setBackground(panelBackground);
+        yakuBox.add(yakuNameLabel).padBottom(10).padTop(15).row();
+        Table multTable = new Table();
+        multTable.add(chipsLabel).padRight(10);
+        multTable.add(new Label(" X ", skin));
+        multTable.add(multLabel).padLeft(10);
+        yakuBox.add(multTable).padBottom(15).row();
+        leftColumn.add(yakuBox).width(240).padBottom(15).row();
 
-        topTable.add(handsLabel).padRight(20);
-        topTable.add(discardLabel).padRight(20);
-        topTable.add(floatingBankLabel).padRight(20);
-        topTable.add(koiKoiMultLabel);
+        Table potBox = new Table();
+        potBox.setBackground(panelBackground);
+        potBox.add(floatingBankLabel).pad(15);
+        leftColumn.add(potBox).width(240).padBottom(15).row();
 
-        stage.addActor(topTable);
-        stage.addActor(table);
+        Table statsBox = new Table();
+        statsBox.setBackground(panelBackground);
+        statsBox.add(handsLabel).padTop(15).padBottom(10).row();
+        statsBox.add(discardLabel).padBottom(10).row();
+        statsBox.add(koiKoiMultLabel).padBottom(15).row();
+        leftColumn.add(statsBox).width(240).padBottom(15).row();
+
+        // =========================================================
+        // DIE OBERE SPALTE (Omamoris und Hankos getrennt)
+        // =========================================================
+        Table topRow = new Table();
+        topRow.left().pad(20);
 
         omamoriTable = new Table();
-        omamoriTable.setFillParent(true);
-        omamoriTable.top().padTop(170);
-        stage.addActor(omamoriTable);
+        omamoriTable.setBackground(panelBackground);
+        omamoriTable.left().pad(15);
+        // (Wird von renderOmamoris gefüllt)
+
+        hankoTable = new Table();
+        hankoTable.setBackground(panelBackground);
+        hankoTable.pad(15);
+        hankoTable.add(new Label("Hankos (Empty)", skin)); // Platzhalter
+
+        topRow.add(omamoriTable).height(150).expandX().fillX().padRight(15);
+        topRow.add(hankoTable).width(250).height(150);
+
+        // =========================================================
+        // MASTER LAYOUT
+        // =========================================================
+        Table masterTable = new Table();
+        masterTable.setFillParent(true);
+        masterTable.add(leftColumn).width(280).expandY().fillY().top();
+        masterTable.add(topRow).expandX().fillX().top().row();
+        stage.addActor(masterTable);
+
+        // BUTTON ZONE UNTEN
+        Table buttonZone = new Table();
+        buttonZone.setFillParent(true);
+        buttonZone.bottom().padBottom(30);
+
+        Table sortTable = new Table();
+        sortTable.add(sortSeasonButton).width(150).height(45).padRight(20);
+        sortTable.add(sortRankButton).width(150).height(45);
+
+        Table actionTable = new Table();
+        actionTable.add(playButton).width(200).height(70).pad(10);
+        actionTable.add(discardButton).width(200).height(70).pad(10);
+        actionTable.add(koiKoiButton).width(200).height(70).pad(10);
+        actionTable.add(bankButton).width(200).height(70).pad(10);
+
+        buttonZone.add(sortTable).padBottom(15).row();
+        buttonZone.add(actionTable);
+        stage.addActor(buttonZone);
 
         handTable = new Table();
         handTable.setFillParent(true);
-        handTable.center().padTop(100);
+        handTable.bottom().padBottom(180);
         stage.addActor(handTable);
+
+        // =========================================================
+        // DAS UNIVERSELLE INFO-POPUP (Für Karten, Omamoris, Hankos)
+        // =========================================================
+        infoPopup = new Table();
+        infoPopup.setBackground(panelBackground);
+        infoPopup.setVisible(false); // Unsichtbar beim Start
+        stage.addActor(infoPopup); // Ganz oben auf die Stage!
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -313,11 +334,19 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        ScreenUtils.clear(0.15f, 0.17f, 0.21f, 1f);
+        // Schwarzer Fallback, falls das Bild nicht den ganzen Screen füllt
+        ScreenUtils.clear(0f, 0f, 0f, 1f);
+
+        // 1. Hintergrundbild zeichnen (Der Holztisch)
+        stage.getBatch().begin();
+        // Zieht das Bild genau auf die Größe deines Viewports
+        stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+        stage.getBatch().end();
+
+        // 2. UI, Animationen und Karten darüber zeichnen
         stage.act(delta);
         stage.draw();
     }
-
     // =========================================================================
     // ASSET LOADING
     // =========================================================================
@@ -339,6 +368,30 @@ public class GameScreen extends ScreenAdapter {
             }
         }
         return cardTextures.get(fileName);
+    }
+
+    private void loadIndieAssets() {
+        // 1. Hintergrund (Der dunkle Holztisch)
+        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
+
+        // 2. Das Panel (Washi-Papier für Stats und Omamoris)
+        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
+        // Die Werte (40) sind der "geschützte" Rand in Pixeln.
+        // Falls dein Tuscherand verzerrt wird, erhöhe diese Zahlen leicht.
+        NinePatch panelPatch = new NinePatch(panelTex, 40, 40, 40, 40);
+        panelBackground = new NinePatchDrawable(panelPatch);
+
+        // 3. Der Button (Pinselstrich)
+        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        // Schützt die Enden des Pinselstrichs (50px links/rechts, 20px oben/unten)
+        NinePatch buttonPatch = new NinePatch(buttonTex, 50, 50, 20, 20);
+        NinePatchDrawable buttonDrawable = new NinePatchDrawable(buttonPatch);
+
+        indieButtonStyle = new TextButton.TextButtonStyle();
+        indieButtonStyle.up = buttonDrawable;
+        indieButtonStyle.down = buttonDrawable.tint(Color.LIGHT_GRAY); // Optisches Feedback beim Klicken
+        indieButtonStyle.font = skin.getFont("default-font");
+        indieButtonStyle.fontColor = Color.WHITE;
     }
     // =========================================================================
     // GAMEPLAY LOGIK
@@ -433,22 +486,33 @@ public class GameScreen extends ScreenAdapter {
         currentRoundScore += floatingBank;
         scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
 
+        // 1. Check auf Sieg (Erfolgreich eingeloggt & Ziel erreicht)
         if (currentRoundScore >= currentTargetScore) {
             currentState = GameState.ROUND_END;
-            yakuNameLabel.setText("VICTORY! Shop kommt bald...");
-            playButton.getColor().a = 0f; discardButton.getColor().a = 0f;
-            koiKoiButton.getColor().a = 0f; bankButton.getColor().a = 0f;
+            yakuNameLabel.setText("VICTORY!");
+
+            // Geld gutschreiben und Zinsen berechnen
+            runSession.addMon(currentRoundScore / 100); // Beispiel: Pro 100 Score = 1 Mon Basis
+            int interest = runSession.applyEndRoundInterest();
+            System.out.println("Zinsen erhalten: " + interest);
+
+            // Screen-Wechsel in den Shop
+            ((com.lychcs.koikoi.KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
             return;
         }
 
+        // 2. Check auf Game Over (Ziel nicht erreicht und keine Hände mehr übrig)
         if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("GAME OVER! Zu wenig Punkte.");
-            playButton.getColor().a = 0f; discardButton.getColor().a = 0f;
-            koiKoiButton.getColor().a = 0f; bankButton.getColor().a = 0f;
+            playButton.getColor().a = 0f;
+            discardButton.getColor().a = 0f;
+            koiKoiButton.getColor().a = 0f;
+            bankButton.getColor().a = 0f;
             return;
         }
 
+        // 3. Weder gewonnen noch verloren: Es geht normal weiter!
         floatingBank = 0;
         currentKoiKoiMult = 1.0;
         floatingBankLabel.setText("Pot: 0");
@@ -457,7 +521,6 @@ public class GameScreen extends ScreenAdapter {
         drawCardsToHand(MAX_HAND_SIZE);
         resetUiForNextTurn();
     }
-
     private void onKoiKoiClicked() {
         if (currentState != GameState.KOI_KOI_DECISION) return;
 
@@ -480,13 +543,37 @@ public class GameScreen extends ScreenAdapter {
             TextureRegionDrawable image = getCardImage(card);
             Button cardView = (image != null) ? new ImageButton(image) : new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
 
-            // NEU: Der Tooltip!
-            TextTooltip tooltip = new TextTooltip(card.name(), skin);
-            cardView.addListener(tooltip);
-
+            // DIE NEUE KLICK- & HOLD-LOGIK
             cardView.addListener(new ClickListener() {
                 @Override
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    // Wenn gedrückt wird: Zeige das Popup an!
+                    infoPopup.clearChildren();
+                    infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
+                    infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
+                    if (card.hasHanko()) {
+                        infoPopup.add(new Label("Seal: " + card.effect().name(), skin)).padBottom(10).row();
+                    }
+                    infoPopup.pack();
+
+                    // Setze das Popup leicht über die Karte
+                    Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
+                    infoPopup.setPosition(pos.x - (infoPopup.getWidth()/2f), pos.y + 40);
+                    infoPopup.setVisible(true);
+
+                    return super.touchDown(event, x, y, pointer, button);
+                }
+
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    // Beim Loslassen: Popup wieder verstecken
+                    infoPopup.setVisible(false);
+                    super.touchUp(event, x, y, pointer, button);
+                }
+
+                @Override
                 public void clicked(InputEvent event, float x, float y) {
+                    // Der eigentliche Klick (Auswählen/Abwählen)
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
 
                     if (selectedCards.contains(card)) {
@@ -537,6 +624,21 @@ public class GameScreen extends ScreenAdapter {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     triggerPunchAnimation(omamoriView);
+
+                    // Wenn man klickt: Das Fenster poppt drunter auf!
+                    if (infoPopup.isVisible()) {
+                        infoPopup.setVisible(false); // Toggle (wieder zu machen)
+                    } else {
+                        infoPopup.clearChildren();
+                        infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
+                        infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
+                        infoPopup.add(new Label("Rarity: " + omamori.getRarity().name(), skin)).padBottom(10).row();
+                        infoPopup.pack();
+
+                        Vector2 pos = omamoriView.localToStageCoordinates(new Vector2(0, 0));
+                        infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
+                        infoPopup.setVisible(true);
+                    }
                 }
             });
 

@@ -9,6 +9,8 @@ public class Kuroneko implements Omamori {
     public String getName() {
         return "Kuroneko";
     }
+    @Override
+    public String getDescription() { return "..."; }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

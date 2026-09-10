@@ -11,6 +11,9 @@ public class TenguFeather implements Omamori {
     }
 
     @Override
+    public String getDescription() { return "..."; }
+
+    @Override
     public Rarity getRarity() { return Rarity.COMMON; }
 
     @Override
