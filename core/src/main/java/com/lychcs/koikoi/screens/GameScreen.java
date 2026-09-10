@@ -2,7 +2,6 @@ package com.lychcs.koikoi.screens;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
-import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
@@ -23,7 +22,6 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
-import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.* ;
 import com.lychcs.koikoi.run.RunSession;
@@ -64,10 +62,10 @@ public class GameScreen extends ScreenAdapter {
     // =========================================================================
     // 2. SPIEL-ZUSTAND (Model/State)
     // =========================================================================
-    private final Deck deck;
     private final List<Card> playerHand = new ArrayList<>();
     private final List<Card> selectedCards = new ArrayList<>();
     private final List<Omamori> activeOmamoris = new ArrayList<>();
+    private final List<Card> drawPile = new ArrayList<>();
 
     private GameState currentState = GameState.WAITING_FOR_INPUT;
 
@@ -116,13 +114,10 @@ public class GameScreen extends ScreenAdapter {
         this.runSession = runSession;
 
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
-        this.deck = new Deck();
-
-        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
 
         this.atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
         for (Texture tex : atlas.getTextures()) {
-            tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // GEFIXT: Nearest für knackige Pixel-Art!
         }
 
         initUiElements();
@@ -137,6 +132,8 @@ public class GameScreen extends ScreenAdapter {
 
     private void startEncounter() {
         currentRoundScore = 0;
+
+        // Werte aus der Session laden (inklusive gekaufter Fukus!)
         discardsRemaining = runSession.getBaseDiscards();
         handsRemaining = runSession.getBaseHands();
 
@@ -145,16 +142,22 @@ public class GameScreen extends ScreenAdapter {
         if (handsLabel != null) handsLabel.setText("Hands: " + handsRemaining);
         if (koiKoiMultLabel != null) koiKoiMultLabel.setText("Koi-Mult: 1.0x");
 
-        deck.initializeDeck();
-        Collections.shuffle(deck.getCards());
+        // ==========================================
+        // Der Nachziehstapel für diesen Kampf
+        // ==========================================
+        drawPile.clear();
+        drawPile.addAll(runSession.getPlayerDeck().getCards());
+        Collections.shuffle(drawPile);
+
         playerHand.clear();
         selectedCards.clear();
+
         drawCardsToHand(MAX_HAND_SIZE);
     }
 
     private void drawCardsToHand(int targetSize) {
-        while (playerHand.size() < targetSize && !deck.getCards().isEmpty()) {
-            playerHand.add(deck.getCards().remove(0));
+        while (playerHand.size() < targetSize && !drawPile.isEmpty()) {
+            playerHand.add(drawPile.remove(0));
         }
     }
 
@@ -226,7 +229,6 @@ public class GameScreen extends ScreenAdapter {
         koiKoiMultLabel = new Label("Koi-Mult: " + currentKoiKoiMult + "x", skin);
         yakuNameLabel = new Label("", skin);
 
-        // Labels leicht verkleinern für die kompakten Boxen
         scoreProgressLabel.setFontScale(1.2f);
         chipsLabel.setFontScale(1.5f);
         multLabel.setFontScale(1.5f);
@@ -274,12 +276,11 @@ public class GameScreen extends ScreenAdapter {
         omamoriTable = new Table();
         omamoriTable.setBackground(panelBackground);
         omamoriTable.left().pad(15);
-        // (Wird von renderOmamoris gefüllt)
 
         hankoTable = new Table();
         hankoTable.setBackground(panelBackground);
         hankoTable.pad(15);
-        hankoTable.add(new Label("Hankos (Empty)", skin)); // Platzhalter
+        hankoTable.add(new Label("Hankos (Empty)", skin));
 
         topRow.add(omamoriTable).height(150).expandX().fillX().padRight(15);
         topRow.add(hankoTable).width(250).height(150);
@@ -318,12 +319,12 @@ public class GameScreen extends ScreenAdapter {
         stage.addActor(handTable);
 
         // =========================================================
-        // DAS UNIVERSELLE INFO-POPUP (Für Karten, Omamoris, Hankos)
+        // DAS UNIVERSELLE INFO-POPUP
         // =========================================================
         infoPopup = new Table();
         infoPopup.setBackground(panelBackground);
-        infoPopup.setVisible(false); // Unsichtbar beim Start
-        stage.addActor(infoPopup); // Ganz oben auf die Stage!
+        infoPopup.setVisible(false);
+        stage.addActor(infoPopup);
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -334,16 +335,12 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
-        // Schwarzer Fallback, falls das Bild nicht den ganzen Screen füllt
         ScreenUtils.clear(0f, 0f, 0f, 1f);
 
-        // 1. Hintergrundbild zeichnen (Der Holztisch)
         stage.getBatch().begin();
-        // Zieht das Bild genau auf die Größe deines Viewports
         stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         stage.getBatch().end();
 
-        // 2. UI, Animationen und Karten darüber zeichnen
         stage.act(delta);
         stage.draw();
     }
@@ -357,7 +354,6 @@ public class GameScreen extends ScreenAdapter {
         String fileName = card.id().name();
 
         if (!cardTextures.containsKey(fileName)) {
-            // NEU: Region aus dem Atlas holen!
             TextureRegion region = atlas.findRegion(fileName);
 
             if (region != null) {
@@ -371,25 +367,19 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void loadIndieAssets() {
-        // 1. Hintergrund (Der dunkle Holztisch)
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
 
-        // 2. Das Panel (Washi-Papier für Stats und Omamoris)
         Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        // Die Werte (40) sind der "geschützte" Rand in Pixeln.
-        // Falls dein Tuscherand verzerrt wird, erhöhe diese Zahlen leicht.
         NinePatch panelPatch = new NinePatch(panelTex, 40, 40, 40, 40);
         panelBackground = new NinePatchDrawable(panelPatch);
 
-        // 3. Der Button (Pinselstrich)
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
-        // Schützt die Enden des Pinselstrichs (50px links/rechts, 20px oben/unten)
         NinePatch buttonPatch = new NinePatch(buttonTex, 50, 50, 20, 20);
         NinePatchDrawable buttonDrawable = new NinePatchDrawable(buttonPatch);
 
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = buttonDrawable;
-        indieButtonStyle.down = buttonDrawable.tint(Color.LIGHT_GRAY); // Optisches Feedback beim Klicken
+        indieButtonStyle.down = buttonDrawable.tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
     }
@@ -412,18 +402,13 @@ public class GameScreen extends ScreenAdapter {
             floatingBankLabel.setText("Pot: 0");
             koiKoiMultLabel.setText("Koi-Mult: 1.0x");
 
-            // Kopie der gespielten Karten machen, damit wir iterieren können
             List<Card> playedCards = new ArrayList<>(selectedCards);
 
-            // Default
             playerHand.removeAll(selectedCards);
             selectedCards.clear();
 
-            // Post-Play-Effects
             for (Card playedCard : playedCards) {
                 if (playedCard.effect() == HankoEffect.STONE_SEAL) {
-                    // STONE SEAL
-                    // (Stempel entfernen)
                     Card strippedCard = new Card(
                         playedCard.id(), playedCard.season(), playedCard.rank(),
                         playedCard.name(), HankoEffect.NONE
@@ -432,10 +417,9 @@ public class GameScreen extends ScreenAdapter {
                     System.out.println("Stone Seal aktiviert: " + playedCard.name() + " kehrt zurück!");
 
                 } else if (playedCard.effect() == HankoEffect.YAMI_SEAL) {
-                    // YAMI SEAL
-                    deck.getCards().remove(playedCard);
+                    // GEFIXT: Das Yami Seal entfernt die Karte jetzt korrekt aus dem Master-Deck der Session!
+                    runSession.getPlayerDeck().getCards().remove(playedCard);
                     System.out.println("Yami Seal aktiviert: " + playedCard.name() + " wurde verbrannt!");
-                    // (später: einen Partikel-Effekt abspielen)
                 }
             }
 
@@ -451,7 +435,6 @@ public class GameScreen extends ScreenAdapter {
         currentState = GameState.SCORING_ANIMATION;
         HandContext hand = new HandContext(selectedCards);
 
-        // NEU: unplayedCards für das Scoring vorbereiten!
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
@@ -486,22 +469,18 @@ public class GameScreen extends ScreenAdapter {
         currentRoundScore += floatingBank;
         scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
 
-        // 1. Check auf Sieg (Erfolgreich eingeloggt & Ziel erreicht)
         if (currentRoundScore >= currentTargetScore) {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("VICTORY!");
 
-            // Geld gutschreiben und Zinsen berechnen
-            runSession.addMon(currentRoundScore / 100); // Beispiel: Pro 100 Score = 1 Mon Basis
+            runSession.addMon(currentRoundScore / 100);
             int interest = runSession.applyEndRoundInterest();
             System.out.println("Zinsen erhalten: " + interest);
 
-            // Screen-Wechsel in den Shop
             ((com.lychcs.koikoi.KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
             return;
         }
 
-        // 2. Check auf Game Over (Ziel nicht erreicht und keine Hände mehr übrig)
         if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("GAME OVER! Zu wenig Punkte.");
@@ -512,7 +491,6 @@ public class GameScreen extends ScreenAdapter {
             return;
         }
 
-        // 3. Weder gewonnen noch verloren: Es geht normal weiter!
         floatingBank = 0;
         currentKoiKoiMult = 1.0;
         floatingBankLabel.setText("Pot: 0");
@@ -521,6 +499,7 @@ public class GameScreen extends ScreenAdapter {
         drawCardsToHand(MAX_HAND_SIZE);
         resetUiForNextTurn();
     }
+
     private void onKoiKoiClicked() {
         if (currentState != GameState.KOI_KOI_DECISION) return;
 
@@ -543,11 +522,9 @@ public class GameScreen extends ScreenAdapter {
             TextureRegionDrawable image = getCardImage(card);
             Button cardView = (image != null) ? new ImageButton(image) : new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
 
-            // DIE NEUE KLICK- & HOLD-LOGIK
             cardView.addListener(new ClickListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                    // Wenn gedrückt wird: Zeige das Popup an!
                     infoPopup.clearChildren();
                     infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
                     infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
@@ -556,7 +533,6 @@ public class GameScreen extends ScreenAdapter {
                     }
                     infoPopup.pack();
 
-                    // Setze das Popup leicht über die Karte
                     Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
                     infoPopup.setPosition(pos.x - (infoPopup.getWidth()/2f), pos.y + 40);
                     infoPopup.setVisible(true);
@@ -566,14 +542,12 @@ public class GameScreen extends ScreenAdapter {
 
                 @Override
                 public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                    // Beim Loslassen: Popup wieder verstecken
                     infoPopup.setVisible(false);
                     super.touchUp(event, x, y, pointer, button);
                 }
 
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
-                    // Der eigentliche Klick (Auswählen/Abwählen)
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
 
                     if (selectedCards.contains(card)) {
@@ -597,15 +571,10 @@ public class GameScreen extends ScreenAdapter {
         omamoriTable.clearChildren();
 
         for (Omamori omamori : activeOmamoris) {
-            // 1. Automatische Namensgenerierung!
-            // Holt den Klassennamen (z.B. "InoshishiTusk" oder "TeruTeruBozu")
             String className = omamori.getClass().getSimpleName();
-
-            // Macht aus "InoshishiTusk" -> "INOSHISHI_TUSK" und hängt "OMAMORI_" davor
             String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
             String regionName = "OMAMORI_" + snakeCaseName;
 
-            // 2. Region aus dem Atlas abrufen
             TextureRegion region = atlas.findRegion(regionName);
 
             Actor omamoriView;
@@ -613,10 +582,9 @@ public class GameScreen extends ScreenAdapter {
                 omamoriView = new Image(region);
             } else {
                 System.out.println("WARNUNG: Omamori-Textur nicht im Atlas gefunden: " + regionName);
-                omamoriView = new TextButton(omamori.getName(), skin); // Fallback
+                omamoriView = new TextButton(omamori.getName(), skin);
             }
 
-            // 3. Tooltip und Animation hinzufügen
             TextTooltip tooltip = new TextTooltip(omamori.getName(), skin);
             omamoriView.addListener(tooltip);
 
@@ -625,9 +593,8 @@ public class GameScreen extends ScreenAdapter {
                 public void clicked(InputEvent event, float x, float y) {
                     triggerPunchAnimation(omamoriView);
 
-                    // Wenn man klickt: Das Fenster poppt drunter auf!
                     if (infoPopup.isVisible()) {
-                        infoPopup.setVisible(false); // Toggle (wieder zu machen)
+                        infoPopup.setVisible(false);
                     } else {
                         infoPopup.clearChildren();
                         infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
@@ -644,11 +611,12 @@ public class GameScreen extends ScreenAdapter {
 
             omamoriTable.add(omamoriView).width(96).height(128).pad(10);
         }
-    }    private void updateLivePreview() {
+    }
+
+    private void updateLivePreview() {
         HandContext hand = new HandContext(selectedCards);
         YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
 
-        // NEU: unplayedCards für das Live Preview berechnen
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
@@ -738,6 +706,7 @@ public class GameScreen extends ScreenAdapter {
         if (skin != null) skin.dispose();
 
         if (atlas != null) atlas.dispose();
+        if (background != null) background.dispose(); // Sicherheitshalber auch hier entsorgen
 
         cardTextures.clear();
     }

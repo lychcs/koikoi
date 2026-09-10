@@ -1,6 +1,11 @@
 package com.lychcs.koikoi.run;
 
+import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.fuku.FukuContext;
+import com.lychcs.koikoi.model.hanko.HankoEffect;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class RunSession implements FukuContext {
 
@@ -9,6 +14,14 @@ public class RunSession implements FukuContext {
 
     private int baseHands = 4;
     private int baseDiscards = 3;
+
+    private final Deck playerDeck;
+    private final List<HankoEffect> purchasedHankos = new ArrayList<>();
+
+    public RunSession() {
+        this.playerDeck = new Deck();
+        this.playerDeck.initializeDeck();
+    }
 
     // Zins-Berechnung am Ende der Runde
     public int applyEndRoundInterest() {
@@ -42,4 +55,10 @@ public class RunSession implements FukuContext {
     public int getBaseHands() { return baseHands; }
     public int getBaseDiscards() { return baseDiscards; }
     public int getMaxInterestCap() { return maxInterestCap; }
+    public Deck getPlayerDeck() {
+        return playerDeck;
+    }
+    public List<HankoEffect> getPurchasedHankos() {
+        return purchasedHankos;
+    }
 }
