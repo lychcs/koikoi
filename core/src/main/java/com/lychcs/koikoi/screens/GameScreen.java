@@ -524,9 +524,39 @@ public class GameScreen extends ScreenAdapter {
         selectedCards.clear();
 
         for (Card card : playerHand) {
-            TextureRegionDrawable image = getCardImage(card);
-            Button cardView = (image != null) ? new ImageButton(image) : new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
+            TextureRegionDrawable cardImage = getCardImage(card);
 
+            // Wir nutzen die Basis-Klasse "Actor", damit es flexibel ist (Stack oder Button)
+            Actor cardView;
+
+            if (cardImage != null) {
+                // ==========================================
+                // DER SANDWICH-MACHER (STACK)
+                // ==========================================
+                Stack cardStack = new Stack();
+
+                // 1. Die normale Karte ganz unten reinlegen
+                cardStack.add(new Image(cardImage));
+
+                // 2. Hat die Karte einen Stempel? Dann das Overlay drüberlegen!
+                if (card.hasHanko()) {
+                    TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
+                    if (hankoRegion != null) {
+                        Image hankoOverlay = new Image(hankoRegion);
+                        cardStack.add(hankoOverlay); // Legt sich exakt über die Karte
+                    } else {
+                        System.out.println("WARNUNG: Hanko-Textur nicht gefunden: HANKO_" + card.effect().name());
+                    }
+                }
+
+                cardView = cardStack;
+            } else {
+                cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
+            }
+
+            // ==========================================
+            // KLICK-LOGIK (Bleibt komplett gleich!)
+            // ==========================================
             cardView.addListener(new ClickListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -534,6 +564,7 @@ public class GameScreen extends ScreenAdapter {
                     infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
                     infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
                     if (card.hasHanko()) {
+                        // Der Tooltip verrät dem Spieler nochmal, was der Stempel macht!
                         infoPopup.add(new Label("Seal: " + card.effect().name(), skin)).padBottom(10).row();
                     }
                     infoPopup.pack();
@@ -557,6 +588,7 @@ public class GameScreen extends ScreenAdapter {
 
                     if (selectedCards.contains(card)) {
                         selectedCards.remove(card);
+                        // Animation bewegt jetzt den GANZEN STACK (Karte + Stempel)
                         cardView.addAction(Actions.moveBy(0, -CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
                     } else {
                         if (selectedCards.size() < MAX_SELECTED_CARDS) {
