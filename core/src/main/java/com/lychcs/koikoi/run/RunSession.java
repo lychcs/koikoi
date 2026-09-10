@@ -13,7 +13,7 @@ public class RunSession implements FukuContext {
     private GameSeason currentSeason = GameSeason.AUTUMN; // Start-Saison
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
-    private int mon = 0;
+    private int mon = 1000;
     private int maxInterestCap = 5;
 
     private int baseHands = 4;

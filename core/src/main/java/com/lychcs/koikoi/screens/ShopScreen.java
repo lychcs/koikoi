@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
@@ -23,6 +24,8 @@ import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
+import com.lychcs.koikoi.model.omamori.Omamori;
+import com.lychcs.koikoi.model.omamori.OmamoriPool;
 import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 
@@ -46,6 +49,8 @@ public class ShopScreen extends ScreenAdapter {
         this.stage = new Stage(new FitViewport(1280, 720));
 
         initAssets();
+
+        // Initialer Aufbau
         buildShopUi();
         buildBoosterOverlay();
 
@@ -60,8 +65,7 @@ public class ShopScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        // 1. DYNAMISCHER JAHRESZEITEN-HINTERGRUND
-        String bgPath = "backgrounds/SHOP_AUTUMN.jpg"; // Fallback
+        String bgPath = "backgrounds/SHOP_AUTUMN.jpg";
         if (runSession.getCurrentSeason() == GameSeason.SPRING) bgPath = "backgrounds/SHOP_SPRING.jpg";
         if (runSession.getCurrentSeason() == GameSeason.SUMMER) bgPath = "backgrounds/SHOP_SUMMER.jpg";
         if (runSession.getCurrentSeason() == GameSeason.AUTUMN) bgPath = "backgrounds/SHOP_AUTUMN.jpg";
@@ -93,11 +97,7 @@ public class ShopScreen extends ScreenAdapter {
         Table root = new Table();
         root.setFillParent(true);
 
-        // ==========================================
-        // DIE 3 SPALTEN (Regale auf dem Holz)
-        // ==========================================
         Table shelves = new Table();
-        // Padding, damit die Items nicht über die Deko an den Rändern ragen
         shelves.padTop(80).padBottom(120).padLeft(120).padRight(120);
         shelves.setFillParent(true);
 
@@ -105,22 +105,28 @@ public class ShopScreen extends ScreenAdapter {
         Table column2 = new Table(); // Booster Packs
         Table column3 = new Table(); // Fukus
 
-        // --- SPALTE 1: Omamoris ---
-        column1.add(createItemCard("Wood Omamori", "Start with +1 Wood Season.", 150, () -> {
-            // runSession.getActiveOmamoris().add(new WoodOmamori());
-            buyItem(150);
-        })).padBottom(20).row();
+        // ==========================================
+        // SPALTE 1: RANDOM OMAMORIS AUS DEM POOL
+        // ==========================================
+        Omamori oma1 = OmamoriPool.getRandomOmamori();
+        Omamori oma2 = OmamoriPool.getRandomOmamori();
 
-        column1.add(createItemCard("Fox Mask", "Increases Animal Yaku by X2.", 200, () -> {
-            buyItem(200);
-        }));
+        // Verhindert, dass 2x exakt das gleiche Omamori im selben Shop liegt
+        while (oma2.getClass().equals(oma1.getClass())) {
+            oma2 = OmamoriPool.getRandomOmamori();
+        }
 
-        // --- SPALTE 2: Booster Packs ---
+        column1.add(createOmamoriCard(oma1)).padBottom(20).row();
+        column1.add(createOmamoriCard(oma2)).row();
+
+        // ==========================================
+        // SPALTE 2: BOOSTER PACKS
+        // ==========================================
         column2.add(createItemCard("Ema Booster Pack", "Get 1 of 3 rare Cards.", 80, () -> {
             if (runSession.getMon() >= 80) {
                 runSession.addMon(-80);
                 updateMonDisplay();
-                startBoosterSequence("EMA"); // Öffnet Karten-Auswahl
+                startBoosterSequence("EMA");
             }
         })).padBottom(20).row();
 
@@ -128,13 +134,14 @@ public class ShopScreen extends ScreenAdapter {
             if (runSession.getMon() >= 60) {
                 runSession.addMon(-60);
                 updateMonDisplay();
-                // Für Hankos könnten wir später auch ein Overlay machen, vorerst direkt ins Inventar
                 runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
                 System.out.println("Hanko gezogen!");
             }
         }));
 
-        // --- SPALTE 3: Fukus ---
+        // ==========================================
+        // SPALTE 3: FUKUS
+        // ==========================================
         column3.add(createItemCard("Fuku: Senba Zuru", "+1 Hand, +1 Discard.", 50, () -> {
             if (runSession.getMon() >= 50) {
                 runSession.addMon(-50);
@@ -144,30 +151,37 @@ public class ShopScreen extends ScreenAdapter {
             }
         }));
 
-        // Füge die Spalten in das Hauptregal ein (expandX verteilt sie gleichmäßig)
         shelves.add(column1).expandX().fillX().top().padRight(40);
         shelves.add(column2).expandX().fillX().top().padRight(40);
         shelves.add(column3).expandX().fillX().top();
-
         stage.addActor(shelves);
 
         // ==========================================
-        // DIE BOTTOM BAR (Angepasst an die Grafik)
+        // BOTTOM BAR & REFRESH LOGIK
         // ==========================================
         Table bottomBar = new Table();
         bottomBar.setFillParent(true);
-        bottomBar.bottom().padBottom(35); // Höhe anpassen, damit es exakt auf der Grafik liegt
+        bottomBar.bottom().padBottom(35);
 
-        // Refresh-Button (Grafik hat links einen)
         TextButton refreshButton = new TextButton("Refresh (-10)", indieButtonStyle);
+        refreshButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (runSession.getMon() >= 10) {
+                    runSession.addMon(-10);
+                    // Den kompletten Screen fegen und neu aufbauen!
+                    stage.clear();
+                    buildShopUi();
+                    buildBoosterOverlay();
+                }
+            }
+        });
 
-        // Mon Anzeige (Mittig platziert über dem "1250" Kasten)
         monLabel = new Label(String.valueOf(runSession.getMon()), skin);
         monLabel.setFontScale(2f);
         monLabel.setColor(Color.WHITE);
         monLabel.setAlignment(Align.center);
 
-        // Exit-Button (Grafik hat rechts ein X)
         TextButton exitButton = new TextButton("Leave Market", indieButtonStyle);
         exitButton.addListener(new ClickListener() {
             @Override
@@ -176,7 +190,6 @@ public class ShopScreen extends ScreenAdapter {
             }
         });
 
-        // Die Breiten hier eventuell leicht anpassen, bis sie exakt über den Buttons im Bild liegen
         bottomBar.add(refreshButton).width(200).height(60).padLeft(80);
         bottomBar.add(monLabel).expandX().center();
         bottomBar.add(exitButton).width(200).height(60).padRight(80);
@@ -184,11 +197,57 @@ public class ShopScreen extends ScreenAdapter {
         stage.addActor(bottomBar);
     }
 
-    private void buyItem(int cost) {
-        if (runSession.getMon() >= cost) {
-            runSession.addMon(-cost);
-            updateMonDisplay();
-        }
+    /**
+     * Neue Methode speziell für Omamoris, um deren Bild mitzuladen!
+     */
+    private Table createOmamoriCard(Omamori omamori) {
+        Table card = new Table();
+        card.setBackground(panelBackground);
+
+        // 1. Textur-Namen generieren (Genau wie im GameScreen!)
+        String className = omamori.getClass().getSimpleName();
+        String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
+        String regionName = "OMAMORI_" + snakeCaseName;
+
+        TextureRegion region = atlas.findRegion(regionName);
+        Actor icon = (region != null) ? new Image(region) : new Label("No Img", skin);
+
+        // 2. Texte vorbereiten
+        Label nameLabel = new Label(omamori.getName(), skin);
+        nameLabel.setFontScale(0.9f);
+        Label descLabel = new Label(omamori.getDescription(), skin);
+        descLabel.setWrap(true);
+        descLabel.setAlignment(Align.center);
+        descLabel.setFontScale(0.8f);
+
+        // 3. Kauf-Logik
+        int price = OmamoriPool.getCost(omamori.getRarity());
+        TextButton buyButton = new TextButton(price + " Mon", indieButtonStyle);
+
+        buyButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (runSession.getMon() >= price) {
+                    runSession.addMon(-price);
+                    runSession.getActiveOmamoris().add(omamori);
+                    updateMonDisplay();
+
+                    // Visuelles Feedback: Kasten leeren und "SOLD OUT" anzeigen
+                    card.clearChildren();
+                    Label soldOut = new Label("SOLD OUT", skin);
+                    soldOut.setColor(Color.FIREBRICK);
+                    card.add(soldOut).expand().center();
+                }
+            }
+        });
+
+        // 4. Layout in der Box (Bild ist jetzt in der Mitte!)
+        card.add(nameLabel).padTop(10).padBottom(5).row();
+        card.add(icon).width(72).height(96).row(); // Maße anpassen falls nötig
+        card.add(descLabel).expand().fill().pad(5).row();
+        card.add(buyButton).width(160).height(45).padBottom(10);
+
+        return card;
     }
 
     private Table createItemCard(String name, String desc, int price, Runnable onBuy) {

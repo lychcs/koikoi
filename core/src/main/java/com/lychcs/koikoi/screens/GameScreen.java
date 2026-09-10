@@ -57,7 +57,7 @@ public class GameScreen extends ScreenAdapter {
     private static final float ANIMATION_SPEED = 0.1f;
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
-    private static final int INITIAL_TARGET_SCORE = 2000;
+    private static final int INITIAL_TARGET_SCORE = 200;
 
     // =========================================================================
     // 2. SPIEL-ZUSTAND (Model/State)
@@ -117,13 +117,12 @@ public class GameScreen extends ScreenAdapter {
 
         this.atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
         for (Texture tex : atlas.getTextures()) {
-            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest); // GEFIXT: Nearest für knackige Pixel-Art!
+            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
         initUiElements();
         startEncounter();
         dealCardsToUI();
-        renderOmamoris();
     }
 
     // =========================================================================
@@ -133,9 +132,16 @@ public class GameScreen extends ScreenAdapter {
     private void startEncounter() {
         currentRoundScore = 0;
 
-        // Werte aus der Session laden (inklusive gekaufter Fukus!)
+        // Werte aus der Session laden (inklusive gekaufter Fukus)
         discardsRemaining = runSession.getBaseDiscards();
         handsRemaining = runSession.getBaseHands();
+
+        // ==========================================
+        // Omamoris aus dem Rucksack laden & anzeigen
+        // ==========================================
+        activeOmamoris.clear();
+        activeOmamoris.addAll(runSession.getActiveOmamoris());
+        renderOmamoris(); // Sagt dem UI, dass es die Bilder in die obere Leiste zeichnen soll
 
         if (scoreProgressLabel != null) scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
         if (discardLabel != null) discardLabel.setText("Discards: " + discardsRemaining);
@@ -154,7 +160,6 @@ public class GameScreen extends ScreenAdapter {
 
         drawCardsToHand(MAX_HAND_SIZE);
     }
-
     private void drawCardsToHand(int targetSize) {
         while (playerHand.size() < targetSize && !drawPile.isEmpty()) {
             playerHand.add(drawPile.remove(0));

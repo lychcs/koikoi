@@ -164,106 +164,106 @@ filter: Linear, Linear
 repeat: none
 OMAMORI_DARUMA_DOLL
   rotate: false
-  xy: 2, 1951
+  xy: 742, 1975
   size: 736, 981
   orig: 768, 1024
   offset: 15, 30
   index: -1
 OMAMORI_FURIN
   rotate: false
-  xy: 2, 2934
+  xy: 742, 2958
   size: 736, 988
   orig: 768, 1024
   offset: 15, 22
   index: -1
 OMAMORI_HANAMI_DANGO
   rotate: false
-  xy: 740, 2939
+  xy: 2, 983
   size: 737, 983
   orig: 768, 1024
   offset: 15, 27
   index: -1
 OMAMORI_INOSHISHI_TUSK
   rotate: false
-  xy: 2, 2
+  xy: 741, 995
   size: 739, 971
   orig: 768, 1024
   offset: 14, 39
   index: -1
 OMAMORI_JOHARI_MIRROR
   rotate: false
-  xy: 1481, 1970
+  xy: 740, 12
   size: 739, 969
   orig: 768, 1024
   offset: 14, 41
   index: -1
 OMAMORI_KINTSUGI_BOWL
   rotate: false
-  xy: 740, 1963
+  xy: 1480, 1989
   size: 739, 974
   orig: 768, 1024
   offset: 14, 35
   index: -1
 OMAMORI_KITSUNE_MASK
   rotate: false
-  xy: 2, 975
+  xy: 2221, 1992
   size: 739, 974
   orig: 768, 1024
   offset: 14, 35
   index: -1
 OMAMORI_KOINOBORI
   rotate: false
-  xy: 2218, 2944
+  xy: 2219, 2968
   size: 739, 978
   orig: 768, 1024
   offset: 14, 31
   index: -1
 OMAMORI_KURONEKO
   rotate: false
-  xy: 1479, 2941
+  xy: 1480, 2965
   size: 737, 981
   orig: 768, 1024
   offset: 15, 30
   index: -1
 OMAMORI_MATCHA_WHISK
   rotate: false
-  xy: 2970, 1982
+  xy: 1482, 1005
   size: 746, 968
   orig: 768, 1024
   offset: 10, 41
   index: -1
 OMAMORI_SAKE_CUP
   rotate: false
-  xy: 2222, 1973
+  xy: 2962, 2005
   size: 746, 969
   orig: 768, 1024
   offset: 10, 40
   index: -1
 OMAMORI_TENGU_FEATHER
   rotate: false
-  xy: 2959, 2952
+  xy: 2960, 2976
   size: 747, 970
   orig: 768, 1024
   offset: 10, 39
   index: -1
 OMAMORI_TERU_TERU_BOZU
   rotate: false
-  xy: 743, 963
-  size: 710, 986
+  xy: 2, 2958
+  size: 738, 988
   orig: 768, 1024
-  offset: 29, 19
+  offset: 9, 24
   index: -1
 OMAMORI_TORII_GATE
   rotate: false
-  xy: 1455, 968
-  size: 709, 981
+  xy: 2, 1968
+  size: 738, 988
   orig: 768, 1024
-  offset: 29, 23
+  offset: 9, 23
   index: -1
 OMAMORI_YATA_MIRROR
   rotate: false
-  xy: 2166, 987
-  size: 705, 981
+  xy: 2, 2
+  size: 736, 979
   orig: 768, 1024
-  offset: 31, 23
+  offset: 10, 31
   index: -1
