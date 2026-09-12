@@ -7,7 +7,9 @@ import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.Yokai;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class RunSession implements FukuContext {
 
@@ -26,7 +28,11 @@ public class RunSession implements FukuContext {
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
 
+    private boolean shrineSummonedThisVisit = false;
+    private final Set<Yokai> shrineEvolvedThisVisit = new HashSet<>();
+
     public RunSession() {
+        resetShrineVisit();
         this.playerDeck = new Deck();
         this.playerDeck.initializeDeck();
     }
@@ -43,6 +49,15 @@ public class RunSession implements FukuContext {
         return interestEarned;
     }
 
+    // Shrines
+    public boolean isShrineSummonedThisVisit() { return shrineSummonedThisVisit; }
+    public void setShrineSummonedThisVisit(boolean summoned) { this.shrineSummonedThisVisit = summoned; }
+    public Set<Yokai> getShrineEvolvedThisVisit() { return shrineEvolvedThisVisit; }
+
+    public void resetShrineVisit() {
+        this.shrineSummonedThisVisit = false;
+        this.shrineEvolvedThisVisit.clear();
+    }
     // --- Fuku Context Implementierung ---
     @Override
     public int getMon() { return this.mon; }
