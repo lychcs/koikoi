@@ -4,6 +4,7 @@ import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.fuku.FukuContext;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
+import com.lychcs.koikoi.model.yokai.Yokai;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,11 +15,14 @@ public class RunSession implements FukuContext {
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
     private int mon = 1000;
+    private int voidDust = 0;
     private int maxInterestCap = 5;
 
     private int baseHands = 4;
     private int baseDiscards = 3;
 
+    private final List<Yokai> yokaiBag = new ArrayList<>();
+    private int maxYokaiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
 
@@ -67,6 +71,10 @@ public class RunSession implements FukuContext {
     }
     public GameSeason getCurrentSeason() { return currentSeason; }
     public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
-
+    public int getVoidDust() { return voidDust; }
+    public void addVoidDust(int amount) { this.voidDust += amount; }
+    public List<Yokai> getYokaiBag() { return yokaiBag; }
+    public int getMaxYokaiBag() { return maxYokaiBag; }
+    public void addMaxYokaiBag(int amount) { this.maxYokaiBag += amount; }
     public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }
 }

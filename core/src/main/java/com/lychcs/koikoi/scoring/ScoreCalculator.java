@@ -50,15 +50,14 @@ public final class ScoreCalculator {
             }
         }
 
-        // 3. Omamori (Joker) Evaluierung
-        for (var omamori : context.omamoris()) {
-            // NEU: Wir übergeben den kompletten Context!
-            omamori.evaluate(context, acc);
+        //3. Yokai Evaluierung (falls einer im Altar liegt und bereit ist)
+        if (context.activeAltarYokai() != null && !context.activeAltarYokai().isExhausted()) {
+            context.activeAltarYokai().activate(context, acc);
         }
 
-        // 4. Koi-Koi Push-Your-Luck Multiplikator
-        if (context.koiKoiMult() > 1.0) {
-            acc.multiplyMult("Koi-Koi Risk", context.koiKoiMult());
+        // 4. Omamori Evaluierung
+        for (var omamori : context.omamoris()) {
+            omamori.evaluate(context, acc);
         }
 
         // 5. Final Payout

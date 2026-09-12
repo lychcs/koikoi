@@ -51,7 +51,7 @@ public class FirstScreen extends ScreenAdapter {
     }
 
     private void buildUI() {
-        NinePatch buttonPatch = new NinePatch(buttonTex, 120, 120, 40, 40);
+        NinePatch buttonPatch = new NinePatch(buttonTex, 15, 15, 15, 15);
         NinePatchDrawable buttonDrawable = new NinePatchDrawable(buttonPatch);
 
         TextButton.TextButtonStyle buttonStyle = new TextButton.TextButtonStyle();
@@ -104,7 +104,6 @@ public class FirstScreen extends ScreenAdapter {
 
     @Override
     public void hide() {
-        Gdx.input.setInputProcessor(null);
     }
 
     @Override

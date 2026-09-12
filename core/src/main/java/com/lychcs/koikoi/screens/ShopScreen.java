@@ -77,11 +77,11 @@ public class ShopScreen extends ScreenAdapter {
         boosterPackTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
         Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 40, 40, 40, 40));
+        panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
 
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
-        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 50, 50, 20, 20));
+        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
@@ -365,6 +365,11 @@ public class ShopScreen extends ScreenAdapter {
 
         stage.act(delta);
         stage.draw();
+    }
+
+    @Override
+    public void show() {
+        Gdx.input.setInputProcessor(stage);
     }
 
     @Override
