@@ -1,13 +1,11 @@
 package com.lychcs.koikoi;
 
 import com.badlogic.gdx.Game;
-import com.lychcs.koikoi.run.RunSession;
-import com.lychcs.koikoi.screens.GameScreen;
+import com.lychcs.koikoi.screens.FirstScreen;
 
 public class KoiKoiGame extends Game {
     @Override
     public void create() {
-        RunSession currentRun = new RunSession();
-        setScreen(new GameScreen(currentRun));
+        setScreen(new FirstScreen(this));
     }
 }
