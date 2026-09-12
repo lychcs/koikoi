@@ -51,7 +51,7 @@ public class FirstScreen extends ScreenAdapter {
     }
 
     private void buildUI() {
-        NinePatch buttonPatch = new NinePatch(buttonTex, 50, 50, 20, 20);
+        NinePatch buttonPatch = new NinePatch(buttonTex, 120, 120, 40, 40);
         NinePatchDrawable buttonDrawable = new NinePatchDrawable(buttonPatch);
 
         TextButton.TextButtonStyle buttonStyle = new TextButton.TextButtonStyle();
@@ -70,20 +70,16 @@ public class FirstScreen extends ScreenAdapter {
             }
         });
 
-        // Logo in einen UI-Actor umwandeln
         Image logoImage = new Image(logoTexture);
 
         Table rootTable = new Table();
         rootTable.setFillParent(true);
 
-        // Beide Elemente unten stapeln, damit das Zentrum des Hintergrunds frei bleibt
-        rootTable.bottom().padBottom(60);
-        rootTable.add(logoImage).padBottom(40).row();
-        rootTable.add(startButton).width(300).height(80);
+        rootTable.add(logoImage).width(840).height(280).expandY().top().padTop(280).row();
+        rootTable.add(startButton).width(300).height(80).padBottom(60);
 
         stage.addActor(rootTable);
     }
-
     @Override
     public void show() {
         Gdx.input.setInputProcessor(stage);
