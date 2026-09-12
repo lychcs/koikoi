@@ -403,7 +403,10 @@ public class GameScreen extends ScreenAdapter {
             int interest = runSession.applyEndRoundInterest();
             System.out.println("Zinsen erhalten: " + interest);
 
-            ((com.lychcs.koikoi.KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+            runSession.resetShrineVisit();
+
+            ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+
         } else if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("GAME OVER!");

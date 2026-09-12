@@ -186,7 +186,7 @@ public class ShopScreen extends ScreenAdapter {
         exitButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
             }
         });
 
