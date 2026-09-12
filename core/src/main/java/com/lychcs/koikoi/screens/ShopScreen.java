@@ -65,13 +65,8 @@ public class ShopScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        String bgPath = "backgrounds/SHOP_AUTUMN.jpg";
-        if (runSession.getCurrentSeason() == GameSeason.SPRING) bgPath = "backgrounds/SHOP_SPRING.jpg";
-        if (runSession.getCurrentSeason() == GameSeason.SUMMER) bgPath = "backgrounds/SHOP_SUMMER.jpg";
-        if (runSession.getCurrentSeason() == GameSeason.AUTUMN) bgPath = "backgrounds/SHOP_AUTUMN.jpg";
-        if (runSession.getCurrentSeason() == GameSeason.WINTER) bgPath = "backgrounds/SHOP_WINTER.jpg";
-
-        background = new Texture(Gdx.files.internal(bgPath));
+        // Lädt automatisch SHOP_SPRING.jpg, SHOP_SUMMER.jpg etc.
+        background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHOP")));
 
         boosterPackTexture = new Texture(Gdx.files.internal("backgrounds/BOOSTER_PACK.png"));
         boosterPackTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
@@ -195,6 +190,11 @@ public class ShopScreen extends ScreenAdapter {
         bottomBar.add(exitButton).width(200).height(60).padRight(80);
 
         stage.addActor(bottomBar);
+    }
+
+    private String getSeasonalBackgroundPath(String prefix) {
+        String seasonName = runSession.getCurrentSeason().name(); // SPRING, SUMMER, AUTUMN, WINTER
+        return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
     /**

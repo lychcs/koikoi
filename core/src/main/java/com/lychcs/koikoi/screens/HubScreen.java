@@ -42,8 +42,8 @@ public class HubScreen extends ScreenAdapter {
     private void initAssets() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
 
-        // Background
-        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_HUB.png"));
+        // Lädt automatisch HUB_SPRING.jpg, HUB_SUMMER.jpg etc.
+        background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("HUB")));
 
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
@@ -107,6 +107,11 @@ public class HubScreen extends ScreenAdapter {
         root.add(proceedButton).width(320).height(70).bottom();
 
         stage.addActor(root);
+    }
+
+    private String getSeasonalBackgroundPath(String prefix) {
+        String seasonName = runSession.getCurrentSeason().name(); // SPRING, SUMMER, AUTUMN, WINTER
+        return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
     @Override

@@ -60,8 +60,8 @@ public class ShrineScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        // HIER DEIN SCHREIN-HINTERGRUND (oder derselbe Hub-Hintergrund):
-        background = new Texture(Gdx.files.internal("backgrounds/HUB_BACKGROUND.jpg"));
+        // Lädt automatisch SHRINE_SPRING.jpg, SHRINE_SUMMER.jpg etc.
+        background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHRINE")));
 
         Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
         panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
@@ -169,6 +169,11 @@ public class ShrineScreen extends ScreenAdapter {
         root.add(backButton).width(320).height(65).bottom();
 
         stage.addActor(root);
+    }
+
+    private String getSeasonalBackgroundPath(String prefix) {
+        String seasonName = runSession.getCurrentSeason().name(); // SPRING, SUMMER, AUTUMN, WINTER
+        return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
     private void playVoidFlameAnimation(String yokaiName) {
