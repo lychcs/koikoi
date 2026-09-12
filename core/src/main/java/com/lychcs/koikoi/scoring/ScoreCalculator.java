@@ -48,12 +48,13 @@ public final class ScoreCalculator {
                 }
                 case BLOOD_SEAL -> {
                     acc.addChips(card.name() + " (Blood Sacrifice)", 50);
+                    acc.addMult(card.name() + " (Blood Surge)", 10);
                 }
                 case STONE_SEAL -> {
-                    // Wird im GameScreen verarbeitet: Kehrt nach dem Ausspielen auf die Hand zurück
+                    // Wird im GameScreen verarbeitet
                 }
                 case POLYCHROME_SEAL -> {
-                    // Wird im HandContext verarbeitet: Zählt zeitgleich für alle vier Jahreszeiten
+                    // Wird im HandContext verarbeitet
                 }
                 case NONE -> {
                     // Keine Siegel-Wirkung

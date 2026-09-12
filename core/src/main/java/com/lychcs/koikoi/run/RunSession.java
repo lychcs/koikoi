@@ -1,15 +1,13 @@
 package com.lychcs.koikoi.run;
 
+import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.fuku.FukuContext;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.Yokai;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class RunSession implements FukuContext {
 
@@ -29,6 +27,9 @@ public class RunSession implements FukuContext {
     private int maxYokaiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
+
+    // Speichert Karten, die durch das Blood Seal für die aktuelle Season verbrannt wurden
+    private final List<Card> banishedThisSeason = new ArrayList<>();
 
     private boolean shrineSummonedThisVisit = false;
     private final Set<Yokai> shrineEvolvedThisVisit = new HashSet<>();
@@ -71,6 +72,7 @@ public class RunSession implements FukuContext {
     }
 
     private void advanceSeason() {
+        restoreSeasonBanishedCards();
         currentSeason = switch (currentSeason) {
             case SPRING -> GameSeason.SUMMER;
             case SUMMER -> GameSeason.AUTUMN;
@@ -78,6 +80,31 @@ public class RunSession implements FukuContext {
             case WINTER -> GameSeason.WINTER; // Hier später in den Final Boss State wechseln!
         };
     }
+
+    /**
+     * Entfernt die Karte temporär aus dem Deck des Spielers und markiert sie als verbannt.
+     */
+    public void banishCardForSeason(Card card) {
+        if (card != null && playerDeck != null) {
+            playerDeck.getCards().remove(card);
+            banishedThisSeason.add(card);
+        }
+    }
+
+    /**
+     * Bringt alle verbannten Karten zurück ins Deck, sobald die nächste Season startet.
+     */
+    public void restoreSeasonBanishedCards() {
+        if (playerDeck != null && !banishedThisSeason.isEmpty()) {
+            playerDeck.getCards().addAll(banishedThisSeason);
+            banishedThisSeason.clear();
+        }
+    }
+
+    public List<Card> getBanishedThisSeason() {
+        return Collections.unmodifiableList(banishedThisSeason);
+    }
+
     // --- Fuku Context Implementierung ---
     @Override
     public int getMon() { return this.mon; }

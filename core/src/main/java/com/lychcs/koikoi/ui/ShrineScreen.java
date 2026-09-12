@@ -38,6 +38,9 @@ public class ShrineScreen extends ScreenAdapter {
     private Texture background;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
+
+    private Texture darkOverlayTex;
+    private Texture purpleOverlayTex;
     private TextureRegionDrawable darkOverlayBackground;
     private TextureRegionDrawable purpleFlameOverlayBackground;
 
@@ -60,7 +63,6 @@ public class ShrineScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        // Lädt automatisch SHRINE_SPRING.jpg, SHRINE_SUMMER.jpg etc.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHRINE")));
 
         Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
@@ -73,16 +75,19 @@ public class ShrineScreen extends ScreenAdapter {
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
 
+        // Overlay Texturen sauber erstellen und referenzieren
         Pixmap darkPixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         darkPixmap.setColor(new Color(0, 0, 0, 0.85f));
         darkPixmap.fill();
-        darkOverlayBackground = new TextureRegionDrawable(new TextureRegion(new Texture(darkPixmap)));
+        darkOverlayTex = new Texture(darkPixmap);
+        darkOverlayBackground = new TextureRegionDrawable(new TextureRegion(darkOverlayTex));
         darkPixmap.dispose();
 
         Pixmap purplePixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         purplePixmap.setColor(new Color(0.12f, 0.0f, 0.18f, 0.92f));
         purplePixmap.fill();
-        purpleFlameOverlayBackground = new TextureRegionDrawable(new TextureRegion(new Texture(purplePixmap)));
+        purpleOverlayTex = new Texture(purplePixmap);
+        purpleFlameOverlayBackground = new TextureRegionDrawable(new TextureRegion(purpleOverlayTex));
         purplePixmap.dispose();
     }
 
@@ -93,7 +98,6 @@ public class ShrineScreen extends ScreenAdapter {
         root.setFillParent(true);
         root.pad(40);
 
-        // TOP BAR
         Table topBar = new Table();
         voidDustLabel = new Label("Void Dust: " + runSession.getVoidDust(), skin);
         voidDustLabel.setFontScale(1.4f);
@@ -101,7 +105,6 @@ public class ShrineScreen extends ScreenAdapter {
         topBar.add(voidDustLabel);
         root.add(topBar).expandX().top().left().padBottom(40).row();
 
-        // SCHREIN INHALT
         Table shrineBox = new Table();
         shrineBox.setBackground(panelBackground);
         shrineBox.pad(30);
@@ -111,13 +114,12 @@ public class ShrineScreen extends ScreenAdapter {
         title.setColor(Color.valueOf("D1C4E9"));
         shrineBox.add(title).padBottom(25).row();
 
-        // Beschwören
         boolean canSummon = !runSession.isShrineSummonedThisVisit() && runSession.getVoidDust() >= SUMMON_COST
             && runSession.getYokaiBag().size() < runSession.getMaxYokaiBag();
 
         String summonText = runSession.isShrineSummonedThisVisit()
             ? "Yokai beschworen (0/1)"
-            : "Yokai beschwören (" + SUMMON_COST + " Dust)";
+            : "Yokai beschwoeren (" + SUMMON_COST + " Dust)";
         TextButton summonButton = new TextButton(summonText, indieButtonStyle);
         if (!canSummon) summonButton.getColor().a = 0.5f;
 
@@ -139,7 +141,6 @@ public class ShrineScreen extends ScreenAdapter {
             }
         });
 
-        // Evolven
         TextButton evolveButton = new TextButton("Yokai evolven (" + EVOLVE_COST + " Dust)", indieButtonStyle);
         evolveButton.addListener(new ClickListener() {
             @Override
@@ -158,8 +159,7 @@ public class ShrineScreen extends ScreenAdapter {
 
         root.add(shrineBox).expandY().center().padBottom(40).row();
 
-        // ZURÜCK BUTTON
-        TextButton backButton = new TextButton("Zurück zum Rastplatz", indieButtonStyle);
+        TextButton backButton = new TextButton("Zurueck zum Rastplatz", indieButtonStyle);
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -172,7 +172,7 @@ public class ShrineScreen extends ScreenAdapter {
     }
 
     private String getSeasonalBackgroundPath(String prefix) {
-        String seasonName = runSession.getCurrentSeason().name(); // SPRING, SUMMER, AUTUMN, WINTER
+        String seasonName = runSession.getCurrentSeason().name();
         return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
@@ -181,7 +181,7 @@ public class ShrineScreen extends ScreenAdapter {
         flameOverlay.setFillParent(true);
         flameOverlay.setBackground(purpleFlameOverlayBackground);
 
-        Label voidText = new Label("~ DER VOID ANTWORTET ~\n\nLila-schwarze Flammen Lodern auf...\n[" + yokaiName + "] ist erwacht!", skin);
+        Label voidText = new Label("~ DER VOID ANTWORTET ~\n\nLila-schwarze Flammen lodern auf...\n[" + yokaiName + "] ist erwacht!", skin);
         voidText.setColor(Color.valueOf("E1BEE7"));
         voidText.setFontScale(1.4f);
         voidText.setAlignment(Align.center);
@@ -210,7 +210,7 @@ public class ShrineScreen extends ScreenAdapter {
         contentBox.setBackground(panelBackground);
         contentBox.pad(30);
 
-        Label title = new Label("Wähle einen Yokai zur Evolution (-" + EVOLVE_COST + " Dust)", skin);
+        Label title = new Label("Waehle einen Yokai zur Evolution (-" + EVOLVE_COST + " Dust)", skin);
         title.setFontScale(1.3f);
         contentBox.add(title).padBottom(20).row();
 
@@ -242,7 +242,7 @@ public class ShrineScreen extends ScreenAdapter {
 
         contentBox.add(listTable).padBottom(20).row();
 
-        TextButton closeBtn = new TextButton("Schließen", indieButtonStyle);
+        TextButton closeBtn = new TextButton("Schliessen", indieButtonStyle);
         closeBtn.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -274,8 +274,10 @@ public class ShrineScreen extends ScreenAdapter {
     @Override
     public void dispose() {
         stage.dispose();
-        background.dispose();
-        atlas.dispose();
-        skin.dispose();
+        if (background != null) background.dispose();
+        if (atlas != null) atlas.dispose();
+        if (skin != null) skin.dispose();
+        if (darkOverlayTex != null) darkOverlayTex.dispose();
+        if (purpleOverlayTex != null) purpleOverlayTex.dispose();
     }
 }

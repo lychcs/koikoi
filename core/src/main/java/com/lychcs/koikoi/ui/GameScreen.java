@@ -338,24 +338,25 @@ public class GameScreen extends ScreenAdapter {
         handsRemaining--;
         handsLabel.setText("Hands: " + handsRemaining);
 
+        List<Card> playedCards = new ArrayList<>(selectedCards);
         YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
 
         if (bestYaku == null) {
-            List<Card> playedCards = new ArrayList<>(selectedCards);
             playerHand.removeAll(selectedCards);
             selectedCards.clear();
 
             for (Card playedCard : playedCards) {
                 if (playedCard.effect() == HankoEffect.STONE_SEAL) {
-                    Card strippedCard = new Card(playedCard.id(), playedCard.season(), playedCard.rank(), playedCard.name(), HankoEffect.NONE);
+                    Card strippedCard = new Card(
+                        playedCard.id(), playedCard.season(), playedCard.rank(),
+                        playedCard.name(), HankoEffect.NONE
+                    );
                     playerHand.add(strippedCard);
-                } else if (playedCard.effect() == HankoEffect.YAMI_SEAL) {
-                    runSession.getPlayerDeck().getCards().remove(playedCard);
                 }
             }
 
-            // Yokai Altar abräumen bei Fail
-            if(activeAltarYokai != null) {
+            // Yokai Altar abräumen bei Fehlschlag
+            if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;
             }
@@ -369,12 +370,30 @@ public class GameScreen extends ScreenAdapter {
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
-        // HIER WICHTIG: ScoreContext benötigt jetzt den AltarYokai!
         ScoreContext context = new ScoreContext(0, hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai);
         CalculationBreakdown breakdown = ScoreCalculator.calculate(context);
 
         playerHand.removeAll(selectedCards);
         selectedCards.clear();
+
+        // Siegel-Effekte nach erfolgreicher Wertung ausführen
+        for (Card playedCard : playedCards) {
+            if (playedCard.effect() == HankoEffect.STONE_SEAL) {
+                // Stone Seal: Karte kehrt ohne Siegel auf die Hand zurück
+                Card strippedCard = new Card(
+                    playedCard.id(), playedCard.season(), playedCard.rank(),
+                    playedCard.name(), HankoEffect.NONE
+                );
+                playerHand.add(strippedCard);
+
+            } else if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
+                // Blood Seal: 1-in-4 Chance, für die laufende Season verbrannt zu werden
+                if (com.badlogic.gdx.math.MathUtils.random(1, 4) == 1) {
+                    runSession.banishCardForSeason(playedCard);
+                }
+            }
+        }
+
         dealCardsToUI();
         updateLivePreview();
 
@@ -427,46 +446,39 @@ public class GameScreen extends ScreenAdapter {
             Actor cardView;
 
             if (cardImage != null) {
-                // TEST: Wir packen die Karte selbst in einen Image-Actor mit Shader!
-                Image cardImageActor = new Image(cardImage) {
-                    @Override
-                    public void draw(com.badlogic.gdx.graphics.g2d.Batch batch, float parentAlpha) {
-                        com.badlogic.gdx.graphics.glutils.ShaderProgram activeShader = null;
-
-                        if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.POLYCHROME_SEAL) {
-                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPolychromeShader();
-                            batch.setShader(activeShader);
-                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
-
-                        } else if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.GOLDEN_SEAL) {
-                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPulseShader();
-                            batch.setShader(activeShader);
-                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
-                            activeShader.setUniformf("u_glowColor", 1.0f, 0.84f, 0.0f);
-
-                        } else if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.YAMI_SEAL) {
-                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPulseShader();
-                            batch.setShader(activeShader);
-                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
-                            activeShader.setUniformf("u_glowColor", 0.65f, 0.0f, 0.95f);
-                        }
-
-                        super.draw(batch, parentAlpha);
-
-                        if (activeShader != null) {
-                            batch.setShader(null);
-                        }
-                    }
-                };
-
                 Stack cardStack = new Stack();
-                cardStack.add(cardImageActor);
+
+                // 1. Unverändertes Kartenbild (ohne Shader)
+                cardStack.add(new Image(cardImage));
+
+                // 2. Hanko-Stempel oben rechts als Overlay
+                if (card.hasHanko()) {
+                    String regionName = "HANKO_" + card.effect().name();
+                    TextureRegion hankoRegion = atlas.findRegion(regionName);
+
+                    // Fallback falls der Packer den Unterordner im Namen behalten hat
+                    if (hankoRegion == null) {
+                        hankoRegion = atlas.findRegion("hankos/" + regionName);
+                    }
+
+                    if (hankoRegion != null) {
+                        HankoActor hankoActor = new HankoActor(card.effect(), hankoRegion);
+
+                        // Fixiert das Siegel mit Abstand in der oberen rechten Ecke
+                        com.badlogic.gdx.scenes.scene2d.ui.Container<HankoActor> sealContainer =
+                            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(hankoActor);
+                        sealContainer.top().right().padTop(6).padRight(6);
+                        sealContainer.size(34, 34); // Stempelgröße auf der Karte
+
+                        cardStack.add(sealContainer);
+                    }
+                }
+
                 cardView = cardStack;
             } else {
                 cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
             }
 
-            // Klick-Logik bleibt identisch
             cardView.addListener(new ClickListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -673,6 +685,7 @@ public class GameScreen extends ScreenAdapter {
         final int[] currentChips = { breakdown.yakuChips() };
         final int[] currentMult = { breakdown.yakuBaseMult() };
 
+        // 1. Buttons ausblenden & Startwerte setzen
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
@@ -681,6 +694,7 @@ public class GameScreen extends ScreenAdapter {
         }));
         sequence.addAction(Actions.delay(0.6f));
 
+        // 2. Alle Scoring-Events schrittweise animieren
         for (ScoringEvent event : breakdown.events()) {
             if (event.addedChips() == 0 && event.addedMult() == 0 && event.xMult() == 1.0) continue;
 
@@ -696,15 +710,23 @@ public class GameScreen extends ScreenAdapter {
         }
 
         sequence.addAction(Actions.delay(0.4f));
+
+        // 3. Finale Punkte & Währungen gutschreiben
         sequence.addAction(Actions.run(() -> {
-            // Punkte DIREKT auf den Round Score addieren!
             currentRoundScore += breakdown.finalPayout();
+
+            // Währungen aus den Siegeln (Gold / Void) verbuchen
+            for (ScoringEvent event : breakdown.events()) {
+                if (event.addedMon() > 0) runSession.addMon(event.addedMon());
+                if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
+            }
+
             scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
             chipsLabel.setText("0");
             multLabel.setText("0");
 
             // Yokai Cooldown aktivieren
-            if(activeAltarYokai != null) {
+            if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;
             }

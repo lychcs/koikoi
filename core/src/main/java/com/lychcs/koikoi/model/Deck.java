@@ -44,9 +44,10 @@ public class Deck {
     private void addCard(CardID id, Season season, Rank rank, String baseName, int count) {
         // Alle aktiven Siegel für den Testlauf:
         HankoEffect[] availableSeals = {
-            HankoEffect.POLYCHROME_SEAL, // Regenbogen-Shader
-            HankoEffect.GOLDEN_SEAL,     // Gold-Puls-Shader
-            HankoEffect.YAMI_SEAL,       // Lila-Void-Shader
+            HankoEffect.POLYCHROME_SEAL,
+            HankoEffect.GOLDEN_SEAL,
+            HankoEffect.VOID_SEAL,
+            HankoEffect.BLOOD_SEAL,
             HankoEffect.WHITE_SEAL,
             HankoEffect.BLACK_SEAL,
             HankoEffect.STONE_SEAL

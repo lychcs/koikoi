@@ -20,28 +20,37 @@ public class HankoActor extends Image {
     public void draw(Batch batch, float parentAlpha) {
         ShaderProgram activeShader = null;
 
-        if (effect == HankoEffect.POLYCHROME_SEAL) {
-            activeShader = HankoShaderManager.getPolychromeShader();
-            batch.setShader(activeShader);
-            activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
-
-        } else if (effect == HankoEffect.GOLDEN_SEAL) {
-            activeShader = HankoShaderManager.getPulseShader();
-            batch.setShader(activeShader);
-            activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
-            activeShader.setUniformf("u_glowColor", 1.0f, 0.84f, 0.0f); // Warmes Gold
-
-        } else if (effect == HankoEffect.YAMI_SEAL) {
-            activeShader = HankoShaderManager.getPulseShader();
-            batch.setShader(activeShader);
-            activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
-            activeShader.setUniformf("u_glowColor", 0.65f, 0.0f, 0.95f); // Lila Void-Flamme
+        switch (effect) {
+            case POLYCHROME_SEAL -> {
+                activeShader = HankoShaderManager.getPolychromeShader();
+                batch.setShader(activeShader);
+                activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
+            }
+            case GOLDEN_SEAL -> {
+                activeShader = HankoShaderManager.getPulseShader();
+                batch.setShader(activeShader);
+                activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
+                activeShader.setUniformf("u_glowColor", 1.0f, 0.84f, 0.0f); // Warmes Gold
+            }
+            case VOID_SEAL -> {
+                activeShader = HankoShaderManager.getPulseShader();
+                batch.setShader(activeShader);
+                activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
+                activeShader.setUniformf("u_glowColor", 0.65f, 0.0f, 0.95f); // Lila Void
+            }
+            case BLOOD_SEAL -> {
+                activeShader = HankoShaderManager.getPulseShader();
+                batch.setShader(activeShader);
+                activeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
+                activeShader.setUniformf("u_glowColor", 0.85f, 0.05f, 0.05f); // Blutrot
+            }
+            default -> {
+                // WHITE_SEAL, BLACK_SEAL, STONE_SEAL nutzen keinen Shader
+            }
         }
 
-        // Zeichnet das Stempel-Overlay normal via Scene2D
         super.draw(batch, parentAlpha);
 
-        // Batch sofort wieder auf Default-Shader zurücksetzen
         if (activeShader != null) {
             batch.setShader(null);
         }

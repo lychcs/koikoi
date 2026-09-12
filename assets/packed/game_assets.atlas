@@ -146,6 +146,61 @@ WINTER_RIBBON
   index: -1
 
 game_assets2.png
+size: 4096, 4096
+format: RGBA8888
+filter: Nearest, Nearest
+repeat: none
+HANKO_BLACK_SEAL
+  rotate: false
+  xy: 2, 2514
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_BLOOD_SEAL
+  rotate: false
+  xy: 2, 1258
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_GOLD_SEAL
+  rotate: false
+  xy: 1258, 2514
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_POLYCHROME_SEAL
+  rotate: false
+  xy: 2, 2
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_STONE_SEAL
+  rotate: false
+  xy: 1258, 1258
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_VOID_SEAL
+  rotate: false
+  xy: 2514, 2514
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+HANKO_WHITE_SEAL
+  rotate: false
+  xy: 1258, 2
+  size: 1254, 1254
+  orig: 1254, 1254
+  offset: 0, 0
+  index: -1
+
+game_assets3.png
 size: 4096, 512
 format: RGBA8888
 filter: Nearest, Nearest
@@ -256,7 +311,7 @@ OMAMORI_YATA_MIRROR
   offset: 0, 0
   index: -1
 
-game_assets3.png
+game_assets4.png
 size: 256, 512
 format: RGBA8888
 filter: Nearest, Nearest

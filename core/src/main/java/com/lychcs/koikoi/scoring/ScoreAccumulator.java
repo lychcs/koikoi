@@ -41,12 +41,14 @@ public class ScoreAccumulator {
 
     public void addVoidDust(String source, int amount) {
         this.earnedVoidDust += amount;
-        events.add(new ScoringEvent(source, 0, 0, 0, 0, amount));
+        events.add(new ScoringEvent(source, 0, 0, 1.0, 0, amount));
     }
-
     public int getChips() { return chips; }
     public int getMult() { return mult; }
     public int getEarnedMon() { return earnedMon; }
+    public int getEarnedVoidDust() {
+        return earnedVoidDust;
+    }
     public List<ScoringEvent> getEvents() { return events; }
 }
 
