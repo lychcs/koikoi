@@ -13,7 +13,9 @@ import java.util.Set;
 
 public class RunSession implements FukuContext {
 
-    private GameSeason currentSeason = GameSeason.AUTUMN; // Start-Saison
+    private GameSeason currentSeason = GameSeason.SPRING; // Start immer im Frühling
+    private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel-Evo-Kampf, 3: Korrumpierter Kami-Boss
+
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
     private int mon = 1000;
@@ -58,6 +60,24 @@ public class RunSession implements FukuContext {
         this.shrineSummonedThisVisit = false;
         this.shrineEvolvedThisVisit.clear();
     }
+
+    //Seasons
+    public void advanceEncounterStage() {
+        seasonEncounterStage++;
+        if (seasonEncounterStage > 3) {
+            seasonEncounterStage = 1;
+            advanceSeason();
+        }
+    }
+
+    private void advanceSeason() {
+        currentSeason = switch (currentSeason) {
+            case SPRING -> GameSeason.SUMMER;
+            case SUMMER -> GameSeason.AUTUMN;
+            case AUTUMN -> GameSeason.WINTER;
+            case WINTER -> GameSeason.WINTER; // Hier später in den Final Boss State wechseln!
+        };
+    }
     // --- Fuku Context Implementierung ---
     @Override
     public int getMon() { return this.mon; }
@@ -84,12 +104,13 @@ public class RunSession implements FukuContext {
     public List<HankoEffect> getPurchasedHankos() {
         return purchasedHankos;
     }
-    public GameSeason getCurrentSeason() { return currentSeason; }
     public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
     public int getVoidDust() { return voidDust; }
     public void addVoidDust(int amount) { this.voidDust += amount; }
     public List<Yokai> getYokaiBag() { return yokaiBag; }
     public int getMaxYokaiBag() { return maxYokaiBag; }
     public void addMaxYokaiBag(int amount) { this.maxYokaiBag += amount; }
+    public GameSeason getCurrentSeason() { return currentSeason; }
     public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }
+    public int getSeasonEncounterStage() { return seasonEncounterStage; }
 }
