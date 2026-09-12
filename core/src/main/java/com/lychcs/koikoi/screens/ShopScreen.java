@@ -347,7 +347,7 @@ public class ShopScreen extends ScreenAdapter {
                 }
             });
 
-            boosterOverlay.add(cardBtn).width(120).height(192).pad(20);
+            boosterOverlay.add(cardBtn).width(108).height(192).pad(20);
         }
     }
 

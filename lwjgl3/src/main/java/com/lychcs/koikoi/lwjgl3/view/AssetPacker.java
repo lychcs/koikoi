@@ -7,10 +7,10 @@ public class AssetPacker {
         TexturePacker.Settings settings = new TexturePacker.Settings();
         settings.maxWidth = 4096;
         settings.maxHeight = 4096;
-        settings.stripWhitespaceX = true;
-        settings.stripWhitespaceY = true;
-        settings.filterMin = com.badlogic.gdx.graphics.Texture.TextureFilter.Linear;
-        settings.filterMag = com.badlogic.gdx.graphics.Texture.TextureFilter.Linear;
+        settings.stripWhitespaceX = false;
+        settings.stripWhitespaceY = false;
+        settings.filterMin = com.badlogic.gdx.graphics.Texture.TextureFilter.Nearest;
+        settings.filterMag = com.badlogic.gdx.graphics.Texture.TextureFilter.Nearest;
 
         settings.flattenPaths = true;
 

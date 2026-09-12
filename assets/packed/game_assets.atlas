@@ -1,269 +1,257 @@
 
 game_assets.png
-size: 4096, 4096
+size: 4096, 1024
 format: RGBA8888
-filter: Linear, Linear
+filter: Nearest, Nearest
 repeat: none
 AUTUMN_BEAST_BOAR
   rotate: false
-  xy: 2, 1676
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 544, 578
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_BEAST_DEER
   rotate: false
-  xy: 2, 2
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 544, 192
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_HIKARI_RED_MOON
   rotate: false
-  xy: 945, 1676
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 2, 2
+  size: 540, 960
+  orig: 540, 960
   offset: 0, 0
   index: -1
 AUTUMN_PETAL
   rotate: false
-  xy: 945, 2
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 762, 578
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_RIBBON
   rotate: false
-  xy: 1888, 1676
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 762, 192
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_BEAST_CRANE
   rotate: false
-  xy: 1888, 2
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 980, 578
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_BEAST_KOI
   rotate: false
-  xy: 2831, 1676
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 980, 192
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_HIKARI_CHERRY_BLOSSOM_STORM
   rotate: false
-  xy: 2831, 2
-  size: 941, 1672
-  orig: 941, 1672
+  xy: 1198, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SPRING_PETAL
+  rotate: false
+  xy: 1198, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SPRING_RIBBON
+  rotate: false
+  xy: 1416, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_BEAST_MOUNTAIN_MONKEY
+  rotate: false
+  xy: 1416, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_BEAST_SERPENT
+  rotate: false
+  xy: 1634, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_HIKARI_GLAZING_SUN
+  rotate: false
+  xy: 1634, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_PETAL
+  rotate: false
+  xy: 1852, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_RIBBON
+  rotate: false
+  xy: 1852, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_BEAST_ARCTIC_FOX
+  rotate: false
+  xy: 2070, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_BEAST_WHITE_OWL
+  rotate: false
+  xy: 2070, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_HIKARI_POLAR_LIGHT
+  rotate: false
+  xy: 2288, 578
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_PETAL
+  rotate: false
+  xy: 2288, 192
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_RIBBON
+  rotate: false
+  xy: 2506, 578
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 
 game_assets2.png
 size: 4096, 4096
 format: RGBA8888
-filter: Linear, Linear
-repeat: none
-SPRING_PETAL
-  rotate: false
-  xy: 2, 1676
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SPRING_RIBBON
-  rotate: false
-  xy: 2, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SUMMER_BEAST_MOUNTAIN_MONKEY
-  rotate: false
-  xy: 945, 1676
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SUMMER_BEAST_SERPENT
-  rotate: false
-  xy: 945, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SUMMER_HIKARI_GLAZING_SUN
-  rotate: false
-  xy: 1888, 1676
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SUMMER_PETAL
-  rotate: false
-  xy: 1888, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-SUMMER_RIBBON
-  rotate: false
-  xy: 2831, 1676
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-WINTER_BEAST_ARCTIC_FOX
-  rotate: false
-  xy: 2831, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-
-game_assets3.png
-size: 4096, 2048
-format: RGBA8888
-filter: Linear, Linear
-repeat: none
-WINTER_BEAST_WHITE_OWL
-  rotate: false
-  xy: 2, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-WINTER_HIKARI_POLAR_LIGHT
-  rotate: false
-  xy: 945, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-WINTER_PETAL
-  rotate: false
-  xy: 1888, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-WINTER_RIBBON
-  rotate: false
-  xy: 2831, 2
-  size: 941, 1672
-  orig: 941, 1672
-  offset: 0, 0
-  index: -1
-
-game_assets4.png
-size: 4096, 4096
-format: RGBA8888
-filter: Linear, Linear
+filter: Nearest, Nearest
 repeat: none
 OMAMORI_DARUMA_DOLL
   rotate: false
-  xy: 742, 1975
-  size: 736, 981
+  xy: 2, 2054
+  size: 768, 1024
   orig: 768, 1024
-  offset: 15, 30
+  offset: 0, 0
   index: -1
 OMAMORI_FURIN
   rotate: false
-  xy: 742, 2958
-  size: 736, 988
+  xy: 2, 1028
+  size: 768, 1024
   orig: 768, 1024
-  offset: 15, 22
+  offset: 0, 0
   index: -1
 OMAMORI_HANAMI_DANGO
   rotate: false
-  xy: 2, 983
-  size: 737, 983
+  xy: 772, 2054
+  size: 768, 1024
   orig: 768, 1024
-  offset: 15, 27
+  offset: 0, 0
   index: -1
 OMAMORI_INOSHISHI_TUSK
   rotate: false
-  xy: 741, 995
-  size: 739, 971
+  xy: 2, 2
+  size: 768, 1024
   orig: 768, 1024
-  offset: 14, 39
+  offset: 0, 0
   index: -1
 OMAMORI_JOHARI_MIRROR
   rotate: false
-  xy: 740, 12
-  size: 739, 969
+  xy: 772, 1028
+  size: 768, 1024
   orig: 768, 1024
-  offset: 14, 41
+  offset: 0, 0
   index: -1
 OMAMORI_KINTSUGI_BOWL
   rotate: false
-  xy: 1480, 1989
-  size: 739, 974
+  xy: 1542, 2054
+  size: 768, 1024
   orig: 768, 1024
-  offset: 14, 35
+  offset: 0, 0
   index: -1
 OMAMORI_KITSUNE_MASK
   rotate: false
-  xy: 2221, 1992
-  size: 739, 974
+  xy: 772, 2
+  size: 768, 1024
   orig: 768, 1024
-  offset: 14, 35
+  offset: 0, 0
   index: -1
 OMAMORI_KOINOBORI
   rotate: false
-  xy: 2219, 2968
-  size: 739, 978
+  xy: 1542, 1028
+  size: 768, 1024
   orig: 768, 1024
-  offset: 14, 31
+  offset: 0, 0
   index: -1
 OMAMORI_KURONEKO
   rotate: false
-  xy: 1480, 2965
-  size: 737, 981
+  xy: 2312, 2054
+  size: 768, 1024
   orig: 768, 1024
-  offset: 15, 30
+  offset: 0, 0
   index: -1
 OMAMORI_MATCHA_WHISK
   rotate: false
-  xy: 1482, 1005
-  size: 746, 968
+  xy: 1542, 2
+  size: 768, 1024
   orig: 768, 1024
-  offset: 10, 41
+  offset: 0, 0
   index: -1
 OMAMORI_SAKE_CUP
   rotate: false
-  xy: 2962, 2005
-  size: 746, 969
+  xy: 2312, 1028
+  size: 768, 1024
   orig: 768, 1024
-  offset: 10, 40
+  offset: 0, 0
   index: -1
 OMAMORI_TENGU_FEATHER
   rotate: false
-  xy: 2960, 2976
-  size: 747, 970
+  xy: 3082, 2054
+  size: 768, 1024
   orig: 768, 1024
-  offset: 10, 39
+  offset: 0, 0
   index: -1
 OMAMORI_TERU_TERU_BOZU
   rotate: false
-  xy: 2, 2958
-  size: 738, 988
+  xy: 2312, 2
+  size: 768, 1024
   orig: 768, 1024
-  offset: 9, 24
+  offset: 0, 0
   index: -1
 OMAMORI_TORII_GATE
   rotate: false
-  xy: 2, 1968
-  size: 738, 988
+  xy: 3082, 1028
+  size: 768, 1024
   orig: 768, 1024
-  offset: 9, 23
+  offset: 0, 0
   index: -1
 OMAMORI_YATA_MIRROR
   rotate: false
-  xy: 2, 2
-  size: 736, 979
+  xy: 3082, 2
+  size: 768, 1024
   orig: 768, 1024
-  offset: 10, 31
+  offset: 0, 0
   index: -1

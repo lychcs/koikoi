@@ -51,8 +51,8 @@ public class GameScreen extends ScreenAdapter {
     private static final float WORLD_HEIGHT = 720f;
     private static final int MAX_HAND_SIZE = 8;
     private static final int MAX_SELECTED_CARDS = 5;
-    private static final float CARD_WIDTH = 90f;
-    private static final float CARD_HEIGHT = 144f;
+    private static final float CARD_WIDTH = 108f;
+    private static final float CARD_HEIGHT = 192f;
     private static final float CARD_SELECT_OFFSET_Y = 20f;
     private static final float ANIMATION_SPEED = 0.1f;
     private static final int INITIAL_MAX_DISCARDS = 3;
@@ -320,8 +320,7 @@ public class GameScreen extends ScreenAdapter {
 
         handTable = new Table();
         handTable.setFillParent(true);
-        handTable.bottom().padBottom(180);
-        stage.addActor(handTable);
+        handTable.bottom().padBottom(180).padLeft(280);        stage.addActor(handTable);
 
         // =========================================================
         // DAS UNIVERSELLE INFO-POPUP
