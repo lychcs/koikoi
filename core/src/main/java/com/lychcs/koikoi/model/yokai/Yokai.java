@@ -35,4 +35,6 @@ public abstract class Yokai {
      * Skaliert idealerweise mit dem aktuellen getStage().
      */
     public abstract boolean activate(ScoreContext context, ScoreAccumulator acc);
+
+    public abstract String getAtlasRegionName();
 }

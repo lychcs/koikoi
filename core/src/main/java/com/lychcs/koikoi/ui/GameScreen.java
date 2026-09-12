@@ -17,6 +17,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -91,7 +92,7 @@ public class GameScreen extends ScreenAdapter {
     private final RunSession runSession;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
-
+    private AltarFlameActor altarFlames;
     private Table hankoTable;
     private Table omamoriTable;
     private Table altarTable;
@@ -176,29 +177,37 @@ public class GameScreen extends ScreenAdapter {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         loadIndieAssets();
 
+        // 1. Buttons & Listener
         playButton = new TextButton("Play Hand", indieButtonStyle);
         discardButton = new TextButton("Discard", indieButtonStyle);
         TextButton sortSeasonButton = new TextButton("Sort: Season", indieButtonStyle);
         TextButton sortRankButton = new TextButton("Sort: Rank", indieButtonStyle);
 
-        playButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onPlayHandSubmitted(); } });
-        discardButton.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { onDiscardClicked(); } });
+        playButton.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) { onPlayHandSubmitted(); }
+        });
+        discardButton.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) { onDiscardClicked(); }
+        });
 
         sortSeasonButton.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
                 if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
                 playerHand.sort(Comparator.comparing(Card::season).thenComparing(Card::rank));
-                dealCardsToUI(); updateLivePreview();
+                dealCardsToUI();
+                updateLivePreview();
             }
         });
         sortRankButton.addListener(new ClickListener() {
             @Override public void clicked(InputEvent e, float x, float y) {
                 if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
                 playerHand.sort(Comparator.comparing(Card::rank, Comparator.reverseOrder()).thenComparing(Card::season));
-                dealCardsToUI(); updateLivePreview();
+                dealCardsToUI();
+                updateLivePreview();
             }
         });
 
+        // 2. Score & Info Labels
         scoreProgressLabel = new Label("0 / " + currentTargetScore, skin);
         chipsLabel = new Label("0", skin);
         multLabel = new Label("0", skin);
@@ -210,7 +219,7 @@ public class GameScreen extends ScreenAdapter {
         chipsLabel.setFontScale(1.5f);
         multLabel.setFontScale(1.5f);
 
-        // LINKE SPALTE
+        // 3. Linke Spalte (Score & Stats)
         Table leftColumn = new Table();
         leftColumn.top().pad(20);
 
@@ -236,7 +245,7 @@ public class GameScreen extends ScreenAdapter {
         statsBox.add(discardLabel).padBottom(15).row();
         leftColumn.add(statsBox).width(240).padBottom(15).row();
 
-        // OBERE SPALTE
+        // 4. Obere Leiste (Omamori, Altar mit Flammen, Hyotan / Seelenkuerbis, Hankos)
         Table topRow = new Table();
         topRow.left().pad(20);
 
@@ -248,6 +257,18 @@ public class GameScreen extends ScreenAdapter {
         altarTable.setBackground(panelBackground);
         altarTable.pad(15);
 
+        TextureRegion whiteRegion = skin.getRegion("white");
+        altarFlames = new AltarFlameActor(whiteRegion);
+
+        // Flammen-Actor hinter dem Altar einbinden
+        TextureRegion flameRegion = atlas.findRegion("FLAME_SHAPE");
+        altarFlames = new AltarFlameActor(flameRegion);
+
+        Stack altarStack = new Stack();
+        altarStack.add(altarFlames); // Liegt visuell dahinter
+        altarStack.add(altarTable);
+
+        // Yokai-Gefaess als traditioneller Seelenkuerbis (Hyotan)
         yokaiBagTable = new Table();
         yokaiBagTable.setBackground(panelBackground);
         yokaiBagTable.left().pad(15);
@@ -258,18 +279,17 @@ public class GameScreen extends ScreenAdapter {
         hankoTable.add(new Label("Hankos", skin));
 
         topRow.add(omamoriTable).height(120).expandX().fillX().padRight(15);
-        topRow.add(altarTable).width(150).height(120).padRight(15);
+        topRow.add(altarStack).width(150).height(120).padRight(15);
         topRow.add(yokaiBagTable).height(120).expandX().fillX().padRight(15);
         topRow.add(hankoTable).width(150).height(120);
 
-        // MASTER LAYOUT
+        // 5. Master Layout & Tables
         Table masterTable = new Table();
         masterTable.setFillParent(true);
         masterTable.add(leftColumn).width(280).expandY().fillY().top();
         masterTable.add(topRow).expandX().fillX().top().row();
         stage.addActor(masterTable);
 
-        // BUTTON ZONE UNTEN
         Table buttonZone = new Table();
         buttonZone.setFillParent(true);
         buttonZone.bottom().padBottom(30);
@@ -291,7 +311,6 @@ public class GameScreen extends ScreenAdapter {
         handTable.bottom().padBottom(180).padLeft(280);
         stage.addActor(handTable);
 
-        // INFO POPUP
         infoPopup = new Table();
         infoPopup.setBackground(panelBackground);
         infoPopup.setVisible(false);
@@ -585,33 +604,73 @@ public class GameScreen extends ScreenAdapter {
         altarTable.clearChildren();
         yokaiBagTable.clearChildren();
 
-        // Altar Rendern
+        // 1. Altar rendern (Skin & Klick-Interaktion)
         if (activeAltarYokai != null) {
-            TextButton altarBtn = new TextButton(activeAltarYokai.getName() + "\n(In Altar)", skin);
-            altarBtn.addListener(new ClickListener() {
+            TextureRegion yokaiRegion = atlas.findRegion(activeAltarYokai.getAtlasRegionName());
+            Actor altarView;
+
+            if (yokaiRegion != null) {
+                Stack stack = new Stack();
+                Image yokaiImg = new Image(yokaiRegion);
+                stack.add(yokaiImg);
+
+                Label stageLabel = new Label(activeAltarYokai.getName(), skin);
+                stageLabel.setFontScale(0.8f);
+                Table labelTable = new Table();
+                labelTable.bottom().padBottom(4);
+                labelTable.add(stageLabel);
+                stack.add(labelTable);
+
+                altarView = stack;
+            } else {
+                altarView = new TextButton(activeAltarYokai.getName() + "\n(In Altar)", skin);
+            }
+
+            altarView.addListener(new ClickListener() {
                 @Override public void clicked(InputEvent e, float x, float y) {
-                    if(currentState != GameState.WAITING_FOR_INPUT) return;
+                    if (currentState != GameState.WAITING_FOR_INPUT) return;
                     activeAltarYokai = null;
                     renderYokaiUI();
                     updateLivePreview();
                 }
             });
-            altarTable.add(altarBtn).width(120).height(80);
+            altarTable.add(altarView).width(80).height(105);
         } else {
-            altarTable.add(new Label("Altar\n(Empty)", skin));
+            Label emptyLabel = new Label("Altar\n(Leer)", skin);
+            emptyLabel.setAlignment(Align.center);
+            altarTable.add(emptyLabel);
         }
 
-        // Bag Rendern
-        if(runSession.getYokaiBag() != null) {
-            for (Yokai yokai : runSession.getYokaiBag()) { // Umbenannt in yokai
+        // 2. Seelenkürbis / Hyōtan-Beutel rendern
+        if (runSession.getYokaiBag() != null) {
+            for (Yokai yokai : runSession.getYokaiBag()) {
                 if (yokai == activeAltarYokai) continue;
 
-                String text = yokai.getName() + (yokai.isExhausted() ? "\n(Exhausted)" : "");
-                TextButton yBtn = new TextButton(text, skin);
-                if (yokai.isExhausted()) yBtn.getColor().a = 0.5f;
+                TextureRegion yokaiRegion = atlas.findRegion(yokai.getAtlasRegionName());
+                Actor yokaiBtn;
 
-                yBtn.addListener(new ClickListener() {
-                    @Override public void clicked(InputEvent e, float x, float y) { // x und y sind jetzt wieder Koordinaten
+                if (yokaiRegion != null) {
+                    Stack stack = new Stack();
+                    Image img = new Image(yokaiRegion);
+                    stack.add(img);
+
+                    if (yokai.isExhausted()) {
+                        img.setColor(0.35f, 0.35f, 0.35f, 0.6f);
+                        Label exLabel = new Label("Rastet", skin);
+                        exLabel.setFontScale(0.75f);
+                        Table t = new Table();
+                        t.center().add(exLabel);
+                        stack.add(t);
+                    }
+                    yokaiBtn = stack;
+                } else {
+                    String text = yokai.getName() + (yokai.isExhausted() ? "\n(Rastet)" : "");
+                    yokaiBtn = new TextButton(text, skin);
+                    if (yokai.isExhausted()) yokaiBtn.getColor().a = 0.5f;
+                }
+
+                yokaiBtn.addListener(new ClickListener() {
+                    @Override public void clicked(InputEvent e, float x, float y) {
                         if (currentState != GameState.WAITING_FOR_INPUT) return;
                         if (!yokai.isExhausted() && activeAltarYokai == null) {
                             activeAltarYokai = yokai;
@@ -620,10 +679,11 @@ public class GameScreen extends ScreenAdapter {
                         }
                     }
                 });
-                yokaiBagTable.add(yBtn).width(100).height(60).pad(5);
+                yokaiBagTable.add(yokaiBtn).width(72).height(95).pad(4);
             }
         }
     }
+
     private void renderOmamoris() {
         omamoriTable.clearChildren();
         for (Omamori omamori : activeOmamoris) {
@@ -685,16 +745,21 @@ public class GameScreen extends ScreenAdapter {
         final int[] currentChips = { breakdown.yakuChips() };
         final int[] currentMult = { breakdown.yakuBaseMult() };
 
-        // 1. Buttons ausblenden & Startwerte setzen
+        // 1. Initialer Score-Aufbau & Flammenzuendung
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
             chipsLabel.setText(String.valueOf(currentChips[0]));
             multLabel.setText(String.valueOf(currentMult[0]));
+
+            // Lila-schwarze kosmische Flammen lodern auf, wenn ein Yokai geopfert/aktiviert wird
+            if (activeAltarYokai != null && altarFlames != null) {
+                altarFlames.ignite();
+            }
         }));
         sequence.addAction(Actions.delay(0.6f));
 
-        // 2. Alle Scoring-Events schrittweise animieren
+        // 2. Score-Events sequentiell hochzaehlen
         for (ScoringEvent event : breakdown.events()) {
             if (event.addedChips() == 0 && event.addedMult() == 0 && event.xMult() == 1.0) continue;
 
@@ -711,11 +776,11 @@ public class GameScreen extends ScreenAdapter {
 
         sequence.addAction(Actions.delay(0.4f));
 
-        // 3. Finale Punkte & Währungen gutschreiben
+        // 3. Auszahlung, Waehrungs-Transfer & Flammen erloeschen
         sequence.addAction(Actions.run(() -> {
             currentRoundScore += breakdown.finalPayout();
 
-            // Währungen aus den Siegeln (Gold / Void) verbuchen
+            // Mon und Void Dust aus den Hanko-Siegeln dem Run gutschreiben
             for (ScoringEvent event : breakdown.events()) {
                 if (event.addedMon() > 0) runSession.addMon(event.addedMon());
                 if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
@@ -725,10 +790,13 @@ public class GameScreen extends ScreenAdapter {
             chipsLabel.setText("0");
             multLabel.setText("0");
 
-            // Yokai Cooldown aktivieren
+            // Yokai erschoepfen und Flammen erloeschen
             if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;
+            }
+            if (altarFlames != null) {
+                altarFlames.extinguish();
             }
 
             checkRoundEndCondition();

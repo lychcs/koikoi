@@ -30,6 +30,14 @@ void main() {
     vec2 flameUv = vec2(uv.x * 1.8, uv.y * 1.6 - u_time * 1.4);
     float n = flameNoise(flameUv);
 
+    float distFromCenter = abs(uv.x - 0.5) * 2.0;
+    float flameMask = smoothstep(1.0 - uv.y, 0.0, distFromCenter);
+
+    if (flameMask < 0.05) {
+        gl_FragColor = vec4(0.0);
+        return;
+    }
+
     // Farbverlauf: Schwarz/Violett -> Dunkellila -> Neon-Magenta -> Glühkern
     vec3 voidBlack = vec3(0.06, 0.01, 0.10);
     vec3 voidPurple = vec3(0.52, 0.05, 0.95);
