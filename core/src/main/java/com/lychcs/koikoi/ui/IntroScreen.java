@@ -1,4 +1,4 @@
-package com.lychcs.koikoi.screens;
+package com.lychcs.koikoi.ui;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;

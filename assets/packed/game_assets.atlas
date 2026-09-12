@@ -146,112 +146,125 @@ WINTER_RIBBON
   index: -1
 
 game_assets2.png
-size: 4096, 4096
+size: 4096, 512
 format: RGBA8888
 filter: Nearest, Nearest
 repeat: none
 OMAMORI_DARUMA_DOLL
   rotate: false
-  xy: 2, 2054
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 2, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_FURIN
   rotate: false
-  xy: 2, 1028
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 220, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_HANAMI_DANGO
   rotate: false
-  xy: 772, 2054
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 438, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_INOSHISHI_TUSK
   rotate: false
-  xy: 2, 2
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 656, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_JOHARI_MIRROR
   rotate: false
-  xy: 772, 1028
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 874, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_KINTSUGI_BOWL
   rotate: false
-  xy: 1542, 2054
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 1092, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_KITSUNE_MASK
   rotate: false
-  xy: 772, 2
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 1310, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_KOINOBORI
   rotate: false
-  xy: 1542, 1028
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 1528, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_KURONEKO
   rotate: false
-  xy: 2312, 2054
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 1746, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_MATCHA_WHISK
   rotate: false
-  xy: 1542, 2
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 1964, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_SAKE_CUP
   rotate: false
-  xy: 2312, 1028
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 2182, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_TENGU_FEATHER
   rotate: false
-  xy: 3082, 2054
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 2400, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_TERU_TERU_BOZU
   rotate: false
-  xy: 2312, 2
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 2618, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_TORII_GATE
   rotate: false
-  xy: 3082, 1028
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 2836, 2
+  size: 216, 288
+  orig: 216, 288
   offset: 0, 0
   index: -1
 OMAMORI_YATA_MIRROR
   rotate: false
-  xy: 3082, 2
-  size: 768, 1024
-  orig: 768, 1024
+  xy: 3054, 2
+  size: 216, 288
+  orig: 216, 288
+  offset: 0, 0
+  index: -1
+
+game_assets3.png
+size: 256, 512
+format: RGBA8888
+filter: Nearest, Nearest
+repeat: none
+YOKAI_KO_ONI
+  rotate: false
+  xy: 2, 2
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1

@@ -1,4 +1,4 @@
-package com.lychcs.koikoi.screens;
+package com.lychcs.koikoi.ui;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
@@ -26,7 +26,6 @@ import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.omamori.OmamoriPool;
-import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 
 public class ShopScreen extends ScreenAdapter {

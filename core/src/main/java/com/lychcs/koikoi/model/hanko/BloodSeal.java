@@ -4,7 +4,7 @@ import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Rank;
 
-public class YamiSeal implements Hanko {
+public class BloodSeal implements Hanko {
 
     @Override
     public String getName() {

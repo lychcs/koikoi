@@ -1,15 +1,16 @@
 package com.lychcs.koikoi.model;
 
 import com.lychcs.koikoi.model.hanko.HankoEffect;
-
 import java.util.ArrayList;
 import java.util.List;
 
 public class Deck {
     private final List<Card> cards = new ArrayList<>();
+    private int testSealIndex = 0; // Zähler für die Rotation
 
     public void initializeDeck() {
         cards.clear();
+        testSealIndex = 0;
 
         // === SPRING ===
         addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm", 1);
@@ -40,10 +41,28 @@ public class Deck {
         addCard(CardID.WINTER_PETAL, Season.WINTER, Rank.PETAL, "Petal", 6);
     }
 
-    // Hilfsmethode für Standardkarten
     private void addCard(CardID id, Season season, Rank rank, String baseName, int count) {
+        // Alle aktiven Siegel für den Testlauf:
+        HankoEffect[] availableSeals = {
+            HankoEffect.POLYCHROME_SEAL, // Regenbogen-Shader
+            HankoEffect.GOLDEN_SEAL,     // Gold-Puls-Shader
+            HankoEffect.YAMI_SEAL,       // Lila-Void-Shader
+            HankoEffect.WHITE_SEAL,
+            HankoEffect.BLACK_SEAL,
+            HankoEffect.STONE_SEAL
+        };
+
         for (int i = 1; i <= count; i++) {
-            cards.add(new Card(id, season, rank, season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i, HankoEffect.NONE));
+            HankoEffect seal = availableSeals[testSealIndex % availableSeals.length];
+            testSealIndex++;
+
+            cards.add(new Card(
+                id,
+                season,
+                rank,
+                season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i,
+                seal
+            ));
         }
     }
 

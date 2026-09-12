@@ -25,11 +25,9 @@ public final class ScoreCalculator {
         for (var card : context.hand().getAllCards()) {
             switch (card.effect()) {
                 case WHITE_SEAL -> {
-                    // Beispiel: +30 Base Chips
                     acc.addChips(card.name() + " (White Seal)", 30);
                 }
                 case BLACK_SEAL -> {
-                    // Beispiel: +4 Base Mult
                     acc.addMult(card.name() + " (Black Seal)", 4);
                 }
                 case GOLDEN_SEAL -> {
@@ -40,17 +38,30 @@ public final class ScoreCalculator {
                         acc.addMon(card.name() + " (Jackpot Seal)", 10);
                     }
                 }
-                case YAMI_SEAL -> {
-                    // Optional: Die Karte zerstört sich gleich, geben wir ihr
-                    // als Entschädigung noch einen massiven Punkte-Boost!
+                case VOID_SEAL -> {
+                    if (MathUtils.random(1, 4) == 1) {
+                        acc.addVoidDust(card.name() + " (Void Echo)", 5);
+                    }
+                    if (MathUtils.random(1, 20) == 1) {
+                        acc.addVoidDust(card.name() + " (Void Rift)", 10);
+                    }
+                }
+                case BLOOD_SEAL -> {
                     acc.addChips(card.name() + " (Blood Sacrifice)", 50);
                 }
-                default -> {
-                } // NONE, STONE und POLYCHROME geben hier keine direkten extra Punkte
+                case STONE_SEAL -> {
+                    // Wird im GameScreen verarbeitet: Kehrt nach dem Ausspielen auf die Hand zurück
+                }
+                case POLYCHROME_SEAL -> {
+                    // Wird im HandContext verarbeitet: Zählt zeitgleich für alle vier Jahreszeiten
+                }
+                case NONE -> {
+                    // Keine Siegel-Wirkung
+                }
             }
         }
 
-        //3. Yokai Evaluierung (falls einer im Altar liegt und bereit ist)
+        // 3. Yokai Evaluierung (falls einer im Altar liegt und einsatzbereit ist)
         if (context.activeAltarYokai() != null && !context.activeAltarYokai().isExhausted()) {
             context.activeAltarYokai().activate(context, acc);
         }

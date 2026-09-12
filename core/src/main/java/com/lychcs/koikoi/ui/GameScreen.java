@@ -1,4 +1,4 @@
-package com.lychcs.koikoi.screens;
+package com.lychcs.koikoi.ui;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
@@ -21,6 +21,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.HankoShaderManager;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
@@ -299,6 +300,7 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        HankoShaderManager.update(delta);
         ScreenUtils.clear(0f, 0f, 0f, 1f);
         stage.getBatch().begin();
         stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -425,17 +427,46 @@ public class GameScreen extends ScreenAdapter {
             Actor cardView;
 
             if (cardImage != null) {
+                // TEST: Wir packen die Karte selbst in einen Image-Actor mit Shader!
+                Image cardImageActor = new Image(cardImage) {
+                    @Override
+                    public void draw(com.badlogic.gdx.graphics.g2d.Batch batch, float parentAlpha) {
+                        com.badlogic.gdx.graphics.glutils.ShaderProgram activeShader = null;
+
+                        if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.POLYCHROME_SEAL) {
+                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPolychromeShader();
+                            batch.setShader(activeShader);
+                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
+
+                        } else if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.GOLDEN_SEAL) {
+                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPulseShader();
+                            batch.setShader(activeShader);
+                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
+                            activeShader.setUniformf("u_glowColor", 1.0f, 0.84f, 0.0f);
+
+                        } else if (card.effect() == com.lychcs.koikoi.model.hanko.HankoEffect.YAMI_SEAL) {
+                            activeShader = com.lychcs.koikoi.graphics.HankoShaderManager.getPulseShader();
+                            batch.setShader(activeShader);
+                            activeShader.setUniformf("u_time", com.lychcs.koikoi.graphics.HankoShaderManager.getTotalTime());
+                            activeShader.setUniformf("u_glowColor", 0.65f, 0.0f, 0.95f);
+                        }
+
+                        super.draw(batch, parentAlpha);
+
+                        if (activeShader != null) {
+                            batch.setShader(null);
+                        }
+                    }
+                };
+
                 Stack cardStack = new Stack();
-                cardStack.add(new Image(cardImage));
-                if (card.hasHanko()) {
-                    TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
-                    if (hankoRegion != null) cardStack.add(new Image(hankoRegion));
-                }
+                cardStack.add(cardImageActor);
                 cardView = cardStack;
             } else {
                 cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
             }
 
+            // Klick-Logik bleibt identisch
             cardView.addListener(new ClickListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
@@ -446,7 +477,7 @@ public class GameScreen extends ScreenAdapter {
                     infoPopup.pack();
 
                     Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
-                    infoPopup.setPosition(pos.x - (infoPopup.getWidth()/2f), pos.y + 40);
+                    infoPopup.setPosition(pos.x - (infoPopup.getWidth() / 2f), pos.y + 40);
                     infoPopup.setVisible(true);
                     return super.touchDown(event, x, y, pointer, button);
                 }
@@ -475,6 +506,68 @@ public class GameScreen extends ScreenAdapter {
             handTable.add(cardView).width(CARD_WIDTH).height(CARD_HEIGHT).pad(5);
         }
     }
+
+//    private void dealCardsToUI() {
+//        handTable.clearChildren();
+//        for (Card card : playerHand) {
+//            TextureRegionDrawable cardImage = getCardImage(card);
+//            Actor cardView;
+//
+//            if (cardImage != null) {
+//                Stack cardStack = new Stack();
+//                cardStack.add(new Image(cardImage));
+//
+//                // Ersetzt das reguläre Image durch den shader-gesteuerten HankoActor
+//                if (card.hasHanko()) {
+//                    TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
+//                    if (hankoRegion != null) {
+//                        cardStack.add(new com.lychcs.koikoi.ui.HankoActor(card.effect(), hankoRegion));
+//                    }
+//                }
+//                cardView = cardStack;
+//            } else {
+//                cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
+//            }
+//
+//            cardView.addListener(new ClickListener() {
+//                @Override
+//                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+//                    infoPopup.clearChildren();
+//                    infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
+//                    infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
+//                    if (card.hasHanko()) infoPopup.add(new Label("Seal: " + card.effect().name(), skin)).padBottom(10).row();
+//                    infoPopup.pack();
+//
+//                    Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
+//                    infoPopup.setPosition(pos.x - (infoPopup.getWidth() / 2f), pos.y + 40);
+//                    infoPopup.setVisible(true);
+//                    return super.touchDown(event, x, y, pointer, button);
+//                }
+//
+//                @Override
+//                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+//                    infoPopup.setVisible(false);
+//                    super.touchUp(event, x, y, pointer, button);
+//                }
+//
+//                @Override
+//                public void clicked(InputEvent event, float x, float y) {
+//                    if (currentState != GameState.WAITING_FOR_INPUT) return;
+//                    if (selectedCards.contains(card)) {
+//                        selectedCards.remove(card);
+//                        cardView.addAction(Actions.moveBy(0, -CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
+//                    } else {
+//                        if (selectedCards.size() < MAX_SELECTED_CARDS) {
+//                            selectedCards.add(card);
+//                            cardView.addAction(Actions.moveBy(0, CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
+//                        }
+//                    }
+//                    updateLivePreview();
+//                }
+//            });
+//            handTable.add(cardView).width(CARD_WIDTH).height(CARD_HEIGHT).pad(5);
+//        }
+//    }
 
     private void renderYokaiUI() {
         altarTable.clearChildren();
