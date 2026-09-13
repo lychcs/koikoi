@@ -4,14 +4,13 @@ import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.Rank;
-import com.lychcs.koikoi.model.fuku.FukuContext;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.Yokai;
 
 import java.util.*;
 
-public class RunSession implements FukuContext {
+public class RunSession {
 
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel, 3: Kami-Boss
@@ -127,12 +126,6 @@ public class RunSession implements FukuContext {
     public List<Card> getBanishedThisSeason() {
         return Collections.unmodifiableList(banishedThisSeason);
     }
-
-    @Override public int getMon() { return this.mon; }
-    @Override public void addMon(int amount) { this.mon += amount; }
-    @Override public void addMaxHands(int amount) { this.baseHands += amount; }
-    @Override public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
-    @Override public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
 
     public int getBaseHands() { return baseHands; }
     public int getBaseDiscards() { return baseDiscards; }
