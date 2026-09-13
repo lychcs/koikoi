@@ -8,9 +8,12 @@ import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
@@ -47,44 +50,35 @@ public class GameScreen extends ScreenAdapter {
         ROUND_END
     }
 
-    // =========================================================================
-    // 1. KONSTANTEN
-    // =========================================================================
     private static final float WORLD_WIDTH = 1280f;
     private static final float WORLD_HEIGHT = 720f;
     private static final int MAX_HAND_SIZE = 8;
     private static final int MAX_SELECTED_CARDS = 5;
-    private static final float CARD_WIDTH = 108f;
-    private static final float CARD_HEIGHT = 192f;
-    private static final float CARD_SELECT_OFFSET_Y = 20f;
-    private static final float ANIMATION_SPEED = 0.1f;
+
+    private static final float CARD_WIDTH = 72f;
+    private static final float CARD_HEIGHT = 128f;
+
+    private static final float CARD_SELECT_OFFSET_Y = 25f;
+
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
     private static final int INITIAL_TARGET_SCORE = 200;
 
-    // =========================================================================
-    // 2. SPIEL-ZUSTAND (Model/State)
-    // =========================================================================
     private final List<Card> playerHand = new ArrayList<>();
     private final List<Card> selectedCards = new ArrayList<>();
     private final List<Omamori> activeOmamoris = new ArrayList<>();
     private final List<Card> drawPile = new ArrayList<>();
 
     private Yokai activeAltarYokai = null;
-
     private GameState currentState = GameState.WAITING_FOR_INPUT;
 
     private int currentTargetScore = INITIAL_TARGET_SCORE;
     private int currentRoundScore = 0;
-
     private int maxDiscards = INITIAL_MAX_DISCARDS;
     private int discardsRemaining = maxDiscards;
     private int maxHands = INITIAL_MAX_HANDS;
     private int handsRemaining = maxHands;
 
-    // =========================================================================
-    // 3. UI-ELEMENTE & RESSOURCEN (View)
-    // =========================================================================
     private Table infoPopup;
     private final Stage stage;
     private Skin skin;
@@ -98,7 +92,8 @@ public class GameScreen extends ScreenAdapter {
     private Table omamoriTable;
     private Table altarTable;
     private Table yokaiBagTable;
-    private Table handTable;
+    private Group handGroup;
+
     private TextButton playButton;
     private TextButton discardButton;
     private Texture background;
@@ -133,7 +128,6 @@ public class GameScreen extends ScreenAdapter {
         activeOmamoris.addAll(runSession.getActiveOmamoris());
         renderOmamoris();
 
-        // Yokai Cooldowns resetten
         if(runSession.getYokaiBag() != null) {
             runSession.getYokaiBag().forEach(y -> y.setExhausted(false));
         }
@@ -178,37 +172,45 @@ public class GameScreen extends ScreenAdapter {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         loadIndieAssets();
 
-        // 1. Buttons & Listener
         playButton = new TextButton("Play Hand", indieButtonStyle);
         discardButton = new TextButton("Discard", indieButtonStyle);
         TextButton sortSeasonButton = new TextButton("Sort: Season", indieButtonStyle);
         TextButton sortRankButton = new TextButton("Sort: Rank", indieButtonStyle);
 
         playButton.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) { onPlayHandSubmitted(); }
+            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
+                super.touchDown(e, x, y, pointer, button);
+                onPlayHandSubmitted();
+                return true;
+            }
         });
         discardButton.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) { onDiscardClicked(); }
+            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
+                super.touchDown(e, x, y, pointer, button);
+                onDiscardClicked();
+                return true;
+            }
         });
 
         sortSeasonButton.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
+            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
+                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return true;
                 playerHand.sort(Comparator.comparing(Card::season).thenComparing(Card::rank));
                 dealCardsToUI();
                 updateLivePreview();
+                return true;
             }
         });
         sortRankButton.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return;
+            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
+                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return true;
                 playerHand.sort(Comparator.comparing(Card::rank, Comparator.reverseOrder()).thenComparing(Card::season));
                 dealCardsToUI();
                 updateLivePreview();
+                return true;
             }
         });
 
-        // 2. Score & Info Labels
         scoreProgressLabel = new Label("0 / " + currentTargetScore, skin);
         chipsLabel = new Label("0", skin);
         multLabel = new Label("0", skin);
@@ -220,7 +222,6 @@ public class GameScreen extends ScreenAdapter {
         chipsLabel.setFontScale(1.5f);
         multLabel.setFontScale(1.5f);
 
-        // 3. Linke Spalte (Score & Stats)
         Table leftColumn = new Table();
         leftColumn.top().pad(20);
 
@@ -246,7 +247,6 @@ public class GameScreen extends ScreenAdapter {
         statsBox.add(discardLabel).padBottom(15).row();
         leftColumn.add(statsBox).width(240).padBottom(15).row();
 
-        // 4. Obere Leiste (Omamori, Altar mit Flammen, Hyotan / Seelenkuerbis, Hankos)
         Table topRow = new Table();
         topRow.left().pad(20);
 
@@ -258,7 +258,6 @@ public class GameScreen extends ScreenAdapter {
         altarTable.setBackground(panelBackground);
         altarTable.pad(15);
 
-        // Flammen-Actor hinter dem Altar einbinden (mit Fallback auf White)
         TextureRegion flameRegion = atlas.findRegion("FLAME_SHAPE");
         if (flameRegion == null) {
             flameRegion = skin.getRegion("white");
@@ -266,10 +265,9 @@ public class GameScreen extends ScreenAdapter {
         altarFlames = new AltarFlameActor(flameRegion);
 
         Stack altarStack = new Stack();
-        altarStack.add(altarFlames); // Liegt visuell dahinter
+        altarStack.add(altarFlames);
         altarStack.add(altarTable);
 
-        // Yokai-Gefaess als traditioneller Seelenkuerbis (Hyotan)
         yokaiBagTable = new Table();
         yokaiBagTable.setBackground(panelBackground);
         yokaiBagTable.left().pad(15);
@@ -284,7 +282,6 @@ public class GameScreen extends ScreenAdapter {
         topRow.add(yokaiBagTable).height(120).expandX().fillX().padRight(15);
         topRow.add(hankoTable).width(150).height(120);
 
-        // 5. Master Layout & Tables
         Table masterTable = new Table();
         masterTable.setFillParent(true);
         masterTable.add(leftColumn).width(280).expandY().fillY().top();
@@ -307,10 +304,9 @@ public class GameScreen extends ScreenAdapter {
         buttonZone.add(actionTable);
         stage.addActor(buttonZone);
 
-        handTable = new Table();
-        handTable.setFillParent(true);
-        handTable.bottom().padBottom(180).padLeft(280);
-        stage.addActor(handTable);
+        handGroup = new Group();
+        handGroup.setPosition(640f, 220f);
+        stage.addActor(handGroup);
 
         infoPopup = new Table();
         infoPopup.setBackground(panelBackground);
@@ -322,11 +318,24 @@ public class GameScreen extends ScreenAdapter {
     public void render(float delta) {
         HankoShaderManager.update(delta);
         ScreenUtils.clear(0f, 0f, 0f, 1f);
+
+        float activeDelta = com.lychcs.koikoi.graphics.JuiceManager.update(delta, stage.getCamera());
+
         stage.getBatch().begin();
         stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         stage.getBatch().end();
-        stage.act(delta);
+
+        stage.act(activeDelta);
         stage.draw();
+
+        float flash = com.lychcs.koikoi.graphics.JuiceManager.getFlashAlpha();
+        if (flash > 0f) {
+            stage.getBatch().begin();
+            stage.getBatch().setColor(1f, 1f, 1f, flash);
+            stage.getBatch().draw(skin.getRegion("white"), 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+            stage.getBatch().setColor(Color.WHITE);
+            stage.getBatch().end();
+        }
     }
 
     private TextureRegionDrawable getCardImage(Card card) {
@@ -375,7 +384,6 @@ public class GameScreen extends ScreenAdapter {
                 }
             }
 
-            // Yokai Altar abräumen bei Fehlschlag
             if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;
@@ -396,7 +404,6 @@ public class GameScreen extends ScreenAdapter {
         playerHand.removeAll(selectedCards);
         selectedCards.clear();
 
-        // Siegel-Effekte nach erfolgreicher Wertung ausführen
         for (Card playedCard : playedCards) {
             if (playedCard.effect() == HankoEffect.STONE_SEAL) {
                 Card strippedCard = new Card(
@@ -440,18 +447,14 @@ public class GameScreen extends ScreenAdapter {
             runSession.applyEndRoundInterest();
             runSession.resetShrineVisit();
 
-            // Hole Season VOR dem Advance für die Cutscene
             GameSeason defeatedSeason = runSession.getCurrentSeason();
             int completedStage = runSession.getSeasonEncounterStage();
 
-            // Level Fortschritt
             runSession.advanceEncounterStage();
 
             if (completedStage == 3) {
-                // Level 3 geschafft -> Boss besiegt -> Cutscene!
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, defeatedSeason));
             } else if (defeatedSeason == GameSeason.FINAL) {
-                // Spiel durchgespielt
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
             } else {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
@@ -469,80 +472,168 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void dealCardsToUI() {
-        handTable.clearChildren();
-        for (Card card : playerHand) {
+        handGroup.clearChildren();
+
+        int cardCount = playerHand.size();
+        if (cardCount == 0) return;
+
+        float spacing = 64f;
+        float dropPerCard = 1.8f;
+        float rotationPerCard = 2.5f;
+        float centerIndex = (cardCount - 1) / 2f;
+
+        // Die Schleife füllt die Gruppe von links (0) nach rechts (cardCount - 1).
+        // Dadurch liegt die rechte Karte automatisch über der linken.
+        for (int i = 0; i < cardCount; i++) {
+            Card card = playerHand.get(i);
             TextureRegionDrawable cardImage = getCardImage(card);
-            Actor cardView;
+
+            float distFromCenter = i - centerIndex;
+            final float baseX = (distFromCenter * spacing) - (CARD_WIDTH / 2f);
+            final float baseY = - (Math.abs(distFromCenter) * Math.abs(distFromCenter) * dropPerCard);
+            final float baseRot = -distFromCenter * rotationPerCard;
 
             if (cardImage != null) {
-                Stack cardStack = new Stack();
+                JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage, baseX, baseY, baseRot);
+                handGroup.addActor(juicyCard);
+            }
+        }
+    }
 
-                // 1. Unverändertes Kartenbild (ohne Shader)
-                cardStack.add(new Image(cardImage));
+    // =========================================================================
+    // JUICY CARD ACTOR - Lerp & Z-Index-Fix Edition
+    // =========================================================================
+    private class JuicyCardActor extends Group {
+        private final Card card;
+        private final float baseX, baseY, baseRot;
+        private final Image shadowImg;
 
-                // 2. Hanko-Stempel oben rechts als Overlay
-                if (card.hasHanko()) {
-                    String regionName = "HANKO_" + card.effect().name();
-                    TextureRegion hankoRegion = atlas.findRegion(regionName);
+        // Mathematische Zielwerte für fließende, ununterbrechbare Bewegungen
+        private float targetY;
+        private float targetRot;
+        private float targetScale = 1f;
+        private float targetShadow = 0f;
+        private float currentShadow = 0f;
 
-                    if (hankoRegion == null) {
-                        hankoRegion = atlas.findRegion("hankos/" + regionName);
-                    }
+        public JuicyCardActor(Card card, TextureRegionDrawable tex, float bX, float bY, float bRot) {
+            this.card = card;
+            this.baseX = bX;
+            this.baseY = bY;
+            this.baseRot = bRot;
 
-                    if (hankoRegion != null) {
-                        HankoActor hankoActor = new HankoActor(card.effect(), hankoRegion);
+            setSize(CARD_WIDTH, CARD_HEIGHT);
+            setOrigin(CARD_WIDTH / 2f, CARD_HEIGHT / 2f);
 
-                        com.badlogic.gdx.scenes.scene2d.ui.Container<HankoActor> sealContainer =
-                            new com.badlogic.gdx.scenes.scene2d.ui.Container<>(hankoActor);
-                        sealContainer.top().right().padTop(6).padRight(6);
-                        sealContainer.size(34, 34); // Stempelgröße auf der Karte
+            shadowImg = new Image(tex);
+            shadowImg.setSize(CARD_WIDTH, CARD_HEIGHT);
+            shadowImg.setColor(0f, 0f, 0f, 0f);
+            shadowImg.setPosition(-3, -4);
+            addActor(shadowImg);
 
-                        cardStack.add(sealContainer);
-                    }
+            Image mainImg = new Image(tex);
+            mainImg.setSize(CARD_WIDTH, CARD_HEIGHT);
+            mainImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            addActor(mainImg);
+
+            if (card.hasHanko()) {
+                String regionName = "HANKO_" + card.effect().name();
+                TextureRegion hankoRegion = atlas.findRegion(regionName);
+                if (hankoRegion == null) hankoRegion = atlas.findRegion("hankos/" + regionName);
+
+                if (hankoRegion != null) {
+                    HankoActor hankoActor = new HankoActor(card.effect(), hankoRegion);
+                    hankoActor.setSize(22, 22);
+                    hankoActor.setPosition(CARD_WIDTH - 28, CARD_HEIGHT - 28);
+                    addActor(hankoActor);
                 }
-
-                cardView = cardStack;
-            } else {
-                cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
             }
 
-            cardView.addListener(new ClickListener() {
+            // Initiale Werte setzen, ohne Actions zu triggern
+            if (selectedCards.contains(card)) {
+                targetY = baseY + CARD_SELECT_OFFSET_Y;
+                targetRot = 0f;
+                targetShadow = 0.1f;
+            } else {
+                targetY = baseY;
+                targetRot = baseRot;
+                targetShadow = 0f;
+            }
+            setX(baseX);
+            setY(targetY);
+            setRotation(targetRot);
+
+            addListener(new InputListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    if (currentState != GameState.WAITING_FOR_INPUT) return true;
+
                     infoPopup.clearChildren();
                     infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
                     infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
                     if (card.hasHanko()) infoPopup.add(new Label("Seal: " + card.effect().name(), skin)).padBottom(10).row();
                     infoPopup.pack();
-
-                    Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
+                    Vector2 pos = localToStageCoordinates(new Vector2(x, y));
                     infoPopup.setPosition(pos.x - (infoPopup.getWidth() / 2f), pos.y + 40);
                     infoPopup.setVisible(true);
-                    return super.touchDown(event, x, y, pointer, button);
+
+                    // ACHTUNG: Hier fehlt bewusst der toFront()-Aufruf!
+                    // Dadurch wird die Karte NICHT visuell über ihre rechte Nachbarkarte gelegt.
+
+                    // 1. ZIEL SETZEN FÜR DEN MIKRO-LIFT (nur solange der Klick andauert)
+                    targetScale = 1.02f;
+                    targetShadow = 0.3f;
+
+                    return true;
                 }
 
                 @Override
                 public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
                     infoPopup.setVisible(false);
-                    super.touchUp(event, x, y, pointer, button);
-                }
-
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
+
+                    // Karte wird sofort wieder auf den Tisch fallen gelassen
+                    targetScale = 1f;
+
                     if (selectedCards.contains(card)) {
                         selectedCards.remove(card);
-                        cardView.addAction(Actions.moveBy(0, -CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
+                        targetY = baseY;
+                        targetRot = baseRot;
+                        targetShadow = 0f;
                     } else {
                         if (selectedCards.size() < MAX_SELECTED_CARDS) {
                             selectedCards.add(card);
-                            cardView.addAction(Actions.moveBy(0, CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
+                            targetY = baseY + CARD_SELECT_OFFSET_Y;
+                            targetRot = 0f;
+                            targetShadow = 0.1f;
+                        } else {
+                            targetY = baseY;
+                            targetRot = baseRot;
+                            targetShadow = 0f;
                         }
                     }
                     updateLivePreview();
                 }
             });
-            handTable.add(cardView).width(CARD_WIDTH).height(CARD_HEIGHT).pad(5);
+        }
+
+        // =========================================================
+        // DIE LERP-SCHLEIFE (Verhindert jegliche Input-Verzögerung)
+        // =========================================================
+        @Override
+        public void act(float delta) {
+            super.act(delta);
+
+            // Die Position feuert ultra-schnell (Multiplikator 25) ans Ziel,
+            // exakt gekoppelt an die Framerate, ohne Action-Queue-Staus.
+            setY(MathUtils.lerp(getY(), targetY, 25f * delta));
+            setRotation(MathUtils.lerp(getRotation(), targetRot, 20f * delta));
+
+            // Die Skalierung und der Schatten feuern noch aggressiver (Multiplikator 40)
+            float newScale = MathUtils.lerp(getScaleX(), targetScale, 40f * delta);
+            setScale(newScale, newScale);
+
+            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 40f * delta);
+            shadowImg.setColor(0f, 0f, 0f, currentShadow);
         }
     }
 
@@ -550,7 +641,6 @@ public class GameScreen extends ScreenAdapter {
         altarTable.clearChildren();
         yokaiBagTable.clearChildren();
 
-        // 1. Altar rendern (Skin & Klick-Interaktion)
         if (activeAltarYokai != null) {
             TextureRegion yokaiRegion = atlas.findRegion(activeAltarYokai.getAtlasRegionName());
             Actor altarView;
@@ -558,6 +648,7 @@ public class GameScreen extends ScreenAdapter {
             if (yokaiRegion != null) {
                 Stack stack = new Stack();
                 Image yokaiImg = new Image(yokaiRegion);
+                yokaiImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
                 stack.add(yokaiImg);
 
                 Label stageLabel = new Label(activeAltarYokai.getName(), skin);
@@ -580,14 +671,13 @@ public class GameScreen extends ScreenAdapter {
                     updateLivePreview();
                 }
             });
-            altarTable.add(altarView).width(80).height(105);
+            altarTable.add(altarView).width(108).height(192);
         } else {
             Label emptyLabel = new Label("Altar\n(Leer)", skin);
             emptyLabel.setAlignment(Align.center);
-            altarTable.add(emptyLabel);
+            altarTable.add(emptyLabel).width(108).height(192);
         }
 
-        // 2. Seelenkürbis / Hyōtan-Beutel rendern
         if (runSession.getYokaiBag() != null) {
             for (Yokai yokai : runSession.getYokaiBag()) {
                 if (yokai == activeAltarYokai) continue;
@@ -598,6 +688,7 @@ public class GameScreen extends ScreenAdapter {
                 if (yokaiRegion != null) {
                     Stack stack = new Stack();
                     Image img = new Image(yokaiRegion);
+                    img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
                     stack.add(img);
 
                     if (yokai.isExhausted()) {
@@ -625,7 +716,7 @@ public class GameScreen extends ScreenAdapter {
                         }
                     }
                 });
-                yokaiBagTable.add(yokaiBtn).width(72).height(95).pad(4);
+                yokaiBagTable.add(yokaiBtn).width(108).height(192).pad(4);
             }
         }
     }
@@ -698,9 +789,14 @@ public class GameScreen extends ScreenAdapter {
 
             if (activeAltarYokai != null && altarFlames != null) {
                 altarFlames.ignite();
+                com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.7f);
+                com.lychcs.koikoi.graphics.JuiceManager.hitstop(0.08f);
+                com.lychcs.koikoi.graphics.JuiceManager.flashScreen(0.85f);
+            } else {
+                com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.3f);
             }
         }));
-        sequence.addAction(Actions.delay(0.6f));
+        sequence.addAction(Actions.delay(0.2f));
 
         for (ScoringEvent event : breakdown.events()) {
             if (event.addedChips() == 0 && event.addedMult() == 0 && event.xMult() == 1.0) continue;
@@ -712,34 +808,38 @@ public class GameScreen extends ScreenAdapter {
 
                 chipsLabel.setText(String.valueOf(currentChips[0]));
                 multLabel.setText(String.valueOf(currentMult[0]));
+
+                com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.15f);
+                com.lychcs.koikoi.graphics.JuiceManager.hitstop(0.02f);
             }));
-            sequence.addAction(Actions.delay(0.35f));
+            sequence.addAction(Actions.delay(0.15f));
         }
 
         sequence.addAction(Actions.delay(0.4f));
 
         sequence.addAction(Actions.run(() -> {
-            currentRoundScore += breakdown.finalPayout();
+                currentRoundScore += breakdown.finalPayout();
 
-            for (ScoringEvent event : breakdown.events()) {
-                if (event.addedMon() > 0) runSession.addMon(event.addedMon());
-                if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
+                for (ScoringEvent event : breakdown.events()) {
+                    if (event.addedMon() > 0) runSession.addMon(event.addedMon());
+                    if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
+                }
+
+                scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
+                chipsLabel.setText("0");
+                multLabel.setText("0");
+
+                if (activeAltarYokai != null) {
+                    activeAltarYokai.setExhausted(true);
+                    activeAltarYokai = null;
+                }
+                if (altarFlames != null) {
+                    altarFlames.extinguish();
+                }
+
+                checkRoundEndCondition();
             }
-
-            scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
-            chipsLabel.setText("0");
-            multLabel.setText("0");
-
-            if (activeAltarYokai != null) {
-                activeAltarYokai.setExhausted(true);
-                activeAltarYokai = null;
-            }
-            if (altarFlames != null) {
-                altarFlames.extinguish();
-            }
-
-            checkRoundEndCondition();
-        }));
+        ));
 
         stage.addAction(sequence);
     }

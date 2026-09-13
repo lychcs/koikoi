@@ -133,7 +133,6 @@ public class ChoiceScreen extends ScreenAdapter {
         stage.draw();
     }
 
-    // WICHTIG: Die Methode, die die Hitboxen beim Skalieren korrekt anpasst!
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
