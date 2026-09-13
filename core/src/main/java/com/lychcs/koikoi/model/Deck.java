@@ -42,31 +42,16 @@ public class Deck {
     }
 
     private void addCard(CardID id, Season season, Rank rank, String baseName, int count) {
-        // Alle aktiven Siegel für den Testlauf:
-        HankoEffect[] availableSeals = {
-            HankoEffect.POLYCHROME_SEAL,
-            HankoEffect.GOLDEN_SEAL,
-            HankoEffect.VOID_SEAL,
-            HankoEffect.BLOOD_SEAL,
-            HankoEffect.WHITE_SEAL,
-            HankoEffect.BLACK_SEAL,
-            HankoEffect.STONE_SEAL
-        };
-
         for (int i = 1; i <= count; i++) {
-            HankoEffect seal = availableSeals[testSealIndex % availableSeals.length];
-            testSealIndex++;
-
             cards.add(new Card(
                 id,
                 season,
                 rank,
                 season.toString().substring(0, 1) + season.toString().substring(1).toLowerCase() + " " + baseName + " #" + i,
-                seal
+                HankoEffect.NONE
             ));
         }
     }
-
     public List<Card> getCards() {
         return cards;
     }

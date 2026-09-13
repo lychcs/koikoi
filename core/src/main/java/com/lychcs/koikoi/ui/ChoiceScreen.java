@@ -31,6 +31,8 @@ public class ChoiceScreen extends ScreenAdapter {
     private final ChoiceType choiceType;
     private Skin skin;
     private Texture background;
+    private Texture panelTex;
+    private Texture buttonTex;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
@@ -48,10 +50,10 @@ public class ChoiceScreen extends ScreenAdapter {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
 
-        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
+        panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
         panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
 
-        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
@@ -78,7 +80,7 @@ public class ChoiceScreen extends ScreenAdapter {
             CardID[] choices = EvolutionMapper.getSeasonBeastChoices(runSession.getCurrentSeason());
 
             for (CardID beast : choices) {
-                // Macht den Namen hübsch: z.B. SPRING_BEAST_KOI -> KOI
+                // Macht den Namen huebsch: z.B. SPRING_BEAST_KOI -> KOI
                 String beastName = beast.name().substring(beast.name().lastIndexOf("_") + 1);
 
                 TextButton btn = new TextButton("Pfad: " + beastName, indieButtonStyle);
@@ -131,10 +133,20 @@ public class ChoiceScreen extends ScreenAdapter {
         stage.draw();
     }
 
+    // WICHTIG: Die Methode, die die Hitboxen beim Skalieren korrekt anpasst!
+    @Override
+    public void resize(int width, int height) {
+        stage.getViewport().update(width, height, true);
+    }
+
     @Override
     public void dispose() {
         stage.dispose();
         background.dispose();
         skin.dispose();
+
+        // VRAM Leaks beheben
+        if (panelTex != null) panelTex.dispose();
+        if (buttonTex != null) buttonTex.dispose();
     }
 }

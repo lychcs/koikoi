@@ -99,6 +99,7 @@ public final class YakuDetector {
         }
 
         // --- 4. SEASONS (Flush-Checks & Great Harvest) ---
+        // --- 4. SEASONS (Flush-Checks & Great Harvest) ---
         boolean allSeasonsPresent = true;
         for (Season s : Season.values()) {
             int seasonCount = ctx.getSeasonCount(s);
@@ -107,17 +108,33 @@ public final class YakuDetector {
             } else if (seasonCount >= 5) {
                 results.add(YakuResult.of(YakuType.FULL_SEASON, ctx.getCardsBySeason(s)));
             } else if (seasonCount >= 3) {
-                // Bugfix: Deckt 3 und 4 Karten gleicher Season ab
                 results.add(YakuResult.of(YakuType.MONOCHROME, ctx.getCardsBySeason(s)));
             }
         }
 
-        if (allSeasonsPresent) {
+        // Great Harvest: 1 Karte aus jeder Jahreszeit
+        // FIX: Auch wenn "allSeasonsPresent" durch Polychrome auf true springt,
+        // müssen physisch mindestens 4 getrennte Karten vorliegen!
+        if (allSeasonsPresent && ctx.getTotalCardCount() >= 4) {
             List<Card> straightCards = new ArrayList<>(4);
+            java.util.Set<Card> usedCards = new java.util.HashSet<>();
+
             for (Season s : Season.values()) {
-                straightCards.add(ctx.getCardsBySeason(s).get(0));
+                for (Card c : ctx.getCardsBySeason(s)) {
+                    // Prüfen, ob diese konkrete Karte (z.B. Polychrome) schon
+                    // für eine ANDERE Jahreszeit in diesem Yaku hergehalten hat
+                    if (!usedCards.contains(c)) {
+                        straightCards.add(c);
+                        usedCards.add(c);
+                        break; // Nächste Jahreszeit suchen
+                    }
+                }
             }
-            results.add(YakuResult.of(YakuType.GREAT_HARVEST, straightCards));
+
+            // Nur wenn wir wirklich 4 unterschiedliche Karten gefunden haben, die die 4 Slots füllen
+            if (straightCards.size() == 4) {
+                results.add(YakuResult.of(YakuType.GREAT_HARVEST, straightCards));
+            }
         }
 
         return results;
