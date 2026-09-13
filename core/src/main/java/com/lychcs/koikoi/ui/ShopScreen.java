@@ -36,13 +36,14 @@ public class ShopScreen extends ScreenAdapter {
 
     private Texture background;
     private Texture boosterPackTexture;
+    private Texture panelTex;
+    private Texture buttonTex;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
     private Label monLabel;
     private Table boosterOverlay;
 
-    // WICHTIG: Die Texture muss im Objekt gehalten werden, um sie zu disposen!
     private Texture darkOverlayTex;
     private TextureRegionDrawable darkOverlayBackground;
 
@@ -52,7 +53,6 @@ public class ShopScreen extends ScreenAdapter {
 
         initAssets();
 
-        // Initialer Aufbau
         buildShopUi();
         buildBoosterOverlay();
 
@@ -67,23 +67,22 @@ public class ShopScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        // LÃ¤dt automatisch SHOP_SPRING.jpg, SHOP_SUMMER.jpg etc.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHOP")));
 
         boosterPackTexture = new Texture(Gdx.files.internal("backgrounds/BOOSTER_PACK.png"));
         boosterPackTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
-        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
+        // VRAM Fix: Referenz auf die Texture speichern, um sie im dispose() zu vernichten
+        panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
         panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
 
-        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
 
-        // Sauber referenziertes und gecleantes Pixmap für das Overlay
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(new Color(0, 0, 0, 0.85f));
         pixmap.fill();
@@ -102,7 +101,7 @@ public class ShopScreen extends ScreenAdapter {
 
         Table column1 = new Table(); // Omamoris
         Table column2 = new Table(); // Booster Packs
-        Table column3 = new Table(); // Fukus
+        Table column3 = new Table(); // Upgrades (ehemals Fukus)
 
         // ==========================================
         // SPALTE 1: RANDOM OMAMORIS AUS DEM POOL
@@ -110,7 +109,6 @@ public class ShopScreen extends ScreenAdapter {
         Omamori oma1 = OmamoriPool.getRandomOmamori();
         Omamori oma2 = OmamoriPool.getRandomOmamori();
 
-        // Verhindert, dass 2x exakt das gleiche Omamori im selben Shop liegt
         while (oma2.getClass().equals(oma1.getClass())) {
             oma2 = OmamoriPool.getRandomOmamori();
         }
@@ -121,33 +119,25 @@ public class ShopScreen extends ScreenAdapter {
         // ==========================================
         // SPALTE 2: BOOSTER PACKS
         // ==========================================
-        column2.add(createItemCard("Ema Booster Pack", "Get 1 of 3 rare Cards.", 80, () -> {
-            if (runSession.getMon() >= 80) {
-                runSession.addMon(-80);
-                updateMonDisplay();
-                startBoosterSequence("EMA");
-            }
+        column2.add(createItemCard("Ema Booster Pack", "Waehle 1 von 3 zufaelligen Karten.", 80, () -> {
+            startBoosterSequence("EMA");
         })).padBottom(20).row();
 
-        column2.add(createItemCard("Hanko Booster Pack", "Get a random Seal for your run.", 60, () -> {
-            if (runSession.getMon() >= 60) {
-                runSession.addMon(-60);
-                updateMonDisplay();
-                runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
-                System.out.println("Hanko gezogen!");
-            }
+        column2.add(createItemCard("Hanko Booster Pack", "Erhalte ein zufaelliges Siegel.", 60, () -> {
+            runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
+            System.out.println("Hanko gezogen!");
         }));
 
         // ==========================================
-        // SPALTE 3: FUKUS
+        // SPALTE 3: STAT UPGRADES (ersetzt Fukus)
         // ==========================================
-        column3.add(createItemCard("Fuku: Senba Zuru", "+1 Hand, +1 Discard.", 50, () -> {
-            if (runSession.getMon() >= 50) {
-                runSession.addMon(-50);
-                runSession.addMaxHands(1);
-                runSession.addMaxDiscards(1);
-                updateMonDisplay();
-            }
+        column3.add(createItemCard("Senba Zuru", "Permanent:\n+1 Hand, +1 Discard.", 150, () -> {
+            runSession.addMaxHands(1);
+            runSession.addMaxDiscards(1);
+        })).padBottom(20).row();
+
+        column3.add(createItemCard("Merchant's Ledger", "Permanent:\n+5 Max Interest Cap.", 100, () -> {
+            runSession.addMaxInterestCap(5);
         }));
 
         shelves.add(column1).expandX().fillX().top().padRight(40);
@@ -168,7 +158,6 @@ public class ShopScreen extends ScreenAdapter {
             public void clicked(InputEvent event, float x, float y) {
                 if (runSession.getMon() >= 10) {
                     runSession.addMon(-10);
-                    // Den kompletten Screen fegen und neu aufbauen!
                     stage.clear();
                     buildShopUi();
                     buildBoosterOverlay();
@@ -197,7 +186,7 @@ public class ShopScreen extends ScreenAdapter {
     }
 
     private String getSeasonalBackgroundPath(String prefix) {
-        String seasonName = runSession.getCurrentSeason().name(); // SPRING, SUMMER, AUTUMN, WINTER
+        String seasonName = runSession.getCurrentSeason().name();
         return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
@@ -246,7 +235,10 @@ public class ShopScreen extends ScreenAdapter {
         return card;
     }
 
-    private Table createItemCard(String name, String desc, int price, Runnable onBuy) {
+    /**
+     * Zieht nun automatisch das Mon ab und setzt das Item auf "SOLD OUT".
+     */
+    private Table createItemCard(String name, String desc, int price, Runnable onBuyEffect) {
         Table card = new Table();
         card.setBackground(panelBackground);
 
@@ -259,7 +251,17 @@ public class ShopScreen extends ScreenAdapter {
         buyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                onBuy.run();
+                if (runSession.getMon() >= price) {
+                    runSession.addMon(-price);
+                    updateMonDisplay();
+
+                    onBuyEffect.run();
+
+                    card.clearChildren();
+                    Label soldOut = new Label("SOLD OUT", skin);
+                    soldOut.setColor(Color.FIREBRICK);
+                    card.add(soldOut).expand().center();
+                }
             }
         });
 
@@ -312,7 +314,7 @@ public class ShopScreen extends ScreenAdapter {
     private void showCardChoices() {
         boosterOverlay.clearChildren();
 
-        Label instruction = new Label("Choose 1 Card for your Deck!", skin);
+        Label instruction = new Label("Waehle 1 Karte fuer dein Deck!", skin);
         instruction.setFontScale(1.5f);
         boosterOverlay.add(instruction).colspan(3).padBottom(50).row();
 
@@ -375,5 +377,7 @@ public class ShopScreen extends ScreenAdapter {
         if (boosterPackTexture != null) boosterPackTexture.dispose();
         if (atlas != null) atlas.dispose();
         if (darkOverlayTex != null) darkOverlayTex.dispose();
+        if (panelTex != null) panelTex.dispose();
+        if (buttonTex != null) buttonTex.dispose();
     }
 }

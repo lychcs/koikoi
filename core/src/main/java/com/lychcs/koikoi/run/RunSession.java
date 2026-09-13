@@ -127,6 +127,12 @@ public class RunSession {
         return Collections.unmodifiableList(banishedThisSeason);
     }
 
+    public int getMon() { return this.mon; }
+    public void addMon(int amount) { this.mon += amount; }
+    public void addMaxHands(int amount) { this.baseHands += amount; }
+    public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
+    public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
+
     public int getBaseHands() { return baseHands; }
     public int getBaseDiscards() { return baseDiscards; }
     public int getMaxInterestCap() { return maxInterestCap; }
