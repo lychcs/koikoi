@@ -187,7 +187,7 @@ public class ShopScreen extends ScreenAdapter {
 
     private String getSeasonalBackgroundPath(String prefix) {
         String seasonName = runSession.getCurrentSeason().name();
-        return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
+        return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".jpg";
     }
 
     private Table createOmamoriCard(Omamori omamori) {
