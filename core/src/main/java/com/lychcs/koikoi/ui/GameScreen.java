@@ -474,6 +474,30 @@ public class GameScreen extends ScreenAdapter {
     private void dealCardsToUI() {
         handGroup.clearChildren();
 
+        for (Card card : playerHand) {
+            TextureRegionDrawable cardImage = getCardImage(card);
+            if (cardImage != null) {
+                JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage);
+                handGroup.addActor(juicyCard);
+
+                juicyCard.setX(MathUtils.random(-30f, 30f));
+                juicyCard.setY(MathUtils.random(-40f, -80f));
+                juicyCard.setRotation(MathUtils.random(-25f, 25f));
+            }
+        }
+        updateCardArcTargets();
+    }
+
+    private JuicyCardActor findActorForCard(Card card) {
+        for (Actor a : handGroup.getChildren()) {
+            if (a instanceof JuicyCardActor && ((JuicyCardActor) a).card.equals(card)) {
+                return (JuicyCardActor) a;
+            }
+        }
+        return null;
+    }
+
+    private void updateCardArcTargets() {
         int cardCount = playerHand.size();
         if (cardCount == 0) return;
 
@@ -482,52 +506,48 @@ public class GameScreen extends ScreenAdapter {
         float rotationPerCard = 2.5f;
         float centerIndex = (cardCount - 1) / 2f;
 
-        // Die Schleife füllt die Gruppe von links (0) nach rechts (cardCount - 1).
-        // Dadurch liegt die rechte Karte automatisch über der linken.
         for (int i = 0; i < cardCount; i++) {
             Card card = playerHand.get(i);
-            TextureRegionDrawable cardImage = getCardImage(card);
+            JuicyCardActor actor = findActorForCard(card);
 
-            float distFromCenter = i - centerIndex;
-            final float baseX = (distFromCenter * spacing) - (CARD_WIDTH / 2f);
-            final float baseY = - (Math.abs(distFromCenter) * Math.abs(distFromCenter) * dropPerCard);
-            final float baseRot = -distFromCenter * rotationPerCard;
+            if (actor != null) {
+                float distFromCenter = i - centerIndex;
+                float bx = (distFromCenter * spacing) - (CARD_WIDTH / 2f);
+                float by = - (Math.abs(distFromCenter) * Math.abs(distFromCenter) * dropPerCard);
+                float brot = -distFromCenter * rotationPerCard;
 
-            if (cardImage != null) {
-                JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage, baseX, baseY, baseRot);
-                handGroup.addActor(juicyCard);
+                actor.updateArc(bx, by, brot);
+                actor.setZIndex(i);
+
+                if (actor.isDragging) {
+                    actor.toFront();
+                }
             }
         }
     }
 
-    // =========================================================================
-    // JUICY CARD ACTOR - Lerp & Z-Index-Fix Edition
-    // =========================================================================
     private class JuicyCardActor extends Group {
         private final Card card;
-        private final float baseX, baseY, baseRot;
+        protected float baseX, baseY, baseRot;
         private final Image shadowImg;
 
-        // Mathematische Zielwerte für fließende, ununterbrechbare Bewegungen
-        private float targetY;
-        private float targetRot;
+        protected float targetX, targetY, targetRot;
         private float targetScale = 1f;
         private float targetShadow = 0f;
         private float currentShadow = 0f;
 
-        public JuicyCardActor(Card card, TextureRegionDrawable tex, float bX, float bY, float bRot) {
-            this.card = card;
-            this.baseX = bX;
-            this.baseY = bY;
-            this.baseRot = bRot;
+        protected boolean isDragging = false;
+        private float dragOffsetX, dragOffsetY;
 
+        public JuicyCardActor(Card card, TextureRegionDrawable tex) {
+            this.card = card;
             setSize(CARD_WIDTH, CARD_HEIGHT);
             setOrigin(CARD_WIDTH / 2f, CARD_HEIGHT / 2f);
 
             shadowImg = new Image(tex);
             shadowImg.setSize(CARD_WIDTH, CARD_HEIGHT);
             shadowImg.setColor(0f, 0f, 0f, 0f);
-            shadowImg.setPosition(-3, -4);
+            shadowImg.setPosition(-4, -6);
             addActor(shadowImg);
 
             Image mainImg = new Image(tex);
@@ -548,24 +568,14 @@ public class GameScreen extends ScreenAdapter {
                 }
             }
 
-            // Initiale Werte setzen, ohne Actions zu triggern
-            if (selectedCards.contains(card)) {
-                targetY = baseY + CARD_SELECT_OFFSET_Y;
-                targetRot = 0f;
-                targetShadow = 0.1f;
-            } else {
-                targetY = baseY;
-                targetRot = baseRot;
-                targetShadow = 0f;
-            }
-            setX(baseX);
-            setY(targetY);
-            setRotation(targetRot);
-
             addListener(new InputListener() {
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                    if (currentState != GameState.WAITING_FOR_INPUT) return true;
+                    if (currentState != GameState.WAITING_FOR_INPUT) return false;
+
+                    isDragging = false;
+                    dragOffsetX = x;
+                    dragOffsetY = y;
 
                     infoPopup.clearChildren();
                     infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
@@ -576,14 +586,44 @@ public class GameScreen extends ScreenAdapter {
                     infoPopup.setPosition(pos.x - (infoPopup.getWidth() / 2f), pos.y + 40);
                     infoPopup.setVisible(true);
 
-                    // ACHTUNG: Hier fehlt bewusst der toFront()-Aufruf!
-                    // Dadurch wird die Karte NICHT visuell über ihre rechte Nachbarkarte gelegt.
-
-                    // 1. ZIEL SETZEN FÜR DEN MIKRO-LIFT (nur solange der Klick andauert)
-                    targetScale = 1.02f;
+                    targetScale = 1.0f;
                     targetShadow = 0.3f;
 
                     return true;
+                }
+
+                @Override
+                public void touchDragged(InputEvent event, float x, float y, int pointer) {
+                    if (currentState != GameState.WAITING_FOR_INPUT) return;
+
+                    isDragging = true;
+                    infoPopup.setVisible(false);
+
+                    targetScale = 1.0f;
+                    targetShadow = 0.6f;
+                    targetRot = 0f;
+                    toFront();
+
+                    Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
+                    Vector2 parentPos = getParent().stageToLocalCoordinates(stagePos);
+
+                    targetX = parentPos.x - dragOffsetX;
+                    targetY = parentPos.y - dragOffsetY;
+
+                    List<Card> newOrder = new ArrayList<>(playerHand);
+                    newOrder.sort((c1, c2) -> {
+                        JuicyCardActor a1 = findActorForCard(c1);
+                        JuicyCardActor a2 = findActorForCard(c2);
+                        float x1 = (a1 != null && a1.isDragging) ? a1.targetX : (a1 != null ? a1.baseX : 0);
+                        float x2 = (a2 != null && a2.isDragging) ? a2.targetX : (a2 != null ? a2.baseX : 0);
+                        return Float.compare(x1, x2);
+                    });
+
+                    if (!playerHand.equals(newOrder)) {
+                        playerHand.clear();
+                        playerHand.addAll(newOrder);
+                        updateCardArcTargets();
+                    }
                 }
 
                 @Override
@@ -591,17 +631,11 @@ public class GameScreen extends ScreenAdapter {
                     infoPopup.setVisible(false);
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
 
-                    // Karte wird sofort wieder auf den Tisch fallen gelassen
                     targetScale = 1f;
 
-                    if (selectedCards.contains(card)) {
-                        selectedCards.remove(card);
-                        targetY = baseY;
-                        targetRot = baseRot;
-                        targetShadow = 0f;
-                    } else {
-                        if (selectedCards.size() < MAX_SELECTED_CARDS) {
-                            selectedCards.add(card);
+                    if (isDragging) {
+                        isDragging = false;
+                        if (selectedCards.contains(card)) {
                             targetY = baseY + CARD_SELECT_OFFSET_Y;
                             targetRot = 0f;
                             targetShadow = 0.1f;
@@ -610,29 +644,58 @@ public class GameScreen extends ScreenAdapter {
                             targetRot = baseRot;
                             targetShadow = 0f;
                         }
+                        targetX = baseX;
+                        updateLivePreview();
+                        updateCardArcTargets();
+
+                    } else {
+                        if (selectedCards.contains(card)) {
+                            selectedCards.remove(card);
+                            targetY = baseY;
+                            targetRot = baseRot;
+                            targetShadow = 0f;
+                        } else {
+                            if (selectedCards.size() < MAX_SELECTED_CARDS) {
+                                selectedCards.add(card);
+                                targetY = baseY + CARD_SELECT_OFFSET_Y;
+                                targetRot = 0f;
+                                targetShadow = 0.1f;
+                            } else {
+                                targetY = baseY;
+                                targetRot = baseRot;
+                                targetShadow = 0f;
+                            }
+                        }
+                        targetX = baseX;
+                        updateLivePreview();
                     }
-                    updateLivePreview();
                 }
             });
         }
 
-        // =========================================================
-        // DIE LERP-SCHLEIFE (Verhindert jegliche Input-Verzögerung)
-        // =========================================================
+        public void updateArc(float bx, float by, float brot) {
+            this.baseX = bx;
+            this.baseY = by;
+            this.baseRot = brot;
+
+            if (!isDragging) {
+                targetX = bx;
+                targetY = selectedCards.contains(card) ? by + CARD_SELECT_OFFSET_Y : by;
+                targetRot = selectedCards.contains(card) ? 0f : brot;
+            }
+        }
+
         @Override
         public void act(float delta) {
             super.act(delta);
+            setX(MathUtils.lerp(getX(), targetX, 22f * delta));
+            setY(MathUtils.lerp(getY(), targetY, 22f * delta));
+            setRotation(MathUtils.lerp(getRotation(), targetRot, 18f * delta));
 
-            // Die Position feuert ultra-schnell (Multiplikator 25) ans Ziel,
-            // exakt gekoppelt an die Framerate, ohne Action-Queue-Staus.
-            setY(MathUtils.lerp(getY(), targetY, 25f * delta));
-            setRotation(MathUtils.lerp(getRotation(), targetRot, 20f * delta));
-
-            // Die Skalierung und der Schatten feuern noch aggressiver (Multiplikator 40)
-            float newScale = MathUtils.lerp(getScaleX(), targetScale, 40f * delta);
+            float newScale = MathUtils.lerp(getScaleX(), targetScale, 35f * delta);
             setScale(newScale, newScale);
 
-            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 40f * delta);
+            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 35f * delta);
             shadowImg.setColor(0f, 0f, 0f, currentShadow);
         }
     }
@@ -643,35 +706,13 @@ public class GameScreen extends ScreenAdapter {
 
         if (activeAltarYokai != null) {
             TextureRegion yokaiRegion = atlas.findRegion(activeAltarYokai.getAtlasRegionName());
-            Actor altarView;
-
             if (yokaiRegion != null) {
-                Stack stack = new Stack();
-                Image yokaiImg = new Image(yokaiRegion);
-                yokaiImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
-                stack.add(yokaiImg);
-
-                Label stageLabel = new Label(activeAltarYokai.getName(), skin);
-                stageLabel.setFontScale(0.8f);
-                Table labelTable = new Table();
-                labelTable.bottom().padBottom(4);
-                labelTable.add(stageLabel);
-                stack.add(labelTable);
-
-                altarView = stack;
+                JuicyYokaiActor actor = new JuicyYokaiActor(activeAltarYokai, yokaiRegion, true);
+                altarTable.add(actor).width(108).height(192);
             } else {
-                altarView = new TextButton(activeAltarYokai.getName() + "\n(In Altar)", skin);
+                TextButton fallback = new TextButton(activeAltarYokai.getName() + "\n(In Altar)", skin);
+                altarTable.add(fallback).width(108).height(192);
             }
-
-            altarView.addListener(new ClickListener() {
-                @Override public void clicked(InputEvent e, float x, float y) {
-                    if (currentState != GameState.WAITING_FOR_INPUT) return;
-                    activeAltarYokai = null;
-                    renderYokaiUI();
-                    updateLivePreview();
-                }
-            });
-            altarTable.add(altarView).width(108).height(192);
         } else {
             Label emptyLabel = new Label("Altar\n(Leer)", skin);
             emptyLabel.setAlignment(Align.center);
@@ -683,41 +724,171 @@ public class GameScreen extends ScreenAdapter {
                 if (yokai == activeAltarYokai) continue;
 
                 TextureRegion yokaiRegion = atlas.findRegion(yokai.getAtlasRegionName());
-                Actor yokaiBtn;
-
                 if (yokaiRegion != null) {
-                    Stack stack = new Stack();
-                    Image img = new Image(yokaiRegion);
-                    img.setScaling(com.badlogic.gdx.utils.Scaling.fit);
-                    stack.add(img);
-
-                    if (yokai.isExhausted()) {
-                        img.setColor(0.35f, 0.35f, 0.35f, 0.6f);
-                        Label exLabel = new Label("Rastet", skin);
-                        exLabel.setFontScale(0.75f);
-                        Table t = new Table();
-                        t.center().add(exLabel);
-                        stack.add(t);
-                    }
-                    yokaiBtn = stack;
+                    JuicyYokaiActor actor = new JuicyYokaiActor(yokai, yokaiRegion, false);
+                    yokaiBagTable.add(actor).width(108).height(192).pad(4);
                 } else {
                     String text = yokai.getName() + (yokai.isExhausted() ? "\n(Rastet)" : "");
-                    yokaiBtn = new TextButton(text, skin);
+                    TextButton yokaiBtn = new TextButton(text, skin);
                     if (yokai.isExhausted()) yokaiBtn.getColor().a = 0.5f;
+                    yokaiBagTable.add(yokaiBtn).width(108).height(192).pad(4);
+                }
+            }
+        }
+    }
+
+    private class JuicyYokaiActor extends Group {
+        private final Yokai yokai;
+        private final boolean isAltar;
+        private final Image shadowImg;
+        private float currentShadow = 0f;
+        private float targetShadow = 0f;
+        private float targetScale = 1f;
+        private boolean isDragging = false;
+        private float dragOffsetX, dragOffsetY;
+
+        public JuicyYokaiActor(Yokai yokai, TextureRegion tex, boolean isAltar) {
+            this.yokai = yokai;
+            this.isAltar = isAltar;
+
+            setSize(108, 192);
+            setOrigin(54, 96);
+
+            shadowImg = new Image(tex);
+            shadowImg.setSize(108, 192);
+            shadowImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            shadowImg.setColor(0, 0, 0, 0f);
+            shadowImg.setPosition(-6, -8);
+            addActor(shadowImg);
+
+            Stack stack = new Stack();
+            stack.setSize(108, 192);
+
+            Image mainImg = new Image(tex);
+            mainImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
+            stack.add(mainImg);
+
+            if (yokai.isExhausted()) {
+                mainImg.setColor(0.35f, 0.35f, 0.35f, 0.6f);
+                Label exLabel = new Label("Rastet", skin);
+                exLabel.setFontScale(0.75f);
+                Table t = new Table();
+                t.center().add(exLabel);
+                stack.add(t);
+            } else {
+                Label stageLabel = new Label(yokai.getName(), skin);
+                stageLabel.setFontScale(0.8f);
+                Table labelTable = new Table();
+                labelTable.bottom().padBottom(4);
+                labelTable.add(stageLabel);
+                stack.add(labelTable);
+            }
+
+            addActor(stack);
+
+            addListener(new InputListener() {
+                @Override
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    if (currentState != GameState.WAITING_FOR_INPUT) return false;
+                    isDragging = false;
+                    dragOffsetX = x; dragOffsetY = y;
+                    toFront();
+                    targetScale = 1.0f;
+                    targetShadow = 0.3f;
+                    return true;
                 }
 
-                yokaiBtn.addListener(new ClickListener() {
-                    @Override public void clicked(InputEvent e, float x, float y) {
-                        if (currentState != GameState.WAITING_FOR_INPUT) return;
-                        if (!yokai.isExhausted() && activeAltarYokai == null) {
+                @Override
+                public void touchDragged(InputEvent event, float x, float y, int pointer) {
+                    if (currentState != GameState.WAITING_FOR_INPUT) return;
+                    isDragging = true;
+                    infoPopup.setVisible(false);
+                    targetScale = 1.0f;
+                    targetShadow = 0.6f;
+
+                    Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
+                    Vector2 parentPos = getParent().stageToLocalCoordinates(stagePos);
+                    setX(parentPos.x - dragOffsetX);
+                    setY(parentPos.y - dragOffsetY);
+                }
+
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    targetShadow = 0f;
+                    targetScale = 1f;
+
+                    if (isDragging) {
+                        isDragging = false;
+
+                        Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
+                        Vector2 bagPos = yokaiBagTable.localToStageCoordinates(new Vector2(0, 0));
+
+                        // Wenn die X-Koordinate links von der Yokai-Tasche ist, werten wir es als Drop auf dem Altar
+                        boolean droppedOnAltar = stagePos.x < bagPos.x;
+
+                        if (droppedOnAltar && !isAltar && !yokai.isExhausted() && activeAltarYokai == null) {
+                            activeAltarYokai = yokai; // Ins Altar-Feld gezogen
+                        } else if (!droppedOnAltar && isAltar) {
+                            activeAltarYokai = null;  // Aus dem Altar-Feld gezogen
+                        }
+
+                        // Tasche nach X-Koordinaten neu sortieren (Drag & Drop im Inventar)
+                        if (!isAltar && !droppedOnAltar) {
+                            List<JuicyYokaiActor> actors = new ArrayList<>();
+                            for (Actor a : yokaiBagTable.getChildren()) {
+                                if (a instanceof JuicyYokaiActor) actors.add((JuicyYokaiActor) a);
+                            }
+                            actors.sort(Comparator.comparing(a -> a.localToStageCoordinates(new Vector2(0, 0)).x));
+
+                            List<Yokai> oldBag = new ArrayList<>(runSession.getYokaiBag());
+                            runSession.getYokaiBag().clear();
+
+                            // Aktiven Altar-Yokai nicht vergessen
+                            if (activeAltarYokai != null) runSession.getYokaiBag().add(activeAltarYokai);
+
+                            for (JuicyYokaiActor a : actors) {
+                                if (!runSession.getYokaiBag().contains(a.yokai)) runSession.getYokaiBag().add(a.yokai);
+                            }
+                            for (Yokai i : oldBag) {
+                                if (!runSession.getYokaiBag().contains(i)) runSession.getYokaiBag().add(i);
+                            }
+                        }
+
+                        renderYokaiUI();
+                        updateLivePreview();
+
+                    } else {
+                        // Regulärer Klick (weiterhin als komfortable Alternative nutzbar)
+                        triggerPunchAnimation(JuicyYokaiActor.this);
+                        infoPopup.clearChildren();
+                        infoPopup.add(new Label(yokai.getName(), skin)).padTop(10).padBottom(5).row();
+                        infoPopup.add(new Label(yokai.isExhausted() ? "(Rastet)" : "(Bereit)", skin)).padBottom(5).row();
+                        infoPopup.pack();
+                        Vector2 pos = localToStageCoordinates(new Vector2(0, 0));
+                        infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
+                        infoPopup.setVisible(true);
+
+                        if (isAltar) {
+                            activeAltarYokai = null;
+                            renderYokaiUI();
+                            updateLivePreview();
+                        } else if (!yokai.isExhausted() && activeAltarYokai == null) {
                             activeAltarYokai = yokai;
                             renderYokaiUI();
                             updateLivePreview();
                         }
                     }
-                });
-                yokaiBagTable.add(yokaiBtn).width(108).height(192).pad(4);
-            }
+                }
+            });
+        }
+
+        @Override
+        public void act(float delta) {
+            super.act(delta);
+            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 25f * delta);
+            shadowImg.setColor(0f, 0f, 0f, currentShadow);
+            float newScale = MathUtils.lerp(getScaleX(), targetScale, 35f * delta);
+            setScale(newScale, newScale);
         }
     }
 
@@ -729,28 +900,106 @@ public class GameScreen extends ScreenAdapter {
             String regionName = "OMAMORI_" + snakeCaseName;
 
             TextureRegion region = atlas.findRegion(regionName);
-            Actor omamoriView = (region != null) ? new Image(region) : new TextButton(omamori.getName(), skin);
-            TextTooltip tooltip = new TextTooltip(omamori.getName(), skin);
-            omamoriView.addListener(tooltip);
+            if (region != null) {
+                JuicyOmamoriActor omamoriActor = new JuicyOmamoriActor(omamori, region);
+                omamoriTable.add(omamoriActor).width(72).height(96).pad(5);
+            } else {
+                TextButton fallback = new TextButton(omamori.getName(), skin);
+                omamoriTable.add(fallback).width(72).height(96).pad(5);
+            }
+        }
+    }
 
-            omamoriView.addListener(new ClickListener() {
+    private class JuicyOmamoriActor extends Group {
+        private final Omamori omamori;
+        private final Image shadowImg;
+        private float currentShadow = 0f;
+        private float targetShadow = 0f;
+        private float targetScale = 1f;
+        private boolean isDragging = false;
+        private float dragOffsetX, dragOffsetY;
+
+        public JuicyOmamoriActor(Omamori omamori, TextureRegion tex) {
+            this.omamori = omamori;
+            setSize(72, 96);
+            setOrigin(36, 48);
+
+            shadowImg = new Image(tex);
+            shadowImg.setSize(72, 96);
+            shadowImg.setColor(0, 0, 0, 0f);
+            shadowImg.setPosition(-4, -6);
+            addActor(shadowImg);
+
+            Image mainImg = new Image(tex);
+            mainImg.setSize(72, 96);
+            addActor(mainImg);
+
+            addListener(new InputListener() {
                 @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    triggerPunchAnimation(omamoriView);
-                    if (infoPopup.isVisible()) {
-                        infoPopup.setVisible(false);
+                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
+                    isDragging = false;
+                    dragOffsetX = x; dragOffsetY = y;
+                    toFront();
+
+                    targetScale = 1.0f;
+                    targetShadow = 0.3f;
+                    return true;
+                }
+
+                @Override
+                public void touchDragged(InputEvent event, float x, float y, int pointer) {
+                    isDragging = true;
+                    infoPopup.setVisible(false);
+
+                    targetScale = 1.0f;
+                    targetShadow = 0.6f;
+
+                    Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
+                    Vector2 parentPos = getParent().stageToLocalCoordinates(stagePos);
+                    setX(parentPos.x - dragOffsetX);
+                    setY(parentPos.y - dragOffsetY);
+                }
+
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    targetShadow = 0f;
+                    targetScale = 1f;
+
+                    if (isDragging) {
+                        isDragging = false;
+
+                        List<JuicyOmamoriActor> actors = new ArrayList<>();
+                        for (Actor a : omamoriTable.getChildren()) {
+                            if (a instanceof JuicyOmamoriActor) actors.add((JuicyOmamoriActor) a);
+                        }
+                        actors.sort(Comparator.comparing(a -> a.localToStageCoordinates(new Vector2(0, 0)).x));
+
+                        activeOmamoris.clear();
+                        for(JuicyOmamoriActor a : actors) activeOmamoris.add(a.omamori);
+
+                        renderOmamoris();
                     } else {
+                        triggerPunchAnimation(JuicyOmamoriActor.this);
                         infoPopup.clearChildren();
                         infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
                         infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
                         infoPopup.pack();
-                        Vector2 pos = omamoriView.localToStageCoordinates(new Vector2(0, 0));
+                        Vector2 pos = localToStageCoordinates(new Vector2(0, 0));
                         infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
                         infoPopup.setVisible(true);
                     }
                 }
             });
-            omamoriTable.add(omamoriView).width(72).height(96).pad(5);
+        }
+
+        @Override
+        public void act(float delta) {
+            super.act(delta);
+            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 25f * delta);
+            shadowImg.setColor(0f, 0f, 0f, currentShadow);
+
+            float newScale = MathUtils.lerp(getScaleX(), targetScale, 35f * delta);
+            setScale(newScale, newScale);
         }
     }
 
