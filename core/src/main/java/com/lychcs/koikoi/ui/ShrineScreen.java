@@ -5,6 +5,7 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -19,10 +20,13 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.model.yokai.Yokai;
 import com.lychcs.koikoi.model.yokai.YokaiPool;
 import com.lychcs.koikoi.model.yokai.YokaiStage;
 import com.lychcs.koikoi.run.RunSession;
+
+import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class ShrineScreen extends ScreenAdapter {
 
@@ -57,7 +61,11 @@ public class ShrineScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
+
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+
         atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
         for (Texture tex : atlas.getTextures()) {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
@@ -72,8 +80,8 @@ public class ShrineScreen extends ScreenAdapter {
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
-        indieButtonStyle.font = skin.getFont("default-font");
-        indieButtonStyle.fontColor = Color.WHITE;
+        indieButtonStyle.font = FontManager.getFont();
+        indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
 
         // Overlay Texturen sauber erstellen und referenzieren
         Pixmap darkPixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layouts>
+    <layout id="_default_" name="_default_">
+        <colorbar side="left" width="76"/>
+        <statusbar side="bottom"/>
+        <dock>
+            <contextbar side="top"/>
+            <toolbar side="right"/>
+            <dock>
+                <timeline side="bottom" width="75" height="89"/>
+                <workspace/>
+            </dock>
+        </dock>
+    </layout>
+</layouts>

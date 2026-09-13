@@ -1,0 +1,3 @@
+@echo off
+echo Installing aseprite-thumbnailer.dll...
+regsvr32.exe aseprite-thumbnailer.dll

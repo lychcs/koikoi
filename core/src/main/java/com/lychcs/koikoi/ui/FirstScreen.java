@@ -4,18 +4,19 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.ui.Image;
-import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.FontManager;
+
+import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class FirstScreen extends ScreenAdapter {
 
@@ -40,11 +41,13 @@ public class FirstScreen extends ScreenAdapter {
 
     private void initAssets() {
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
-
         logoTexture = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_LOGO.png"));
         logoTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+
         buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
     }
 
@@ -55,15 +58,14 @@ public class FirstScreen extends ScreenAdapter {
         TextButton.TextButtonStyle buttonStyle = new TextButton.TextButtonStyle();
         buttonStyle.up = buttonDrawable;
         buttonStyle.down = buttonDrawable.tint(Color.LIGHT_GRAY);
-        buttonStyle.font = skin.getFont("default-font");
-        buttonStyle.fontColor = Color.WHITE;
+        buttonStyle.font = FontManager.getFont();
+        buttonStyle.fontColor = COLOR_TEXT_MAIN;
 
         TextButton startButton = new TextButton("Start Journey", buttonStyle);
 
         startButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                // Korrektur: Geht jetzt ins Intro statt direkt ins Spiel!
                 game.setScreen(new IntroScreen(game));
             }
         });

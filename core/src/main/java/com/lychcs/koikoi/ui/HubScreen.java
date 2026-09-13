@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -13,7 +14,10 @@ import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.run.RunSession;
+
+import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class HubScreen extends ScreenAdapter {
 
@@ -40,7 +44,10 @@ public class HubScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
+
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         // Lädt automatisch HUB_SPRING.jpg, HUB_SUMMER.jpg etc.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("HUB")));
@@ -49,8 +56,8 @@ public class HubScreen extends ScreenAdapter {
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
-        indieButtonStyle.font = skin.getFont("default-font");
-        indieButtonStyle.fontColor = Color.WHITE;
+        indieButtonStyle.font = FontManager.getFont();
+        indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
     }
 
     private void buildHubUi() {

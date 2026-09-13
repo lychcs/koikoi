@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -25,6 +26,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.graphics.HankoShaderManager;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
@@ -41,6 +43,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class GameScreen extends ScreenAdapter {
 
@@ -170,6 +174,9 @@ public class GameScreen extends ScreenAdapter {
 
     private void initUiElements() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+
         loadIndieAssets();
 
         playButton = new TextButton("Play Hand", indieButtonStyle);
@@ -357,8 +364,8 @@ public class GameScreen extends ScreenAdapter {
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
-        indieButtonStyle.font = skin.getFont("default-font");
-        indieButtonStyle.fontColor = Color.WHITE;
+        indieButtonStyle.font = FontManager.getFont();
+        indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
     }
 
     public void onPlayHandSubmitted() {

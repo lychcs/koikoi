@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
@@ -17,8 +18,11 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
+
+import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class CutsceneScreen extends ScreenAdapter {
 
@@ -40,15 +44,19 @@ public class CutsceneScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
+
         skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
 
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
         indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
-        indieButtonStyle.font = skin.getFont("default-font");
-        indieButtonStyle.fontColor = Color.WHITE;
+        indieButtonStyle.font = FontManager.getFont();
+        indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
     }
 
     private void buildUI() {
