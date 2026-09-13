@@ -28,6 +28,7 @@ import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.*;
 import com.lychcs.koikoi.model.yokai.Yokai;
+import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.scoring.*;
 
@@ -257,11 +258,11 @@ public class GameScreen extends ScreenAdapter {
         altarTable.setBackground(panelBackground);
         altarTable.pad(15);
 
-        TextureRegion whiteRegion = skin.getRegion("white");
-        altarFlames = new AltarFlameActor(whiteRegion);
-
-        // Flammen-Actor hinter dem Altar einbinden
+        // Flammen-Actor hinter dem Altar einbinden (mit Fallback auf White)
         TextureRegion flameRegion = atlas.findRegion("FLAME_SHAPE");
+        if (flameRegion == null) {
+            flameRegion = skin.getRegion("white");
+        }
         altarFlames = new AltarFlameActor(flameRegion);
 
         Stack altarStack = new Stack();
@@ -398,7 +399,6 @@ public class GameScreen extends ScreenAdapter {
         // Siegel-Effekte nach erfolgreicher Wertung ausführen
         for (Card playedCard : playedCards) {
             if (playedCard.effect() == HankoEffect.STONE_SEAL) {
-                // Stone Seal: Karte kehrt ohne Siegel auf die Hand zurück
                 Card strippedCard = new Card(
                     playedCard.id(), playedCard.season(), playedCard.rank(),
                     playedCard.name(), HankoEffect.NONE
@@ -406,7 +406,6 @@ public class GameScreen extends ScreenAdapter {
                 playerHand.add(strippedCard);
 
             } else if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
-                // Blood Seal: 1-in-4 Chance, für die laufende Season verbrannt zu werden
                 if (com.badlogic.gdx.math.MathUtils.random(1, 4) == 1) {
                     runSession.banishCardForSeason(playedCard);
                 }
@@ -437,15 +436,26 @@ public class GameScreen extends ScreenAdapter {
 
             int voidDustEarned = 10 + (handsRemaining * 5) + (discardsRemaining * 2);
             runSession.addVoidDust(voidDustEarned);
-            System.out.println("Void Dust erhalten: " + voidDustEarned);
-
             runSession.addMon(currentRoundScore / 100);
-            int interest = runSession.applyEndRoundInterest();
-            System.out.println("Zinsen erhalten: " + interest);
-
+            runSession.applyEndRoundInterest();
             runSession.resetShrineVisit();
 
-            ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+            // Hole Season VOR dem Advance für die Cutscene
+            GameSeason defeatedSeason = runSession.getCurrentSeason();
+            int completedStage = runSession.getSeasonEncounterStage();
+
+            // Level Fortschritt
+            runSession.advanceEncounterStage();
+
+            if (completedStage == 3) {
+                // Level 3 geschafft -> Boss besiegt -> Cutscene!
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, defeatedSeason));
+            } else if (defeatedSeason == GameSeason.FINAL) {
+                // Spiel durchgespielt
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
+            } else {
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+            }
 
         } else if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
@@ -475,7 +485,6 @@ public class GameScreen extends ScreenAdapter {
                     String regionName = "HANKO_" + card.effect().name();
                     TextureRegion hankoRegion = atlas.findRegion(regionName);
 
-                    // Fallback falls der Packer den Unterordner im Namen behalten hat
                     if (hankoRegion == null) {
                         hankoRegion = atlas.findRegion("hankos/" + regionName);
                     }
@@ -483,7 +492,6 @@ public class GameScreen extends ScreenAdapter {
                     if (hankoRegion != null) {
                         HankoActor hankoActor = new HankoActor(card.effect(), hankoRegion);
 
-                        // Fixiert das Siegel mit Abstand in der oberen rechten Ecke
                         com.badlogic.gdx.scenes.scene2d.ui.Container<HankoActor> sealContainer =
                             new com.badlogic.gdx.scenes.scene2d.ui.Container<>(hankoActor);
                         sealContainer.top().right().padTop(6).padRight(6);
@@ -537,68 +545,6 @@ public class GameScreen extends ScreenAdapter {
             handTable.add(cardView).width(CARD_WIDTH).height(CARD_HEIGHT).pad(5);
         }
     }
-
-//    private void dealCardsToUI() {
-//        handTable.clearChildren();
-//        for (Card card : playerHand) {
-//            TextureRegionDrawable cardImage = getCardImage(card);
-//            Actor cardView;
-//
-//            if (cardImage != null) {
-//                Stack cardStack = new Stack();
-//                cardStack.add(new Image(cardImage));
-//
-//                // Ersetzt das reguläre Image durch den shader-gesteuerten HankoActor
-//                if (card.hasHanko()) {
-//                    TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
-//                    if (hankoRegion != null) {
-//                        cardStack.add(new com.lychcs.koikoi.ui.HankoActor(card.effect(), hankoRegion));
-//                    }
-//                }
-//                cardView = cardStack;
-//            } else {
-//                cardView = new TextButton(card.season().name() + "\n" + card.rank().name(), skin);
-//            }
-//
-//            cardView.addListener(new ClickListener() {
-//                @Override
-//                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-//                    infoPopup.clearChildren();
-//                    infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
-//                    infoPopup.add(new Label(card.season().name() + " | " + card.rank().name(), skin)).padBottom(10).row();
-//                    if (card.hasHanko()) infoPopup.add(new Label("Seal: " + card.effect().name(), skin)).padBottom(10).row();
-//                    infoPopup.pack();
-//
-//                    Vector2 pos = cardView.localToStageCoordinates(new Vector2(x, y));
-//                    infoPopup.setPosition(pos.x - (infoPopup.getWidth() / 2f), pos.y + 40);
-//                    infoPopup.setVisible(true);
-//                    return super.touchDown(event, x, y, pointer, button);
-//                }
-//
-//                @Override
-//                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-//                    infoPopup.setVisible(false);
-//                    super.touchUp(event, x, y, pointer, button);
-//                }
-//
-//                @Override
-//                public void clicked(InputEvent event, float x, float y) {
-//                    if (currentState != GameState.WAITING_FOR_INPUT) return;
-//                    if (selectedCards.contains(card)) {
-//                        selectedCards.remove(card);
-//                        cardView.addAction(Actions.moveBy(0, -CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
-//                    } else {
-//                        if (selectedCards.size() < MAX_SELECTED_CARDS) {
-//                            selectedCards.add(card);
-//                            cardView.addAction(Actions.moveBy(0, CARD_SELECT_OFFSET_Y, ANIMATION_SPEED));
-//                        }
-//                    }
-//                    updateLivePreview();
-//                }
-//            });
-//            handTable.add(cardView).width(CARD_WIDTH).height(CARD_HEIGHT).pad(5);
-//        }
-//    }
 
     private void renderYokaiUI() {
         altarTable.clearChildren();
@@ -723,7 +669,6 @@ public class GameScreen extends ScreenAdapter {
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
-        // Preview ohne Globale Relikte für schnelle Übersicht
         ScoreContext previewCtx = ScoreContext.preview(hand, unplayed, bestYaku, activeAltarYokai);
 
         chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
@@ -745,21 +690,18 @@ public class GameScreen extends ScreenAdapter {
         final int[] currentChips = { breakdown.yakuChips() };
         final int[] currentMult = { breakdown.yakuBaseMult() };
 
-        // 1. Initialer Score-Aufbau & Flammenzuendung
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
             chipsLabel.setText(String.valueOf(currentChips[0]));
             multLabel.setText(String.valueOf(currentMult[0]));
 
-            // Lila-schwarze kosmische Flammen lodern auf, wenn ein Yokai geopfert/aktiviert wird
             if (activeAltarYokai != null && altarFlames != null) {
                 altarFlames.ignite();
             }
         }));
         sequence.addAction(Actions.delay(0.6f));
 
-        // 2. Score-Events sequentiell hochzaehlen
         for (ScoringEvent event : breakdown.events()) {
             if (event.addedChips() == 0 && event.addedMult() == 0 && event.xMult() == 1.0) continue;
 
@@ -776,11 +718,9 @@ public class GameScreen extends ScreenAdapter {
 
         sequence.addAction(Actions.delay(0.4f));
 
-        // 3. Auszahlung, Waehrungs-Transfer & Flammen erloeschen
         sequence.addAction(Actions.run(() -> {
             currentRoundScore += breakdown.finalPayout();
 
-            // Mon und Void Dust aus den Hanko-Siegeln dem Run gutschreiben
             for (ScoringEvent event : breakdown.events()) {
                 if (event.addedMon() > 0) runSession.addMon(event.addedMon());
                 if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
@@ -790,7 +730,6 @@ public class GameScreen extends ScreenAdapter {
             chipsLabel.setText("0");
             multLabel.setText("0");
 
-            // Yokai erschoepfen und Flammen erloeschen
             if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;

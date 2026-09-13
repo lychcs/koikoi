@@ -1,7 +1,9 @@
 package com.lychcs.koikoi.run;
 
 import com.lychcs.koikoi.model.Card;
+import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Deck;
+import com.lychcs.koikoi.model.Rank;
 import com.lychcs.koikoi.model.fuku.FukuContext;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
@@ -11,8 +13,12 @@ import java.util.*;
 
 public class RunSession implements FukuContext {
 
-    private GameSeason currentSeason = GameSeason.SPRING; // Start immer im Frühling
-    private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel-Evo-Kampf, 3: Korrumpierter Kami-Boss
+    private GameSeason currentSeason = GameSeason.SPRING;
+    private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel, 3: Kami-Boss
+
+    // Neu: Tracking der Pfad-Entscheidungen
+    private CardID activeBeastChoice = null;
+    private Rank activeAlignmentChoice = null;
 
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
@@ -28,7 +34,6 @@ public class RunSession implements FukuContext {
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
 
-    // Speichert Karten, die durch das Blood Seal für die aktuelle Season verbrannt wurden
     private final List<Card> banishedThisSeason = new ArrayList<>();
 
     private boolean shrineSummonedThisVisit = false;
@@ -40,19 +45,13 @@ public class RunSession implements FukuContext {
         this.playerDeck.initializeDeck();
     }
 
-    // Zins-Berechnung am Ende der Runde
     public int applyEndRoundInterest() {
         int interestEarned = this.mon / 5;
-
-        if (interestEarned > maxInterestCap) {
-            interestEarned = maxInterestCap;
-        }
-
+        if (interestEarned > maxInterestCap) interestEarned = maxInterestCap;
         this.mon += interestEarned;
         return interestEarned;
     }
 
-    // Shrines
     public boolean isShrineSummonedThisVisit() { return shrineSummonedThisVisit; }
     public void setShrineSummonedThisVisit(boolean summoned) { this.shrineSummonedThisVisit = summoned; }
     public Set<Yokai> getShrineEvolvedThisVisit() { return shrineEvolvedThisVisit; }
@@ -62,11 +61,14 @@ public class RunSession implements FukuContext {
         this.shrineEvolvedThisVisit.clear();
     }
 
-    //Seasons
+    // --- LEVEL STRUKTUR & PATHING ---
+
     public void advanceEncounterStage() {
         seasonEncounterStage++;
         if (seasonEncounterStage > 3) {
             seasonEncounterStage = 1;
+            activeBeastChoice = null;     // Reset für die neue Season
+            activeAlignmentChoice = null; // Reset für die neue Season
             advanceSeason();
         }
     }
@@ -77,13 +79,37 @@ public class RunSession implements FukuContext {
             case SPRING -> GameSeason.SUMMER;
             case SUMMER -> GameSeason.AUTUMN;
             case AUTUMN -> GameSeason.WINTER;
-            case WINTER -> GameSeason.WINTER; // Hier später in den Final Boss State wechseln!
+            case WINTER -> GameSeason.FINAL; // Boss Stage!
+            case FINAL -> GameSeason.FINAL;
         };
     }
 
-    /**
-     * Entfernt die Karte temporär aus dem Deck des Spielers und markiert sie als verbannt.
-     */
+    public void setBeastChoice(CardID beastID) {
+        this.activeBeastChoice = beastID;
+    }
+
+    public void setAlignmentChoiceAndEvolve(Rank alignment) {
+        this.activeAlignmentChoice = alignment;
+
+        if (activeBeastChoice == null) return;
+        CardID evolvedId = EvolutionMapper.getEvolvedForm(activeBeastChoice, alignment);
+
+        // Finde das Basis-Beast im Deck und werte es auf
+        for (int i = 0; i < playerDeck.getCards().size(); i++) {
+            Card c = playerDeck.getCards().get(i);
+            if (c.id() == activeBeastChoice) {
+                Card evolvedCard = new Card(evolvedId, c.season(), alignment, c.name() + " (Erwacht)", c.effect());
+                playerDeck.getCards().set(i, evolvedCard);
+                break;
+            }
+        }
+    }
+
+    public boolean needsBeastChoice() { return activeBeastChoice == null; }
+    public boolean needsAlignmentChoice() { return activeAlignmentChoice == null; }
+
+    // --- BANISH LOGIK ---
+
     public void banishCardForSeason(Card card) {
         if (card != null && playerDeck != null) {
             playerDeck.getCards().remove(card);
@@ -91,9 +117,6 @@ public class RunSession implements FukuContext {
         }
     }
 
-    /**
-     * Bringt alle verbannten Karten zurück ins Deck, sobald die nächste Season startet.
-     */
     public void restoreSeasonBanishedCards() {
         if (playerDeck != null && !banishedThisSeason.isEmpty()) {
             playerDeck.getCards().addAll(banishedThisSeason);
@@ -105,32 +128,17 @@ public class RunSession implements FukuContext {
         return Collections.unmodifiableList(banishedThisSeason);
     }
 
-    // --- Fuku Context Implementierung ---
-    @Override
-    public int getMon() { return this.mon; }
+    @Override public int getMon() { return this.mon; }
+    @Override public void addMon(int amount) { this.mon += amount; }
+    @Override public void addMaxHands(int amount) { this.baseHands += amount; }
+    @Override public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
+    @Override public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
 
-    @Override
-    public void addMon(int amount) { this.mon += amount; }
-
-    @Override
-    public void addMaxHands(int amount) { this.baseHands += amount; }
-
-    @Override
-    public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
-
-    @Override
-    public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
-
-    // --- Getter & Setter ---
     public int getBaseHands() { return baseHands; }
     public int getBaseDiscards() { return baseDiscards; }
     public int getMaxInterestCap() { return maxInterestCap; }
-    public Deck getPlayerDeck() {
-        return playerDeck;
-    }
-    public List<HankoEffect> getPurchasedHankos() {
-        return purchasedHankos;
-    }
+    public Deck getPlayerDeck() { return playerDeck; }
+    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
     public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
     public int getVoidDust() { return voidDust; }
     public void addVoidDust(int amount) { this.voidDust += amount; }

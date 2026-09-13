@@ -60,7 +60,6 @@ public class HubScreen extends ScreenAdapter {
         root.setFillParent(true);
         root.pad(40);
 
-        // TOP BAR: Währungen
         Table topBar = new Table();
         monLabel = new Label("Mon: " + runSession.getMon(), skin);
         monLabel.setFontScale(1.4f);
@@ -73,21 +72,18 @@ public class HubScreen extends ScreenAdapter {
         topBar.add(voidDustLabel);
         root.add(topBar).expandX().top().left().padBottom(80).row();
 
-        // MITTE: Die beiden großen Buttons (Schrein & Shop)
         Table centerTable = new Table();
 
         TextButton shrineButton = new TextButton("Schrein betreten", indieButtonStyle);
         shrineButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
+            @Override public void clicked(InputEvent event, float x, float y) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShrineScreen(runSession));
             }
         });
 
         TextButton shopButton = new TextButton("Shop betreten", indieButtonStyle);
         shopButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
+            @Override public void clicked(InputEvent event, float x, float y) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
             }
         });
@@ -96,12 +92,23 @@ public class HubScreen extends ScreenAdapter {
         centerTable.add(shopButton).width(320).height(90);
         root.add(centerTable).expandY().center().padBottom(80).row();
 
-        // UNTEN: Weiterziehen zum nächsten Kampf
-        TextButton proceedButton = new TextButton("Weiterziehen", indieButtonStyle);
+        // Dynamischer Weiterziehen-Button je nach Level
+        String btnText = "Level " + runSession.getSeasonEncounterStage() + " Starten";
+        if (runSession.getSeasonEncounterStage() == 3) btnText = "Kami Bosskampf";
+
+        TextButton proceedButton = new TextButton(btnText, indieButtonStyle);
         proceedButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
+                KoiKoiGame game = (KoiKoiGame) Gdx.app.getApplicationListener();
+
+                if (runSession.getSeasonEncounterStage() == 1 && runSession.needsBeastChoice()) {
+                    game.setScreen(new ChoiceScreen(runSession, ChoiceScreen.ChoiceType.BEAST));
+                } else if (runSession.getSeasonEncounterStage() == 2 && runSession.needsAlignmentChoice()) {
+                    game.setScreen(new ChoiceScreen(runSession, ChoiceScreen.ChoiceType.ALIGNMENT));
+                } else {
+                    game.setScreen(new GameScreen(runSession));
+                }
             }
         });
         root.add(proceedButton).width(320).height(70).bottom();

@@ -41,6 +41,9 @@ public class ShopScreen extends ScreenAdapter {
 
     private Label monLabel;
     private Table boosterOverlay;
+
+    // WICHTIG: Die Texture muss im Objekt gehalten werden, um sie zu disposen!
+    private Texture darkOverlayTex;
     private TextureRegionDrawable darkOverlayBackground;
 
     public ShopScreen(RunSession runSession) {
@@ -64,7 +67,7 @@ public class ShopScreen extends ScreenAdapter {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
 
-        // Lädt automatisch SHOP_SPRING.jpg, SHOP_SUMMER.jpg etc.
+        // LÃ¤dt automatisch SHOP_SPRING.jpg, SHOP_SUMMER.jpg etc.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHOP")));
 
         boosterPackTexture = new Texture(Gdx.files.internal("backgrounds/BOOSTER_PACK.png"));
@@ -80,10 +83,12 @@ public class ShopScreen extends ScreenAdapter {
         indieButtonStyle.font = skin.getFont("default-font");
         indieButtonStyle.fontColor = Color.WHITE;
 
+        // Sauber referenziertes und gecleantes Pixmap für das Overlay
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(new Color(0, 0, 0, 0.85f));
         pixmap.fill();
-        darkOverlayBackground = new TextureRegionDrawable(new TextureRegion(new Texture(pixmap)));
+        darkOverlayTex = new Texture(pixmap);
+        darkOverlayBackground = new TextureRegionDrawable(new TextureRegion(darkOverlayTex));
         pixmap.dispose();
     }
 
@@ -196,14 +201,10 @@ public class ShopScreen extends ScreenAdapter {
         return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
-    /**
-     * Neue Methode speziell für Omamoris, um deren Bild mitzuladen!
-     */
     private Table createOmamoriCard(Omamori omamori) {
         Table card = new Table();
         card.setBackground(panelBackground);
 
-        // 1. Textur-Namen generieren (Genau wie im GameScreen!)
         String className = omamori.getClass().getSimpleName();
         String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
         String regionName = "OMAMORI_" + snakeCaseName;
@@ -211,7 +212,6 @@ public class ShopScreen extends ScreenAdapter {
         TextureRegion region = atlas.findRegion(regionName);
         Actor icon = (region != null) ? new Image(region) : new Label("No Img", skin);
 
-        // 2. Texte vorbereiten
         Label nameLabel = new Label(omamori.getName(), skin);
         nameLabel.setFontScale(0.9f);
         Label descLabel = new Label(omamori.getDescription(), skin);
@@ -219,7 +219,6 @@ public class ShopScreen extends ScreenAdapter {
         descLabel.setAlignment(Align.center);
         descLabel.setFontScale(0.8f);
 
-        // 3. Kauf-Logik
         int price = OmamoriPool.getCost(omamori.getRarity());
         TextButton buyButton = new TextButton(price + " Mon", indieButtonStyle);
 
@@ -231,7 +230,6 @@ public class ShopScreen extends ScreenAdapter {
                     runSession.getActiveOmamoris().add(omamori);
                     updateMonDisplay();
 
-                    // Visuelles Feedback: Kasten leeren und "SOLD OUT" anzeigen
                     card.clearChildren();
                     Label soldOut = new Label("SOLD OUT", skin);
                     soldOut.setColor(Color.FIREBRICK);
@@ -240,9 +238,8 @@ public class ShopScreen extends ScreenAdapter {
             }
         });
 
-        // 4. Layout in der Box (Bild ist jetzt in der Mitte!)
         card.add(nameLabel).padTop(10).padBottom(5).row();
-        card.add(icon).width(72).height(96).row(); // Maße anpassen falls nötig
+        card.add(icon).width(72).height(96).row();
         card.add(descLabel).expand().fill().pad(5).row();
         card.add(buyButton).width(160).height(45).padBottom(10);
 
@@ -374,8 +371,9 @@ public class ShopScreen extends ScreenAdapter {
     @Override
     public void dispose() {
         stage.dispose();
-        background.dispose();
-        boosterPackTexture.dispose();
-        atlas.dispose();
+        if (background != null) background.dispose();
+        if (boosterPackTexture != null) boosterPackTexture.dispose();
+        if (atlas != null) atlas.dispose();
+        if (darkOverlayTex != null) darkOverlayTex.dispose();
     }
 }
