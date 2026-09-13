@@ -68,7 +68,7 @@ public class ChoiceScreen extends ScreenAdapter {
         titleLabel.setFontScale(1.8f);
         root.add(titleLabel).padBottom(20).row();
 
-        Label descLabel = new Label(choiceType == ChoiceType.BEAST ? "Welches Beast soll dich in dieser Season begleiten?" : "Wähle zwischen dem pfad des Lichts und der Dunkelheit.", skin);
+        Label descLabel = new Label(choiceType == ChoiceType.BEAST ? "Welches Beast soll dich in dieser Season begleiten?" : "Waehle zwischen dem Pfad des Lichts und der Dunkelheit.", skin);
         descLabel.setAlignment(Align.center);
         root.add(descLabel).padBottom(60).row();
 
@@ -78,7 +78,10 @@ public class ChoiceScreen extends ScreenAdapter {
             CardID[] choices = EvolutionMapper.getSeasonBeastChoices(runSession.getCurrentSeason());
 
             for (CardID beast : choices) {
-                TextButton btn = new TextButton(beast.name(), indieButtonStyle);
+                // Macht den Namen hübsch: z.B. SPRING_BEAST_KOI -> KOI
+                String beastName = beast.name().substring(beast.name().lastIndexOf("_") + 1);
+
+                TextButton btn = new TextButton("Pfad: " + beastName, indieButtonStyle);
                 btn.addListener(new ClickListener() {
                     @Override public void clicked(InputEvent event, float x, float y) {
                         runSession.setBeastChoice(beast);

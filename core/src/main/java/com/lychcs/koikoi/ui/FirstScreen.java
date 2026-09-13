@@ -16,7 +16,6 @@ import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
-import com.lychcs.koikoi.run.RunSession;
 
 public class FirstScreen extends ScreenAdapter {
 
@@ -42,7 +41,6 @@ public class FirstScreen extends ScreenAdapter {
     private void initAssets() {
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
 
-        // Logo laden und Pixel-Art-Filter setzen
         logoTexture = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_LOGO.png"));
         logoTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
@@ -65,8 +63,8 @@ public class FirstScreen extends ScreenAdapter {
         startButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                RunSession currentRun = new RunSession();
-                game.setScreen(new GameScreen(currentRun));
+                // Korrektur: Geht jetzt ins Intro statt direkt ins Spiel!
+                game.setScreen(new IntroScreen(game));
             }
         });
 
@@ -80,6 +78,7 @@ public class FirstScreen extends ScreenAdapter {
 
         stage.addActor(rootTable);
     }
+
     @Override
     public void show() {
         Gdx.input.setInputProcessor(stage);
@@ -88,7 +87,6 @@ public class FirstScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0f, 0f, 0f, 1f);
-
         stage.getBatch().begin();
         stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         stage.getBatch().end();
@@ -100,10 +98,6 @@ public class FirstScreen extends ScreenAdapter {
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
-    }
-
-    @Override
-    public void hide() {
     }
 
     @Override

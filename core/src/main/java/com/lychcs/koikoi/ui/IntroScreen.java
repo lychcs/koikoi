@@ -40,7 +40,6 @@ public class IntroScreen extends ScreenAdapter {
 
     private void initAssets() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        // Du kannst hier einen dunklen/lila-schwarzen Hintergrund für die Korruption nehmen
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
 
         Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
@@ -82,8 +81,8 @@ public class IntroScreen extends ScreenAdapter {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 RunSession currentRun = new RunSession();
-                // Hier könntest du dem Spieler direkt sein erstes Starter-Ei / Yokai in den Beutel geben!
-                game.setScreen(new GameScreen(currentRun));
+                // Direkt zur Pfadauswahl für das erste Level, Hub wird komplett übersprungen!
+                game.setScreen(new ChoiceScreen(currentRun, ChoiceScreen.ChoiceType.BEAST));
             }
         });
 

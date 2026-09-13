@@ -16,13 +16,13 @@ public class RunSession implements FukuContext {
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel, 3: Kami-Boss
 
-    // Neu: Tracking der Pfad-Entscheidungen
+    // Tracking der Pfad-Entscheidungen
     private CardID activeBeastChoice = null;
     private Rank activeAlignmentChoice = null;
 
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
-    private int mon = 1000;
+    private int mon = 0; // Zurückgesetzt auf echtes Startkapital
     private int voidDust = 0;
     private int maxInterestCap = 5;
 
