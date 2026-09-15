@@ -513,8 +513,6 @@ public class GameScreen extends ScreenAdapter {
             int voidDustEarned = 10 + (handsRemaining * 5) + (discardsRemaining * 2);
             runSession.addVoidDust(voidDustEarned);
             runSession.addMon(currentRoundScore / 100);
-            runSession.applyEndRoundInterest();
-            runSession.resetShrineVisit();
 
             GameSeason defeatedSeason = runSession.getCurrentSeason();
             int completedStage = runSession.getSeasonEncounterStage();

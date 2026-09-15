@@ -135,23 +135,6 @@ public class ShopScreen extends ScreenAdapter {
         }));
 
         // ==========================================
-        // SPALTE 3: STAT UPGRADES (ersetzt Fukus)
-        // ==========================================
-        column3.add(createItemCard("Senba Zuru", "Permanent:\n+1 Hand, +1 Discard.", 150, () -> {
-            runSession.addMaxHands(1);
-            runSession.addMaxDiscards(1);
-        })).padBottom(20).row();
-
-        column3.add(createItemCard("Merchant's Ledger", "Permanent:\n+5 Max Interest Cap.", 100, () -> {
-            runSession.addMaxInterestCap(5);
-        }));
-
-        shelves.add(column1).expandX().fillX().top().padRight(40);
-        shelves.add(column2).expandX().fillX().top().padRight(40);
-        shelves.add(column3).expandX().fillX().top();
-        stage.addActor(shelves);
-
-        // ==========================================
         // BOTTOM BAR & REFRESH LOGIK
         // ==========================================
         Table bottomBar = new Table();

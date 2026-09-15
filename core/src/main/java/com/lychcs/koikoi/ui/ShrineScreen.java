@@ -22,8 +22,6 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.model.yokai.Yokai;
-import com.lychcs.koikoi.model.yokai.YokaiPool;
-import com.lychcs.koikoi.model.yokai.YokaiStage;
 import com.lychcs.koikoi.run.RunSession;
 
 import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
@@ -32,8 +30,7 @@ public class ShrineScreen extends ScreenAdapter {
 
     private static final float WORLD_WIDTH = 1280f;
     private static final float WORLD_HEIGHT = 720f;
-    private static final int SUMMON_COST = 30;
-    private static final int EVOLVE_COST = 20;
+    private static final int PURIFY_COST = 15;
 
     private final Stage stage;
     private final RunSession runSession;
@@ -43,9 +40,7 @@ public class ShrineScreen extends ScreenAdapter {
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
-    private Texture darkOverlayTex;
     private Texture purpleOverlayTex;
-    private TextureRegionDrawable darkOverlayBackground;
     private TextureRegionDrawable purpleFlameOverlayBackground;
 
     private Label voidDustLabel;
@@ -61,7 +56,6 @@ public class ShrineScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
-
         skin = new Skin(Gdx.files.internal("uiskin.json"));
         skin.add("default-font", FontManager.getFont(), BitmapFont.class);
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
@@ -83,16 +77,8 @@ public class ShrineScreen extends ScreenAdapter {
         indieButtonStyle.font = FontManager.getFont();
         indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
 
-        // Overlay Texturen sauber erstellen und referenzieren
-        Pixmap darkPixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        darkPixmap.setColor(new Color(0, 0, 0, 0.85f));
-        darkPixmap.fill();
-        darkOverlayTex = new Texture(darkPixmap);
-        darkOverlayBackground = new TextureRegionDrawable(new TextureRegion(darkOverlayTex));
-        darkPixmap.dispose();
-
         Pixmap purplePixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        purplePixmap.setColor(new Color(0.12f, 0.0f, 0.18f, 0.92f));
+        purplePixmap.setColor(new Color(0.10f, 0.0f, 0.16f, 0.92f));
         purplePixmap.fill();
         purpleOverlayTex = new Texture(purplePixmap);
         purpleFlameOverlayBackground = new TextureRegionDrawable(new TextureRegion(purpleOverlayTex));
@@ -106,75 +92,82 @@ public class ShrineScreen extends ScreenAdapter {
         root.setFillParent(true);
         root.pad(40);
 
+        // Header: Währung
         Table topBar = new Table();
-        voidDustLabel = new Label("Void Dust: " + runSession.getVoidDust(), skin);
+        voidDustLabel = new Label("VOID DUST: " + runSession.getVoidDust(), skin);
         voidDustLabel.setFontScale(1.4f);
         voidDustLabel.setColor(Color.valueOf("B388FF"));
         topBar.add(voidDustLabel);
-        root.add(topBar).expandX().top().left().padBottom(40).row();
+        root.add(topBar).expandX().top().left().padBottom(30).row();
 
+        // Zentrales Schrein-Panel
         Table shrineBox = new Table();
         shrineBox.setBackground(panelBackground);
-        shrineBox.pad(30);
+        shrineBox.pad(35);
 
-        Label title = new Label("Schrein der Kamis", skin);
+        Label title = new Label("Schrein der Rast", skin);
         title.setFontScale(1.5f);
         title.setColor(Color.valueOf("D1C4E9"));
-        shrineBox.add(title).padBottom(25).row();
+        shrineBox.add(title).padBottom(20).row();
 
-        boolean canSummon = !runSession.isShrineSummonedThisVisit() && runSession.getVoidDust() >= SUMMON_COST
-            && runSession.getYokaiBag().size() < runSession.getMaxYokaiBag();
+        long exhaustedCount = runSession.getYokaiBag().stream()
+            .filter(Yokai::isExhausted)
+            .count();
 
-        String summonText = runSession.isShrineSummonedThisVisit()
-            ? "Yokai beschworen (0/1)"
-            : "Yokai beschwoeren (" + SUMMON_COST + " Dust)";
-        TextButton summonButton = new TextButton(summonText, indieButtonStyle);
-        if (!canSummon) summonButton.getColor().a = 0.5f;
+        boolean canPurify = (exhaustedCount > 0) && (runSession.getVoidDust() >= PURIFY_COST);
 
-        summonButton.addListener(new ClickListener() {
+        String purifyText = (exhaustedCount == 0)
+            ? "Alle Yokai sind ausgeruht"
+            : "Geister wecken (" + PURIFY_COST + " VOID DUST)";
+
+        TextButton purifyButton = new TextButton(purifyText, indieButtonStyle);
+        if (!canPurify) purifyButton.getColor().a = 0.5f;
+
+        purifyButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                if (!runSession.isShrineSummonedThisVisit() && runSession.getVoidDust() >= SUMMON_COST) {
-                    if (runSession.getYokaiBag().size() < runSession.getMaxYokaiBag()) {
-                        runSession.addVoidDust(-SUMMON_COST);
-                        runSession.setShrineSummonedThisVisit(true);
+                if (exhaustedCount > 0 && runSession.getVoidDust() >= PURIFY_COST) {
+                    runSession.addVoidDust(-PURIFY_COST);
 
-                        Yokai newYokai = YokaiPool.getRandomYokai();
-                        runSession.getYokaiBag().add(newYokai);
-                        runSession.getShrineEvolvedThisVisit().add(newYokai);
-
-                        playVoidFlameAnimation(newYokai.getName());
+                    for (Yokai yokai : runSession.getYokaiBag()) {
+                        yokai.setExhausted(false);
                     }
+
+                    playPurifyAnimation((int) exhaustedCount);
                 }
             }
         });
 
-        TextButton evolveButton = new TextButton("Yokai evolven (" + EVOLVE_COST + " Dust)", indieButtonStyle);
-        evolveButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                if (runSession.getVoidDust() >= EVOLVE_COST && !runSession.getYokaiBag().isEmpty()) {
-                    showSkulEvolutionMenu();
-                }
-            }
-        });
+        shrineBox.add(purifyButton).width(360).height(65).padBottom(25).row();
 
-        shrineBox.add(summonButton).width(320).height(60).padBottom(20).row();
-        shrineBox.add(evolveButton).width(320).height(60).padBottom(20).row();
+        // Übersicht der Begleiter im Beutel
+        Table yokaiListTable = new Table();
+        for (Yokai y : runSession.getYokaiBag()) {
+            String status = y.isExhausted() ? " [Rastet]" : " [Bereit]";
+            String xpInfo = (y.getLevel() >= Yokai.MAX_LEVEL)
+                ? "MAX"
+                : (y.getCurrentXp() + "/" + y.getXpToNextLevel() + " XP");
 
-        Label bagStatus = new Label("Yokai im Beutel: " + runSession.getYokaiBag().size() + "/" + runSession.getMaxYokaiBag(), skin);
-        shrineBox.add(bagStatus);
+            Label yLabel = new Label(y.getName() + " (Lv. " + y.getLevel() + ") - " + xpInfo + status, skin);
+            yLabel.setFontScale(0.85f);
+            if (y.isExhausted()) yLabel.setColor(Color.GRAY);
+            else yLabel.setColor(Color.WHITE);
 
-        root.add(shrineBox).expandY().center().padBottom(40).row();
+            yokaiListTable.add(yLabel).padBottom(6).row();
+        }
 
-        TextButton backButton = new TextButton("Zurueck zum Rastplatz", indieButtonStyle);
+        shrineBox.add(yokaiListTable).padBottom(15).row();
+
+        root.add(shrineBox).expandY().center().padBottom(30).row();
+
+        TextButton backButton = new TextButton("Zurueck zur Erkundung", indieButtonStyle);
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
             }
         });
-        root.add(backButton).width(320).height(65).bottom();
+        root.add(backButton).width(300).height(60).bottom();
 
         stage.addActor(root);
     }
@@ -184,83 +177,30 @@ public class ShrineScreen extends ScreenAdapter {
         return "backgrounds/" + "BACKGROUND" + "_" + prefix + "_" + seasonName + ".png";
     }
 
-    private void playVoidFlameAnimation(String yokaiName) {
-        Table flameOverlay = new Table();
-        flameOverlay.setFillParent(true);
-        flameOverlay.setBackground(purpleFlameOverlayBackground);
+    private void playPurifyAnimation(int restoredCount) {
+        Table purifyOverlay = new Table();
+        purifyOverlay.setFillParent(true);
+        purifyOverlay.setBackground(purpleFlameOverlayBackground);
 
-        Label voidText = new Label("~ DER VOID ANTWORTET ~\n\nLila-schwarze Flammen lodern auf...\n[" + yokaiName + "] ist erwacht!", skin);
-        voidText.setColor(Color.valueOf("E1BEE7"));
-        voidText.setFontScale(1.4f);
-        voidText.setAlignment(Align.center);
+        Label purifyText = new Label("~ RITUS DER REINIGUNG ~\n\nHeilige Raeucherstaebchen wecken deine Geister.\n["
+            + restoredCount + " Yokai] sind wieder einsatzbereit!", skin);
+        purifyText.setColor(Color.valueOf("E1BEE7"));
+        purifyText.setFontScale(1.3f);
+        purifyText.setAlignment(Align.center);
 
-        flameOverlay.add(voidText);
-        stage.addActor(flameOverlay);
+        purifyOverlay.add(purifyText);
+        stage.addActor(purifyOverlay);
 
-        flameOverlay.addAction(Actions.sequence(
+        purifyOverlay.addAction(Actions.sequence(
             Actions.alpha(0f),
             Actions.fadeIn(0.2f),
-            Actions.delay(1.0f),
+            Actions.delay(0.9f),
             Actions.fadeOut(0.3f),
             Actions.run(() -> {
-                flameOverlay.remove();
+                purifyOverlay.remove();
                 buildShrineUi();
             })
         ));
-    }
-
-    private void showSkulEvolutionMenu() {
-        Table evoOverlay = new Table();
-        evoOverlay.setFillParent(true);
-        evoOverlay.setBackground(darkOverlayBackground);
-
-        Table contentBox = new Table();
-        contentBox.setBackground(panelBackground);
-        contentBox.pad(30);
-
-        Label title = new Label("Waehle einen Yokai zur Evolution (-" + EVOLVE_COST + " Dust)", skin);
-        title.setFontScale(1.3f);
-        contentBox.add(title).padBottom(20).row();
-
-        Table listTable = new Table();
-        for (Yokai yokai : runSession.getYokaiBag()) {
-            boolean alreadyEvolved = runSession.getShrineEvolvedThisVisit().contains(yokai);
-            boolean isMaxLevel = (yokai.getLevel() == 3);
-
-            String statusText = alreadyEvolved ? " (Bereits aufgewertet)" : (isMaxLevel ? " (Max Level)" : "");
-            TextButton yokaiBtn = new TextButton(yokai.getName() + " [" + yokai.getStage().name() + "]" + statusText, indieButtonStyle);
-
-            if (alreadyEvolved || isMaxLevel || runSession.getVoidDust() < EVOLVE_COST) {
-                yokaiBtn.getColor().a = 0.4f;
-            } else {
-                yokaiBtn.addListener(new ClickListener() {
-                    @Override
-                    public void clicked(InputEvent event, float x, float y) {
-                        runSession.addVoidDust(-EVOLVE_COST);
-                        yokai.evolve();
-                        runSession.getShrineEvolvedThisVisit().add(yokai);
-
-                        evoOverlay.remove();
-                        buildShrineUi();
-                    }
-                });
-            }
-            listTable.add(yokaiBtn).width(400).height(50).padBottom(10).row();
-        }
-
-        contentBox.add(listTable).padBottom(20).row();
-
-        TextButton closeBtn = new TextButton("Schliessen", indieButtonStyle);
-        closeBtn.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                evoOverlay.remove();
-            }
-        });
-        contentBox.add(closeBtn).width(180).height(45);
-
-        evoOverlay.add(contentBox);
-        stage.addActor(evoOverlay);
     }
 
     @Override
@@ -285,7 +225,6 @@ public class ShrineScreen extends ScreenAdapter {
         if (background != null) background.dispose();
         if (atlas != null) atlas.dispose();
         if (skin != null) skin.dispose();
-        if (darkOverlayTex != null) darkOverlayTex.dispose();
         if (purpleOverlayTex != null) purpleOverlayTex.dispose();
     }
 }

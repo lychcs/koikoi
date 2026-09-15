@@ -214,6 +214,11 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     @Override
+    public void show() {
+        Gdx.input.setInputProcessor(uiStage);
+    }
+
+    @Override
     public void resize(int width, int height) {
         uiStage.getViewport().update(width, height, true);
 

@@ -6,7 +6,9 @@ import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.Rank;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
+import com.lychcs.koikoi.model.yokai.Oni;
 import com.lychcs.koikoi.model.yokai.Yokai;
+import com.lychcs.koikoi.model.yokai.YokaiStage;
 
 import java.util.*;
 
@@ -15,9 +17,11 @@ public class RunSession {
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1;
     private final List<Omamori> activeOmamoris = new ArrayList<>();
-    private int mon = 0;
-    private int voidDust = 0;
-    private int maxInterestCap = 5;
+
+    // --- START-WERTE ---
+    private int mon = 10000;          // 10.000 Mon
+    private int voidDust = 5000;      // 5.000 Void Dust
+
     private int baseHands = 4;
     private int baseDiscards = 3;
     private final List<Yokai> yokaiBag = new ArrayList<>();
@@ -26,16 +30,18 @@ public class RunSession {
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
     private final List<Card> banishedThisSeason = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
-    private boolean shrineSummonedThisVisit = false;
-    private final Set<Yokai> shrineEvolvedThisVisit = new HashSet<>();
     private float lastPlayerX = -1f;
     private float lastPlayerY = -1f;
     private boolean hasStoredPosition = false;
+    private final Set<String> unlockedShrines = new HashSet<>();
+    private String lastVisitedShrineId = "shrine_village";
 
     public RunSession() {
-        resetShrineVisit();
         this.playerDeck = new Deck();
         this.playerDeck.initializeDeck();
+
+        // --- LEVEL 1 ONI (Ko-Oni) DIREKT IN DEN BEUTEL LEGEN ---
+        this.yokaiBag.add(new Oni(YokaiStage.LEVEL_1));
     }
 
     // --- PLAYER POSITION ---
@@ -52,14 +58,6 @@ public class RunSession {
     public float getLastPlayerY() { return lastPlayerY; }
 
     // --- SHRINE ---
-
-    public boolean isShrineSummonedThisVisit() { return shrineSummonedThisVisit; }
-    public void setShrineSummonedThisVisit(boolean summoned) { this.shrineSummonedThisVisit = summoned; }
-    public Set<Yokai> getShrineEvolvedThisVisit() { return shrineEvolvedThisVisit; }
-    public void resetShrineVisit() {
-        this.shrineSummonedThisVisit = false;
-        this.shrineEvolvedThisVisit.clear();
-    }
 
     // --- SEASON STRUKTUR ---
 
@@ -115,14 +113,6 @@ public class RunSession {
 
     public int getMon() { return this.mon; }
     public void addMon(int amount) { this.mon += amount; }
-    public int getMaxInterestCap() { return maxInterestCap; }
-    public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
-    public int applyEndRoundInterest() {
-        int interestEarned = this.mon / 5;
-        if (interestEarned > maxInterestCap) interestEarned = maxInterestCap;
-        this.mon += interestEarned;
-        return interestEarned;
-    }
 
     // --- HANDS -- DISCARDS -- DECK---
 
@@ -136,10 +126,21 @@ public class RunSession {
 
     public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
 
-    // ---HANKO
+    // ---HANKO ---
 
     public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
 
+    // --- SHRINES ---
+
+    public void unlockShrine(String shrineId, float x, float y) {
+        unlockedShrines.add(shrineId);
+        this.lastVisitedShrineId = shrineId;
+        setLastPlayerPosition(x, y); // Setzt den Respawn-Punkt!
+    }
+
+    public Set<String> getUnlockedShrines() {
+        return Collections.unmodifiableSet(unlockedShrines);
+    }
 
     // --- VOID DUST ---
 

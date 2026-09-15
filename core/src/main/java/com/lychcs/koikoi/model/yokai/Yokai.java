@@ -6,7 +6,7 @@ import com.lychcs.koikoi.scoring.ScoreContext;
 public abstract class Yokai {
 
     private final String id;
-    private final String name;
+    private final String baseName;
     private final String atlasRegionName;
     private YokaiStage stage;
     private boolean exhausted;
@@ -16,28 +16,33 @@ public abstract class Yokai {
 
     public static final int MAX_LEVEL = 3;
 
-    public Yokai(String id, String name, String atlasRegionName, YokaiStage initialStage) {
+    public Yokai(String id, String baseName, String atlasRegionName, YokaiStage initialStage) {
         this.id = id;
-        this.name = name;
+        this.baseName = baseName;
         this.atlasRegionName = atlasRegionName;
         this.stage = initialStage;
         this.exhausted = false;
+
+        // Synchronisiert das Start-Level mit der gewählten Stage
+        this.level = switch (initialStage) {
+            case EGG -> 0;
+            case LEVEL_1 -> 1;
+            case LEVEL_2 -> 2;
+            case LEVEL_3 -> 3;
+        };
     }
 
-    // Bequemer Zweit-Konstruktor für Starter auf Stufe 1
-    public Yokai(String id, String name, String atlasRegionName) {
-        this(id, name, atlasRegionName, YokaiStage.LEVEL_1);
+    public Yokai(String id, String baseName, String atlasRegionName) {
+        this(id, baseName, atlasRegionName, YokaiStage.LEVEL_1);
     }
 
     public abstract String getDescription();
-
-    /**
-     * Führt den individuellen Scoring-Effekt des Yokai auf dem Altar aus.
-     */
     public abstract boolean activate(ScoreContext context, ScoreAccumulator acc);
 
     /**
-     * Fügt Erfahrungspunkte hinzu und stößt automatische Level-Ups / Evolutionen an.
+     * Fügt Erfahrungspunkte hinzu.
+     * Erreicht die Leiste das Maximum, steigt der Yokai sofort ein Level auf
+     * und entwickelt sich wie in Pokémon zur nächsten Stufe weiter.
      */
     public void addXp(int amount) {
         if (level >= MAX_LEVEL) return;
@@ -48,12 +53,16 @@ public abstract class Yokai {
             currentXp -= getXpToNextLevel();
             levelUp();
         }
+
+        if (level >= MAX_LEVEL) {
+            currentXp = 0; // Kein XP-Überhang auf Maximalstufe
+        }
     }
 
     private void levelUp() {
         level++;
         evolve();
-        System.out.println(name + " ist auf Level " + level + " (" + stage + ") aufgestiegen!");
+        System.out.println("Evolving! " + baseName + " hat sich zu " + getName() + " (Stufe " + level + ") entwickelt!");
     }
 
     public void evolve() {
@@ -63,26 +72,25 @@ public abstract class Yokai {
     }
 
     /**
-     * Berechnet die benötigten EP für das nächste Level.
+     * Benötigte EP bis zum nächsten Evolutionssprung.
      * Level 1 -> 2: 50 XP
-     * Level 2 -> 3: 123 XP
+     * Level 2 -> 3: 125 XP
+     * Level 3: Max
      */
     public int getXpToNextLevel() {
-        if (level >= MAX_LEVEL) {
-            return 0;
-        }
-        return (int) (50 * Math.pow(level, 1.3));
+        if (level >= MAX_LEVEL) return 0;
+        return (int) (50 * Math.pow(level, 1.32));
     }
 
     // --- Getter & Setter ---
 
     public String getId() { return id; }
-    public String getName() { return name; }
+    public String getName() { return baseName; } // Wird von Subklassen wie Oni überschrieben
     public String getAtlasRegionName() { return atlasRegionName; }
     public YokaiStage getStage() { return stage; }
     public int getLevel() { return level; }
-    public int getXp() { return currentXp; }
     public int getCurrentXp() { return currentXp; }
+    public int getXp() { return currentXp; }
 
     public boolean isExhausted() { return exhausted; }
     public void setExhausted(boolean exhausted) { this.exhausted = exhausted; }

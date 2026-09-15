@@ -4,9 +4,9 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
-import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
@@ -33,7 +33,6 @@ public class InventoryOverlay extends Group {
     private final TextButton hankoTab;
     private boolean isOpen = false;
 
-    // Stempel-Modus Zustand
     private HankoEffect selectedHankoToApply = null;
 
     public InventoryOverlay(RunSession session, Skin skin, TextureAtlas atlas,
@@ -47,21 +46,34 @@ public class InventoryOverlay extends Group {
         setSize(1280, 720);
         setVisible(false);
 
-        // Halbdunkler Hintergrund-Schleier
+        // 1. Hintergrund-Dimmer: Fängt Klicks ab, damit man nicht durch das Menü klickt
         Image dimBackground = new Image(skin.getRegion("white"));
         dimBackground.setSize(1280, 720);
         dimBackground.setColor(0f, 0f, 0f, 0.65f);
+        dimBackground.setTouchable(Touchable.enabled);
+        dimBackground.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {
+                // Klick auf den abgedunkelten Rand schließt das Inventar
+                toggle();
+            }
+        });
         addActor(dimBackground);
 
-        // Zentrales Hauptfenster
+        // 2. Zentrales Fenster
         mainPanel = new Table();
         mainPanel.setSize(1000, 580);
         mainPanel.setPosition(140, 70);
         mainPanel.setOrigin(500, 290);
         mainPanel.setBackground(panelBackground);
+        mainPanel.setTouchable(Touchable.enabled);
         mainPanel.pad(20);
 
-        // Header: Tabs & Währungen
+        // Klicks auf das Fenster selbst nicht an den Hintergrund weitergeben
+        mainPanel.addListener(new ClickListener() {
+            @Override public void clicked(InputEvent e, float x, float y) {}
+        });
+
+        // Header
         Table header = new Table();
         TextButton deckTab = new TextButton("Deck", buttonStyle);
         TextButton omamoriTab = new TextButton("Omamori", buttonStyle);
@@ -110,7 +122,6 @@ public class InventoryOverlay extends Group {
 
         mainPanel.add(header).expandX().fillX().padBottom(15).row();
 
-        // Inhaltsbereich (Scrollbar)
         contentArea = new Table();
         contentArea.top().left();
 
@@ -156,7 +167,7 @@ public class InventoryOverlay extends Group {
     }
 
     private void updateCurrencies() {
-        currencyLabel.setText("Mon: " + runSession.getMon() + "  |  Void Dust: " + runSession.getVoidDust());
+            currencyLabel.setText("Mon: " + runSession.getMon() + "  |  VOID DUST: " + runSession.getVoidDust());
     }
 
     private void updateHankoTabBadge() {
@@ -164,14 +175,11 @@ public class InventoryOverlay extends Group {
         hankoTab.setText(count > 0 ? "Hankos (" + count + ")" : "Hankos");
     }
 
-    // =========================================================================
-    // 1. DECK-ANSICHT (Inklusive Stempel-Leiste und Stempeln auf Klick)
-    // =========================================================================
     private void showDeckTab() {
         contentArea.clearChildren();
         updateHankoTabBadge();
 
-        // --- STEMPEL-LEISTE AM KOPF DER KARTEN (falls Siegel im Besitz sind) ---
+        // Stempel-Leiste
         if (!runSession.getPurchasedHankos().isEmpty()) {
             Table shelf = new Table();
             shelf.setBackground(panelBackground);
@@ -184,7 +192,8 @@ public class InventoryOverlay extends Group {
             for (HankoEffect effect : runSession.getPurchasedHankos()) {
                 TextureRegion hRegion = atlas.findRegion("HANKO_" + effect.name());
                 Table hBtn = new Table();
-                hBtn.pad(4);
+                hBtn.setTouchable(Touchable.enabled); // Klickbar machen
+                hBtn.pad(6);
 
                 boolean isSelected = (selectedHankoToApply == effect);
                 if (isSelected) {
@@ -202,11 +211,7 @@ public class InventoryOverlay extends Group {
 
                 hBtn.addListener(new ClickListener() {
                     @Override public void clicked(InputEvent e, float x, float y) {
-                        if (selectedHankoToApply == effect) {
-                            selectedHankoToApply = null; // Klick deselektiert
-                        } else {
-                            selectedHankoToApply = effect;
-                        }
+                        selectedHankoToApply = (selectedHankoToApply == effect) ? null : effect;
                         showDeckTab();
                     }
                 });
@@ -214,7 +219,6 @@ public class InventoryOverlay extends Group {
                 shelf.add(hBtn).padRight(12);
             }
 
-            // Abbrechen-Button bei aktivem Stempel
             if (selectedHankoToApply != null) {
                 TextButton cancelBtn = new TextButton("Abbrechen", buttonStyle);
                 cancelBtn.addListener(new ClickListener() {
@@ -228,7 +232,6 @@ public class InventoryOverlay extends Group {
 
             contentArea.add(shelf).expandX().fillX().padBottom(15).row();
 
-            // Status-Hinweis
             if (selectedHankoToApply != null) {
                 Label hint = new Label("Waehle eine Karte! (Bestehendes Siegel wird ueberschrieben)", skin);
                 hint.setColor(Color.GOLD);
@@ -238,13 +241,16 @@ public class InventoryOverlay extends Group {
             }
         }
 
-        // --- KARTEN GRID ---
+        // Karten-Raster
         Table cardsGrid = new Table();
         int col = 0;
 
         for (Card card : runSession.getPlayerDeck().getCards()) {
             TextureRegion region = atlas.findRegion(card.id().name());
             Table cardBox = new Table();
+            cardBox.setTouchable(Touchable.enabled); // Ganze Karte inklusive Text klickbar
+            cardBox.setTransform(true);
+            cardBox.setOrigin(30, 60);
 
             Stack cardStack = new Stack();
 
@@ -254,7 +260,6 @@ public class InventoryOverlay extends Group {
                 cardStack.add(cardImg);
             }
 
-            // Falls die Karte bereits ein Siegel hat: Icon oben rechts anzeigen!
             if (card.hasHanko()) {
                 TextureRegion hRegion = atlas.findRegion("HANKO_" + card.effect().name());
                 if (hRegion != null) {
@@ -272,13 +277,11 @@ public class InventoryOverlay extends Group {
             nameLbl.setFontScale(0.65f);
             cardBox.add(nameLbl).row();
 
-            // Interaktion: Bei Klick Karte stempeln
             cardBox.addListener(new ClickListener() {
                 @Override public void clicked(InputEvent e, float x, float y) {
                     if (selectedHankoToApply != null) {
                         applyHankoToCard(card, selectedHankoToApply);
                     } else {
-                        // Kleiner Wackler beim normalen Anklicken
                         cardBox.clearActions();
                         cardBox.addAction(Actions.sequence(
                             Actions.scaleTo(1.15f, 1.15f, 0.08f),
@@ -296,12 +299,7 @@ public class InventoryOverlay extends Group {
         contentArea.add(cardsGrid).expand().fill().row();
     }
 
-    /**
-     * Tauscht das Siegel auf der Karte aus (überschreibt bestehende)
-     * und entfernt das Siegel aus dem Vorrat.
-     */
     private void applyHankoToCard(Card targetCard, HankoEffect newEffect) {
-        // Neue Karte mit dem neuen Effekt erzeugen (altes Siegel wird verworfen)
         Card modifiedCard = new Card(
             targetCard.id(),
             targetCard.season(),
@@ -310,22 +308,13 @@ public class InventoryOverlay extends Group {
             newEffect
         );
 
-        // Im Deck austauschen
         runSession.getPlayerDeck().evolveCard(targetCard, modifiedCard);
-
-        // Verbrauchen
         runSession.getPurchasedHankos().remove(newEffect);
         selectedHankoToApply = null;
 
-        System.out.println("Hanko " + newEffect + " auf " + targetCard.name() + " aufgetragen!");
-
-        // Ansicht aktualisieren
         showDeckTab();
     }
 
-    // =========================================================================
-    // 2. HANKOS TAB (Detaillierte Vorrats-Übersicht)
-    // =========================================================================
     private void showHankoTab() {
         contentArea.clearChildren();
         updateHankoTabBadge();
@@ -368,7 +357,7 @@ public class InventoryOverlay extends Group {
             useBtn.addListener(new ClickListener() {
                 @Override public void clicked(InputEvent e, float x, float y) {
                     selectedHankoToApply = effect;
-                    showDeckTab(); // Wechselt ins Deck mit aktiviertem Stempel
+                    showDeckTab();
                 }
             });
 
@@ -377,9 +366,6 @@ public class InventoryOverlay extends Group {
         }
     }
 
-    // =========================================================================
-    // 3. OMAMORI TAB
-    // =========================================================================
     private void showOmamoriTab() {
         contentArea.clearChildren();
 
@@ -391,7 +377,7 @@ public class InventoryOverlay extends Group {
             if (region != null) {
                 JuicyOmamoriActor actor = new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
                     @Override public void onTap(JuicyOmamoriActor a) {}
-                    @Override public void onDrop(JuicyOmamoriActor a, Vector2 p) {}
+                    @Override public void onDrop(JuicyOmamoriActor a, com.badlogic.gdx.math.Vector2 p) {}
                 });
 
                 Table box = new Table();
@@ -411,9 +397,6 @@ public class InventoryOverlay extends Group {
         }
     }
 
-    // =========================================================================
-    // 4. YOKAI TAB
-    // =========================================================================
     private void showYokaiTab() {
         contentArea.clearChildren();
 
@@ -423,7 +406,7 @@ public class InventoryOverlay extends Group {
                 if (region != null) {
                     JuicyYokaiActor actor = new JuicyYokaiActor(yokai, region, false, skin, new JuicyYokaiActor.YokaiListener() {
                         @Override public void onTap(JuicyYokaiActor a) {}
-                        @Override public void onDrop(JuicyYokaiActor a, Vector2 p) {}
+                        @Override public void onDrop(JuicyYokaiActor a, com.badlogic.gdx.math.Vector2 p) {}
                     });
 
                     Table box = new Table();
@@ -443,7 +426,6 @@ public class InventoryOverlay extends Group {
         }
     }
 
-    // --- TEXT-HELPER FÜR HANKOS ---
     private String getHankoShortName(HankoEffect effect) {
         return switch (effect) {
             case WHITE_SEAL -> "White Seal";
