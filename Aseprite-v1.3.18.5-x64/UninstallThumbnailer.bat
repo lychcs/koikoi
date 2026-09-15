@@ -1,3 +1,0 @@
-@echo off
-echo Uninstalling aseprite-thumbnailer.dll...
-regsvr32.exe -u aseprite-thumbnailer.dll
