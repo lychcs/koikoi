@@ -1,0 +1,29 @@
+1. Der visuelle Kern: Ukiyo-e on Acid (Shader-Magie)
+Statt normaler Post-Processing-Filter oder purem Pixel-Art reagiert die gesamte Spielwelt live auf dein Gameplay:
+
+Farb-Inversion & Wellen-Shader (Liquid Washi):
+Jedes Mal, wenn du eine Hand ausspielst oder punktest, verzieht sich der Hintergrund-Shader (edgeShader). Die traditionellen Reispapier-Texturen beginnen zu „atmen“ und zu fließen. Die Jahreszeiten-Farben (Frühling-Rosa, Sommer-Grün) schlagen in Neon- und Ultraviolett-Töne um, wenn du nah an den Ziel-Score kommst.
+
+Chromatische Aberration & Nachbilder:
+Karten und Yokai werfen beim Ziehen oder Bewegen keine normalen Schatten, sondern farbversetzte Geister-Abbilder (RGB-Split), die sich bei hohem Combos wie optische Halluzinationen über den Bildschirm ziehen.
+
+2. Jahreszeiten-Verschmelzung (Season Bleed)
+Normalerweise sind die 4 Jahreszeiten im Hanafuda streng getrennt (Frühling, Sommer, Herbst, Winter). In einer psychedelischen Welt bricht diese Ordnung zusammen:
+
+Der Algorithmus im Hintergrund: Je länger ein Kampf dauert oder je intensiver du spielst, desto mehr fangen die Jahreszeiten an, sich zu vermischen.
+
+Im Frühling fangen plötzlich Kirschblüten an zu brennen (Herbst-Effekt), oder im Winter wachsen digitale Lotusblumen aus dem Eis. Die Karten verlieren ihre feste visuelle Identität und passen sich optisch dem Fiebertraum der Geisterwelt an.
+
+3. Audio-Visual Synesthesia (Der Flow-Zustand)
+Psychedelische Spiele wie Tamashika leben davon, dass Bild und Aktion verschmelzen:
+
+Tusche-Schocks: Jede gespielte Karte schickt eine ringförmige Tusch-Welle (wie ein Stein im Wasser) über den Bildschirm.
+
+Wenn du ein seltenes Yaku (wie Imperial Court oder Petal Storm) ausspielst, stoppt das Spiel für einen Bruchteil einer Sekunde (Hitstop), der Bildschirm flasht in ein negatives Farbspektrum, und die Geisterwelt „glitcht“ kurz in eine andere Realität, bevor die Punkte explodieren.
+
+4. Das Interface als Fiebertraum
+Das UI sollte sich nicht wie ein steriles Excel-Menü anfühlen, sondern wie ein lebendiger Organismus:
+
+Lebensbalken gibt es ohnehin nicht – stattdessen pulsiert der Bildschirmrand im Rhythmus deines verbleibenden Zugs (je weniger Hände du hast, desto intensiver pulsiert die Welt, wie ein Herzschlag unter Wasser).
+
+Schriftarten und Labels verzerren sich leicht, wenn man mit der Maus darüber fährt, als würde man durch eine Glaslinse oder Wasser schauen.

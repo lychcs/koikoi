@@ -139,4 +139,5 @@ public abstract class JuicyDraggableActor extends Group {
     protected void onDrag(InputEvent event, float x, float y, Vector2 stagePos) {}
     protected void onDrop(InputEvent event, float x, float y, Vector2 stagePos) {}
     protected abstract void onTap(InputEvent event, float x, float y);
+    public boolean isDragging() { return isDragging; }
 }
