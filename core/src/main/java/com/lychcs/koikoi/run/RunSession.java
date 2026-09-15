@@ -14,52 +14,79 @@ import java.util.*;
 
 public class RunSession {
 
+    // Feste, unantastbare Basiswerte für jeden Kampf
+    public static final int BASE_HANDS = 4;
+    public static final int BASE_DISCARDS = 3;
+
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1;
     private final List<Omamori> activeOmamoris = new ArrayList<>();
+    private int mon = 10000;
+    private int voidDust = 5000;
 
-    // --- START-WERTE ---
-    private int mon = 10000;          // 10.000 Mon
-    private int voidDust = 5000;      // 5.000 Void Dust
-
-    private int baseHands = 4;
-    private int baseDiscards = 3;
     private final List<Yokai> yokaiBag = new ArrayList<>();
     private int maxYokaiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
     private final List<Card> banishedThisSeason = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
+
+    // Checkpoint- & Schrine-Tracking (for Teleport & Respawn)
+    private final Map<String, float[]> unlockedShrines = new LinkedHashMap<>();
+    private String lastVisitedShrineName = "Dorf-Schrein";
     private float lastPlayerX = -1f;
     private float lastPlayerY = -1f;
     private boolean hasStoredPosition = false;
-    private final Set<String> unlockedShrines = new HashSet<>();
-    private String lastVisitedShrineId = "shrine_village";
+    private int shrineRank = 0;
 
     public RunSession() {
         this.playerDeck = new Deck();
         this.playerDeck.initializeDeck();
-
-        // --- LEVEL 1 ONI (Ko-Oni) DIREKT IN DEN BEUTEL LEGEN ---
         this.yokaiBag.add(new Oni(YokaiStage.LEVEL_1));
     }
 
-    // --- PLAYER POSITION ---
+    // --- SHRINE & TELEPORT SYSTEM ---
+
+    public void registerAndActivateShrine(String shrineName, float x, float y) {
+        this.unlockedShrines.put(shrineName, new float[]{x, y});
+        this.lastVisitedShrineName = shrineName;
+        setLastPlayerPosition(x, y); // Neuer Respawn-Ort!
+    }
+
+    public Map<String, float[]> getUnlockedShrines() {
+        return Collections.unmodifiableMap(unlockedShrines);
+    }
+
+    public String getLastVisitedShrineName() {
+        return lastVisitedShrineName;
+    }
+
+    public int getShrineRank() {
+        return shrineRank;
+    }
+
+    public void addClearedShrine() {
+        this.shrineRank++;
+        System.out.println("Schrein geläutert! Spirituelles Ansehen gestiegen auf Rang: " + shrineRank);
+    }
+
+    public boolean hasRequiredRank(int requiredRank) {
+        return this.shrineRank >= requiredRank;
+    }
+
+    // --- PLAYER POSITION & RESPAWN ---
 
     public void setLastPlayerPosition(float x, float y) {
         this.lastPlayerX = x;
         this.lastPlayerY = y;
         this.hasStoredPosition = true;
     }
-    public boolean hasStoredPosition() {
-        return hasStoredPosition;
-    }
+
+    public boolean hasStoredPosition() { return hasStoredPosition; }
     public float getLastPlayerX() { return lastPlayerX; }
     public float getLastPlayerY() { return lastPlayerY; }
 
-    // --- SHRINE ---
-
-    // --- SEASON STRUKTUR ---
+    // --- SEASONS ---
 
     public void advanceEncounterStage() {
         seasonEncounterStage++;
@@ -74,7 +101,7 @@ public class RunSession {
             case SPRING -> GameSeason.SUMMER;
             case SUMMER -> GameSeason.AUTUMN;
             case AUTUMN -> GameSeason.WINTER;
-            case WINTER -> GameSeason.FINAL; // Boss Stage!
+            case WINTER -> GameSeason.FINAL;
             case FINAL -> GameSeason.FINAL;
         };
     }
@@ -87,67 +114,38 @@ public class RunSession {
             banishedThisSeason.add(card);
         }
     }
+
     public void restoreSeasonBanishedCards() {
         if (playerDeck != null && !banishedThisSeason.isEmpty()) {
             playerDeck.getCards().addAll(banishedThisSeason);
             banishedThisSeason.clear();
         }
     }
+
     public List<Card> getBanishedThisSeason() {
         return Collections.unmodifiableList(banishedThisSeason);
     }
 
-    // --- YAKU LEVELING ---
+    // --- PROGRESSION & DECK ---
 
-    public YakuProgression getYakuProgression() {
-        return yakuProgression;
-    }
-
-    // --- YOKAI ---
-
+    public YakuProgression getYakuProgression() { return yakuProgression; }
     public List<Yokai> getYokaiBag() { return yokaiBag; }
     public int getMaxYokaiBag() { return maxYokaiBag; }
-    public void addMaxYokaiBag(int amount) { this.maxYokaiBag += amount; }
+    public Deck getPlayerDeck() { return playerDeck; }
+    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
+    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
 
-    // --- MONEY ---
+    // --- WÄHRUNGEN ---
 
     public int getMon() { return this.mon; }
     public void addMon(int amount) { this.mon += amount; }
-
-    // --- HANDS -- DISCARDS -- DECK---
-
-    public void addMaxHands(int amount) { this.baseHands += amount; }
-    public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
-    public int getBaseHands() { return baseHands; }
-    public int getBaseDiscards() { return baseDiscards; }
-    public Deck getPlayerDeck() { return playerDeck; }
-
-    // --- OMAMORI ---
-
-    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
-
-    // ---HANKO ---
-
-    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
-
-    // --- SHRINES ---
-
-    public void unlockShrine(String shrineId, float x, float y) {
-        unlockedShrines.add(shrineId);
-        this.lastVisitedShrineId = shrineId;
-        setLastPlayerPosition(x, y); // Setzt den Respawn-Punkt!
-    }
-
-    public Set<String> getUnlockedShrines() {
-        return Collections.unmodifiableSet(unlockedShrines);
-    }
-
-    // --- VOID DUST ---
-
     public int getVoidDust() { return voidDust; }
     public void addVoidDust(int amount) { this.voidDust += amount; }
 
-    // --- SEASONS ---
+    // --- FIGHT-CONSTANTS GETTER ---
+
+    public int getBaseHands() { return BASE_HANDS; }
+    public int getBaseDiscards() { return BASE_DISCARDS; }
 
     public GameSeason getCurrentSeason() { return currentSeason; }
     public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }

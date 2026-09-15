@@ -427,6 +427,13 @@ public class OverworldScreen extends ScreenAdapter {
 
                     // --- 1. AUTOMATISCHE TRIGGER (Gegner / Kampf) ---
                     if ("enemy1".equals(type) || "combat_zone".equals(type)) {
+                        Vector2 currentPos = player.body.getPosition();
+
+                        // Position speichern (wie beim Shop mit Sprite-Offset -32f / -12f)
+                        // Optional: Einen kleinen Schritt zurücksetzen (z. B. y - 10f),
+                        // damit man nach dem Kampf nicht sofort wieder mitten im Trigger steht!
+                        runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 20f);
+
                         ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
                         return;
                     }

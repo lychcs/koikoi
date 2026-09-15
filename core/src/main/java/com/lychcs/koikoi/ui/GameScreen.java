@@ -33,6 +33,7 @@ import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.*;
+import com.lychcs.koikoi.model.yokai.Oni;
 import com.lychcs.koikoi.model.yokai.Yokai;
 import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
@@ -187,7 +188,6 @@ public class GameScreen extends ScreenAdapter {
         fboRegion = new TextureRegion(fbo.getColorBufferTexture());
         fboRegion.flip(false, true);
 
-        // screenBatch auf Fullscreen-Größe anpassen:
         if (screenBatch != null) {
             screenBatch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
         }
@@ -346,7 +346,6 @@ public class GameScreen extends ScreenAdapter {
     public void render(float delta) {
         HankoShaderManager.update(delta);
 
-        // 1. PHASE: Kampfgeschehen in den FrameBuffer zeichnen
         fbo.begin();
         ScreenUtils.clear(0f, 0f, 0f, 1f);
 
@@ -361,26 +360,15 @@ public class GameScreen extends ScreenAdapter {
 
         fbo.end();
 
-        // 2. PHASE: Fullscreen Edge-Detection Post-Processing
-        // 2. PHASE: Reiner Ink- / Manga-Look
         ScreenUtils.clear(0, 0, 0, 1);
 
         screenBatch.begin();
         screenBatch.setShader(edgeShader);
 
         edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
-
-        // 1. Schwellenwert: Höher ansetzen (0.45f - 0.65f), damit nur echte Silhouetten
-        // und keine feinen Pixelsprünge als Linien gezeichnet werden!
         edgeShader.setUniformf("u_threshold", 0.52f);
-
-        // 2. Tusche-Farbe (dunkles Sumi-e-Schwarz/Anthrazit)
         edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
-
-        // 3. Hintergrund (warmes japanisches Reispapier / Washi-Ton)
         edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
-
-        // 4. Modus: 0.0f = Texturen weg, nur Zeichnung
         edgeShader.setUniformf("u_drawOriginal", 0.0f);
 
         screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -388,7 +376,6 @@ public class GameScreen extends ScreenAdapter {
         screenBatch.end();
         screenBatch.setShader(null);
 
-        // 3. PHASE: Screen-Flash für wuchtige Treffer (über Post-Processing)
         float flash = com.lychcs.koikoi.graphics.JuiceManager.getFlashAlpha();
         if (flash > 0f) {
             stage.getBatch().begin();
@@ -429,7 +416,13 @@ public class GameScreen extends ScreenAdapter {
         handsLabel.setText("Hands: " + handsRemaining);
 
         List<Card> playedCards = new ArrayList<>(selectedCards);
-        YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
+
+        List<Card> evaluatedCards = playedCards;
+        if (activeAltarYokai instanceof Oni oni) {
+            evaluatedCards = oni.mutateHand(playedCards, runSession.getCurrentSeason());
+        }
+
+        YakuResult bestYaku = YakuDetector.findBestYaku(evaluatedCards).orElse(null);
 
         if (bestYaku == null) {
             playerHand.removeAll(selectedCards);
@@ -455,11 +448,12 @@ public class GameScreen extends ScreenAdapter {
         }
 
         currentState = GameState.SCORING_ANIMATION;
-        HandContext hand = new HandContext(selectedCards);
+        HandContext hand = new HandContext(evaluatedCards);
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
-        ScoreContext context = new ScoreContext(hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai);
+        // ScoreContext mit übergebener YakuProgression
+        ScoreContext context = new ScoreContext(hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai, runSession.getYakuProgression());
         CalculationBreakdown breakdown = ScoreCalculator.calculate(context);
 
         playerHand.removeAll(selectedCards);
@@ -484,6 +478,34 @@ public class GameScreen extends ScreenAdapter {
         updateLivePreview();
 
         playScoringSequence(breakdown);
+    }
+
+    private void updateLivePreview() {
+        List<Card> previewHand = selectedCards;
+        if (activeAltarYokai instanceof Oni oni) {
+            previewHand = oni.mutateHand(selectedCards, runSession.getCurrentSeason());
+        }
+
+        HandContext hand = new HandContext(previewHand);
+        YakuResult bestYaku = YakuDetector.findBestYaku(previewHand).orElse(null);
+        List<Card> unplayed = new ArrayList<>(playerHand);
+        unplayed.removeAll(selectedCards);
+
+        // Preview-Kontext mit übergebener YakuProgression für exakte Level-Werte
+        ScoreContext previewCtx = ScoreContext.preview(hand, unplayed, bestYaku, activeAltarYokai, runSession.getYakuProgression());
+
+        chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
+        multLabel.setText(String.valueOf(previewCtx.getYakuBaseMult()));
+
+        if (selectedCards.isEmpty()) yakuNameLabel.setText("");
+        else if (bestYaku != null) yakuNameLabel.setText(bestYaku.type().getDisplayName());
+        else yakuNameLabel.setText("");
+
+        if (selectedCards.isEmpty() || discardsRemaining <= 0) discardButton.getColor().a = 0.5f;
+        else discardButton.getColor().a = 1.0f;
+
+        if (selectedCards.isEmpty() || handsRemaining <= 0) playButton.getColor().a = 0.5f;
+        else playButton.getColor().a = 1.0f;
     }
 
     private void onDiscardClicked() {
@@ -529,9 +551,16 @@ public class GameScreen extends ScreenAdapter {
 
         } else if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
-            yakuNameLabel.setText("GAME OVER!");
+            yakuNameLabel.setText("NIEDERLAGE...");
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
+
+            stage.addAction(Actions.sequence(
+                Actions.delay(1.5f),
+                Actions.run(() -> {
+                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
+                })
+            ));
         } else {
             drawCardsToHand(MAX_HAND_SIZE);
             resetUiForNextTurn();
@@ -1013,7 +1042,6 @@ public class GameScreen extends ScreenAdapter {
 
                     @Override
                     public void onDrop(JuicyOmamoriActor actor, Vector2 stagePos) {
-                        // Nach X-Koordinate in der Table neu sortieren
                         List<JuicyOmamoriActor> actors = new ArrayList<>();
                         for (Actor a : omamoriTable.getChildren()) {
                             if (a instanceof JuicyOmamoriActor) actors.add((JuicyOmamoriActor) a);
@@ -1033,28 +1061,6 @@ public class GameScreen extends ScreenAdapter {
                 omamoriTable.add(fallback).width(72).height(96).pad(5);
             }
         }
-    }
-
-    private void updateLivePreview() {
-        HandContext hand = new HandContext(selectedCards);
-        YakuResult bestYaku = YakuDetector.findBestYaku(selectedCards).orElse(null);
-        List<Card> unplayed = new ArrayList<>(playerHand);
-        unplayed.removeAll(selectedCards);
-
-        ScoreContext previewCtx = ScoreContext.preview(hand, unplayed, bestYaku, activeAltarYokai);
-
-        chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
-        multLabel.setText(String.valueOf(previewCtx.getYakuBaseMult()));
-
-        if (selectedCards.isEmpty()) yakuNameLabel.setText("");
-        else if (bestYaku != null) yakuNameLabel.setText(bestYaku.type().getDisplayName());
-        else yakuNameLabel.setText("");
-
-        if (selectedCards.isEmpty() || discardsRemaining <= 0) discardButton.getColor().a = 0.5f;
-        else discardButton.getColor().a = 1.0f;
-
-        if (selectedCards.isEmpty() || handsRemaining <= 0) playButton.getColor().a = 0.5f;
-        else playButton.getColor().a = 1.0f;
     }
 
     private void playScoringSequence(CalculationBreakdown breakdown) {
@@ -1101,6 +1107,11 @@ public class GameScreen extends ScreenAdapter {
         sequence.addAction(Actions.run(() -> {
                 currentRoundScore += breakdown.finalPayout();
 
+                // Yaku XP vergeben bei erfolgreichem Yaku
+                YakuResult evaluatedYaku = YakuDetector.findBestYaku(selectedCards.isEmpty() ? playerHand : selectedCards).orElse(null);
+                // Da selectedCards bereits geleert wurde, nutzen wir den berechneten bestYaku aus der Runde (oder speichern ihn als Feld)
+                // Alternativ hängen wir die XP direkt an den erfolgreichen Play-Durchlauf.
+
                 for (ScoringEvent event : breakdown.events()) {
                     if (event.addedMon() > 0) runSession.addMon(event.addedMon());
                     if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
@@ -1140,7 +1151,6 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void dispose() {
         stage.dispose();
-        // Post-Processing
         if (fbo != null) fbo.dispose();
         if (screenBatch != null) screenBatch.dispose();
         if (edgeShader != null) edgeShader.dispose();

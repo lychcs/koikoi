@@ -58,7 +58,6 @@ public class ShopScreen extends ScreenAdapter {
         initAssets();
 
         buildShopUi();
-        buildBoosterOverlay();
 
         Gdx.input.setInputProcessor(stage);
     }
@@ -123,20 +122,9 @@ public class ShopScreen extends ScreenAdapter {
         column1.add(createOmamoriCard(oma2)).row();
 
         // ==========================================
-        // SPALTE 2: BOOSTER PACKS
-        // ==========================================
-        column2.add(createItemCard("Ema Booster Pack", "Waehle 1 von 3 zufaelligen Karten.", 80, () -> {
-            startBoosterSequence("EMA");
-        })).padBottom(20).row();
-
-        column2.add(createItemCard("Hanko Booster Pack", "Erhalte ein zufaelliges Siegel.", 60, () -> {
-            runSession.getPurchasedHankos().add(HankoEffect.GOLDEN_SEAL);
-            System.out.println("Hanko gezogen!");
-        }));
-
-        // ==========================================
         // BOTTOM BAR & REFRESH LOGIK
         // ==========================================
+
         Table bottomBar = new Table();
         bottomBar.setFillParent(true);
         bottomBar.bottom().padBottom(35);
@@ -149,7 +137,6 @@ public class ShopScreen extends ScreenAdapter {
                     runSession.addMon(-10);
                     stage.clear();
                     buildShopUi();
-                    buildBoosterOverlay();
                 }
             }
         });
@@ -259,83 +246,6 @@ public class ShopScreen extends ScreenAdapter {
         card.add(buyButton).width(160).height(50).padBottom(15);
 
         return card;
-    }
-
-    private void buildBoosterOverlay() {
-        boosterOverlay = new Table();
-        boosterOverlay.setFillParent(true);
-        boosterOverlay.setBackground(darkOverlayBackground);
-        boosterOverlay.setVisible(false);
-        stage.addActor(boosterOverlay);
-    }
-
-    private void startBoosterSequence(String type) {
-        boosterOverlay.clearChildren();
-        boosterOverlay.setVisible(true);
-
-        ImageButton packButton = new ImageButton(new TextureRegionDrawable(boosterPackTexture));
-        packButton.setTransform(true);
-        packButton.setOrigin(150, 250);
-
-        packButton.addAction(Actions.forever(Actions.sequence(
-            Actions.rotateTo(3f, 0.1f), Actions.rotateTo(-3f, 0.1f)
-        )));
-
-        packButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                packButton.clearActions();
-                packButton.addAction(Actions.sequence(
-                    Actions.parallel(Actions.scaleTo(1.5f, 1.5f, 0.2f), Actions.fadeOut(0.2f)),
-                    Actions.run(() -> showCardChoices())
-                ));
-            }
-        });
-
-        Label instruction = new Label("Click to rip open!", skin);
-        instruction.setFontScale(2f);
-        instruction.setColor(Color.WHITE);
-
-        boosterOverlay.add(instruction).padBottom(50).row();
-        boosterOverlay.add(packButton).width(300).height(500);
-    }
-
-    private void showCardChoices() {
-        boosterOverlay.clearChildren();
-
-        Label instruction = new Label("Waehle 1 Karte fuer dein Deck!", skin);
-        instruction.setFontScale(1.5f);
-        boosterOverlay.add(instruction).colspan(3).padBottom(50).row();
-
-        Deck tempDeck = new Deck();
-        tempDeck.initializeDeck();
-        java.util.Collections.shuffle(tempDeck.getCards());
-
-        Card[] choices = new Card[]{
-            tempDeck.getCards().get(0),
-            tempDeck.getCards().get(1),
-            tempDeck.getCards().get(2)
-        };
-
-        for (Card card : choices) {
-            TextureRegion region = atlas.findRegion(card.id().name());
-            Button cardBtn = (region != null) ? new ImageButton(new TextureRegionDrawable(region))
-                : new TextButton(card.name(), skin);
-
-            cardBtn.setTransform(true);
-            cardBtn.setScale(0f);
-            cardBtn.addAction(Actions.scaleTo(1f, 1f, 0.5f, Interpolation.elasticOut));
-
-            cardBtn.addListener(new ClickListener() {
-                @Override
-                public void clicked(InputEvent event, float x, float y) {
-                    runSession.getPlayerDeck().getCards().add(card);
-                    boosterOverlay.setVisible(false);
-                }
-            });
-
-            boosterOverlay.add(cardBtn).width(108).height(192).pad(20);
-        }
     }
 
     private void updateMonDisplay() {
