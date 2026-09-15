@@ -13,24 +13,19 @@ import java.util.*;
 public class RunSession {
 
     private GameSeason currentSeason = GameSeason.SPRING;
-    private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel, 3: Kami-Boss
-
+    private int seasonEncounterStage = 1;
     private final List<Omamori> activeOmamoris = new ArrayList<>();
-
-    private int mon = 0; // Zurückgesetzt auf echtes Startkapital
+    private int mon = 0;
     private int voidDust = 0;
     private int maxInterestCap = 5;
-
     private int baseHands = 4;
     private int baseDiscards = 3;
-
     private final List<Yokai> yokaiBag = new ArrayList<>();
     private int maxYokaiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
-
     private final List<Card> banishedThisSeason = new ArrayList<>();
-
+    private final YakuProgression yakuProgression = new YakuProgression();
     private boolean shrineSummonedThisVisit = false;
     private final Set<Yokai> shrineEvolvedThisVisit = new HashSet<>();
 
@@ -56,7 +51,7 @@ public class RunSession {
         this.shrineEvolvedThisVisit.clear();
     }
 
-    // --- LEVEL STRUKTUR & PATHING ---
+    // --- SEASON STRUKTUR ---
 
     public void advanceEncounterStage() {
         seasonEncounterStage++;
@@ -95,6 +90,12 @@ public class RunSession {
 
     public List<Card> getBanishedThisSeason() {
         return Collections.unmodifiableList(banishedThisSeason);
+    }
+
+    // --- YAKU LEVELING ---
+
+    public YakuProgression getYakuProgression() {
+        return yakuProgression;
     }
 
     public int getMon() { return this.mon; }

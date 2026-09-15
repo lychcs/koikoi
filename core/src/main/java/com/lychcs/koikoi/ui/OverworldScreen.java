@@ -26,6 +26,8 @@ public class OverworldScreen extends ScreenAdapter {
 
     private final RunSession runSession;
     private TiledMap map;
+    private float mapPixelWidth;
+    private float mapPixelHeight;
     private OrthogonalTiledMapRenderer mapRenderer;
     private OrthographicCamera camera;
     private Player player;
@@ -50,6 +52,16 @@ public class OverworldScreen extends ScreenAdapter {
         this.runSession = runSession;
 
         map = new TmxMapLoader().load("map/testmap.tmx");
+
+        // Berechne die absolute Größe der Map in Pixeln
+        int mapWidthTiles = map.getProperties().get("width", Integer.class);
+        int mapHeightTiles = map.getProperties().get("height", Integer.class);
+        int tileWidth = map.getProperties().get("tilewidth", Integer.class);
+        int tileHeight = map.getProperties().get("tileheight", Integer.class);
+
+        mapPixelWidth = mapWidthTiles * tileWidth;
+        mapPixelHeight = mapHeightTiles * tileHeight;
+
         mapRenderer = new OrthogonalTiledMapRenderer(map, 1f);
 
         camera = new OrthographicCamera();
@@ -78,8 +90,20 @@ public class OverworldScreen extends ScreenAdapter {
         handleMovement(delta);
         handleInteractions();
 
-        // Kamera folgt dem Spieler sanft
-        camera.position.set(player.position.x + 24f, player.position.y + 32f, 0);
+        // 1. Kamera-Zielposition (Zentrum des Spielers)
+        float targetX = player.position.x + 32f; // Halbe Spielerbreite
+        float targetY = player.position.y + 64f; // Halbe Spielerhöhe
+
+        // 2. Wie viel von der Welt sieht die Kamera gerade? (Zoom einberechnen!)
+        float camHalfWidth = camera.viewportWidth * 0.5f * camera.zoom;
+        float camHalfHeight = camera.viewportHeight * 0.5f * camera.zoom;
+
+        // 3. Clamping: Sperrt die X/Y-Werte zwischen dem linken/unteren und rechten/oberen Rand ein
+        float clampedX = com.badlogic.gdx.math.MathUtils.clamp(targetX, camHalfWidth, mapPixelWidth - camHalfWidth);
+        float clampedY = com.badlogic.gdx.math.MathUtils.clamp(targetY, camHalfHeight, mapPixelHeight - camHalfHeight);
+
+        // 4. Position setzen
+        camera.position.set(clampedX, clampedY, 0);
         camera.update();
 
         mapRenderer.setView(camera);
@@ -183,28 +207,39 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     private void handleInteractions() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
-            MapLayer triggersLayer = map.getLayers().get("triggers");
-            if (triggersLayer == null) return;
+        MapLayer triggersLayer = map.getLayers().get("triggers");
+        if (triggersLayer == null) return;
 
-            Rectangle interactionBox = new Rectangle(player.position.x, player.position.y, 48f, 64f);
+        // Die Interaktions-Box des Spielers
+        Rectangle playerBox = new Rectangle(player.position.x, player.position.y, 48f, 64f);
 
-            for (MapObject object : triggersLayer.getObjects()) {
-                if (object instanceof RectangleMapObject) {
-                    Rectangle rect = ((RectangleMapObject) object).getRectangle();
+        // Wir merken uns, ob E in diesem Frame gedrückt wurde
+        boolean ePressed = Gdx.input.isKeyJustPressed(Input.Keys.E);
 
-                    if (interactionBox.overlaps(rect)) {
-                        String type = object.getProperties().get("type", String.class);
-                        if (type == null) type = object.getProperties().get("class", String.class);
+        for (MapObject object : triggersLayer.getObjects()) {
+            if (object instanceof RectangleMapObject) {
+                Rectangle rect = ((RectangleMapObject) object).getRectangle();
 
+                // Wenn der Spieler das Rechteck aus Tiled berührt
+                if (playerBox.overlaps(rect)) {
+                    String type = object.getProperties().get("type", String.class);
+                    if (type == null) type = object.getProperties().get("class", String.class);
+                    if (type == null) continue;
+
+                    // --- 1. AUTOMATISCHE TRIGGER (Auslösen bei reiner Berührung) ---
+                    if ("enemy1".equals(type) || "combat_zone".equals(type)) {
+                        System.out.println("Gegner berührt! Lade Kampf...");
+                        ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
+                        return; // Bricht ab, da wir den Screen ohnehin verlassen
+                    }
+
+                    // --- 2. MANUELLE TRIGGER (Auslösen nur, wenn E gedrückt wird) ---
+                    if (ePressed) {
                         if ("shop".equals(type)) {
                             ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
                             return;
                         } else if ("shrine".equals(type)) {
                             ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShrineScreen(runSession));
-                            return;
-                        } else if ("combat_zone".equals(type)) {
-                            ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
                             return;
                         }
                     }
