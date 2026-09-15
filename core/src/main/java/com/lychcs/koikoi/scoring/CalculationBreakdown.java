@@ -8,7 +8,6 @@ import java.util.Objects;
  * Designed to drive UI animations and provide breakdown data for tooltips.
  */
 public record CalculationBreakdown(
-    int startingBank,
     int yakuChips,
     int yakuBaseMult,
     int totalChips,

@@ -8,13 +8,13 @@ import java.util.List;
 import java.util.Objects;
 
 public record ScoreContext(
-    int floatingBank,          // Kann perspektivisch auch komplett weg
     HandContext hand,
     List<Card> unplayedCards,
     YakuResult bestYaku,
     List<Omamori> omamoris,
-    Yokai activeAltarYokai     // NEU: Ersetzt den koiKoiMult
+    Yokai activeAltarYokai
 ) {
+
     public ScoreContext {
         Objects.requireNonNull(hand, "hand must not be null");
         Objects.requireNonNull(unplayedCards, "unplayedCards must not be null");
@@ -25,17 +25,13 @@ public record ScoreContext(
         omamoris = List.copyOf(omamoris);
     }
 
-    /**
-     * Preview für das UI (ohne globale Omamoris, aber Yokai wird berücksichtigt)
-     */
     public static ScoreContext preview(HandContext hand, List<Card> unplayedCards, YakuResult bestYaku, Yokai activeAltarYokai) {
         return new ScoreContext(
-            0,                 // floatingBank ist jetzt immer 0
             hand,
             unplayedCards,
             bestYaku,
-            List.of(),         // Keine Omamoris in der puren Basis-Preview
-            activeAltarYokai   // Yokai in die Preview übergeben
+            List.of(),
+            activeAltarYokai
         );
     }
 

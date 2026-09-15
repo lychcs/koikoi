@@ -28,6 +28,9 @@ public class RunSession {
     private final YakuProgression yakuProgression = new YakuProgression();
     private boolean shrineSummonedThisVisit = false;
     private final Set<Yokai> shrineEvolvedThisVisit = new HashSet<>();
+    private float lastPlayerX = -1f;
+    private float lastPlayerY = -1f;
+    private boolean hasStoredPosition = false;
 
     public RunSession() {
         resetShrineVisit();
@@ -35,17 +38,24 @@ public class RunSession {
         this.playerDeck.initializeDeck();
     }
 
-    public int applyEndRoundInterest() {
-        int interestEarned = this.mon / 5;
-        if (interestEarned > maxInterestCap) interestEarned = maxInterestCap;
-        this.mon += interestEarned;
-        return interestEarned;
+    // --- PLAYER POSITION ---
+
+    public void setLastPlayerPosition(float x, float y) {
+        this.lastPlayerX = x;
+        this.lastPlayerY = y;
+        this.hasStoredPosition = true;
     }
+    public boolean hasStoredPosition() {
+        return hasStoredPosition;
+    }
+    public float getLastPlayerX() { return lastPlayerX; }
+    public float getLastPlayerY() { return lastPlayerY; }
+
+    // --- SHRINE ---
 
     public boolean isShrineSummonedThisVisit() { return shrineSummonedThisVisit; }
     public void setShrineSummonedThisVisit(boolean summoned) { this.shrineSummonedThisVisit = summoned; }
     public Set<Yokai> getShrineEvolvedThisVisit() { return shrineEvolvedThisVisit; }
-
     public void resetShrineVisit() {
         this.shrineSummonedThisVisit = false;
         this.shrineEvolvedThisVisit.clear();
@@ -62,7 +72,6 @@ public class RunSession {
     }
 
     private void advanceSeason() {
-        restoreSeasonBanishedCards();
         currentSeason = switch (currentSeason) {
             case SPRING -> GameSeason.SUMMER;
             case SUMMER -> GameSeason.AUTUMN;
@@ -80,14 +89,12 @@ public class RunSession {
             banishedThisSeason.add(card);
         }
     }
-
     public void restoreSeasonBanishedCards() {
         if (playerDeck != null && !banishedThisSeason.isEmpty()) {
             playerDeck.getCards().addAll(banishedThisSeason);
             banishedThisSeason.clear();
         }
     }
-
     public List<Card> getBanishedThisSeason() {
         return Collections.unmodifiableList(banishedThisSeason);
     }
@@ -98,23 +105,49 @@ public class RunSession {
         return yakuProgression;
     }
 
-    public int getMon() { return this.mon; }
-    public void addMon(int amount) { this.mon += amount; }
-    public void addMaxHands(int amount) { this.baseHands += amount; }
-    public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
-    public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
+    // --- YOKAI ---
 
-    public int getBaseHands() { return baseHands; }
-    public int getBaseDiscards() { return baseDiscards; }
-    public int getMaxInterestCap() { return maxInterestCap; }
-    public Deck getPlayerDeck() { return playerDeck; }
-    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
-    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
-    public int getVoidDust() { return voidDust; }
-    public void addVoidDust(int amount) { this.voidDust += amount; }
     public List<Yokai> getYokaiBag() { return yokaiBag; }
     public int getMaxYokaiBag() { return maxYokaiBag; }
     public void addMaxYokaiBag(int amount) { this.maxYokaiBag += amount; }
+
+    // --- MONEY ---
+
+    public int getMon() { return this.mon; }
+    public void addMon(int amount) { this.mon += amount; }
+    public int getMaxInterestCap() { return maxInterestCap; }
+    public void addMaxInterestCap(int amount) { this.maxInterestCap += amount; }
+    public int applyEndRoundInterest() {
+        int interestEarned = this.mon / 5;
+        if (interestEarned > maxInterestCap) interestEarned = maxInterestCap;
+        this.mon += interestEarned;
+        return interestEarned;
+    }
+
+    // --- HANDS -- DISCARDS -- DECK---
+
+    public void addMaxHands(int amount) { this.baseHands += amount; }
+    public void addMaxDiscards(int amount) { this.baseDiscards += amount; }
+    public int getBaseHands() { return baseHands; }
+    public int getBaseDiscards() { return baseDiscards; }
+    public Deck getPlayerDeck() { return playerDeck; }
+
+    // --- OMAMORI ---
+
+    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
+
+    // ---HANKO
+
+    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
+
+
+    // --- VOID DUST ---
+
+    public int getVoidDust() { return voidDust; }
+    public void addVoidDust(int amount) { this.voidDust += amount; }
+
+    // --- SEASONS ---
+
     public GameSeason getCurrentSeason() { return currentSeason; }
     public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }
     public int getSeasonEncounterStage() { return seasonEncounterStage; }

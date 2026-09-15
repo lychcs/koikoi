@@ -3,11 +3,11 @@ package com.lychcs.koikoi.ui;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.NinePatch;
-import com.badlogic.gdx.graphics.g2d.TextureAtlas;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g2d.*;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
@@ -107,6 +107,13 @@ public class GameScreen extends ScreenAdapter {
     private Label handsLabel;
     private Label yakuNameLabel;
 
+    // Post-Processing
+
+    private FrameBuffer fbo;
+    private SpriteBatch screenBatch;
+    private TextureRegion fboRegion;
+    private ShaderProgram edgeShader;
+
     public GameScreen(RunSession runSession) {
         this.runSession = runSession;
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
@@ -115,6 +122,12 @@ public class GameScreen extends ScreenAdapter {
         for (Texture tex : atlas.getTextures()) {
             tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
+
+        screenBatch = new SpriteBatch();
+        edgeShader = new ShaderProgram(
+            Gdx.files.internal("shaders/edge_detection.vert"),
+            Gdx.files.internal("shaders/edge_detection.frag")
+        );
 
         initUiElements();
         startEncounter();
@@ -130,7 +143,7 @@ public class GameScreen extends ScreenAdapter {
         activeOmamoris.addAll(runSession.getActiveOmamoris());
         renderOmamoris();
 
-        if(runSession.getYokaiBag() != null) {
+        if (runSession.getYokaiBag() != null) {
             runSession.getYokaiBag().forEach(y -> y.setExhausted(false));
         }
         activeAltarYokai = null;
@@ -168,6 +181,16 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
+
+        if (fbo != null) fbo.dispose();
+        fbo = new FrameBuffer(Pixmap.Format.RGBA8888, width, height, false);
+        fboRegion = new TextureRegion(fbo.getColorBufferTexture());
+        fboRegion.flip(false, true);
+
+        // screenBatch auf Fullscreen-Größe anpassen:
+        if (screenBatch != null) {
+            screenBatch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+        }
     }
 
     private void initUiElements() {
@@ -322,6 +345,9 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         HankoShaderManager.update(delta);
+
+        // 1. PHASE: Kampfgeschehen in den FrameBuffer zeichnen
+        fbo.begin();
         ScreenUtils.clear(0f, 0f, 0f, 1f);
 
         float activeDelta = com.lychcs.koikoi.graphics.JuiceManager.update(delta, stage.getCamera());
@@ -333,6 +359,36 @@ public class GameScreen extends ScreenAdapter {
         stage.act(activeDelta);
         stage.draw();
 
+        fbo.end();
+
+        // 2. PHASE: Fullscreen Edge-Detection Post-Processing
+        // 2. PHASE: Reiner Ink- / Manga-Look
+        ScreenUtils.clear(0, 0, 0, 1);
+
+        screenBatch.begin();
+        screenBatch.setShader(edgeShader);
+
+        edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
+
+        // 1. Schwellenwert: Höher ansetzen (0.45f - 0.65f), damit nur echte Silhouetten
+        // und keine feinen Pixelsprünge als Linien gezeichnet werden!
+        edgeShader.setUniformf("u_threshold", 0.52f);
+
+        // 2. Tusche-Farbe (dunkles Sumi-e-Schwarz/Anthrazit)
+        edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
+
+        // 3. Hintergrund (warmes japanisches Reispapier / Washi-Ton)
+        edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
+
+        // 4. Modus: 0.0f = Texturen weg, nur Zeichnung
+        edgeShader.setUniformf("u_drawOriginal", 0.0f);
+
+        screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+        screenBatch.end();
+        screenBatch.setShader(null);
+
+        // 3. PHASE: Screen-Flash für wuchtige Treffer (über Post-Processing)
         float flash = com.lychcs.koikoi.graphics.JuiceManager.getFlashAlpha();
         if (flash > 0f) {
             stage.getBatch().begin();
@@ -403,7 +459,7 @@ public class GameScreen extends ScreenAdapter {
         List<Card> unplayed = new ArrayList<>(playerHand);
         unplayed.removeAll(selectedCards);
 
-        ScoreContext context = new ScoreContext(0, hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai);
+        ScoreContext context = new ScoreContext(hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai);
         CalculationBreakdown breakdown = ScoreCalculator.calculate(context);
 
         playerHand.removeAll(selectedCards);
@@ -446,9 +502,9 @@ public class GameScreen extends ScreenAdapter {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("VICTORY!");
 
-            int totalXpReward = 50; // Basis-EP für den gewonnenen Kampf
+            int totalXpReward = 50;
             if (!usedYokaiInBattle.isEmpty()) {
-                int xpPerYokai = totalXpReward / usedYokaiInBattle.size(); // EP-Teiler durch Anzahl der genutzten Yokai
+                int xpPerYokai = totalXpReward / usedYokaiInBattle.size();
                 for (Yokai y : usedYokaiInBattle) {
                     y.addXp(xpPerYokai);
                 }
@@ -582,6 +638,9 @@ public class GameScreen extends ScreenAdapter {
             }
 
             addListener(new InputListener() {
+                private float touchDownStageX, touchDownStageY;
+                private static final float DRAG_THRESHOLD = 14f;
+
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
                     if (currentState != GameState.WAITING_FOR_INPUT) return false;
@@ -589,6 +648,8 @@ public class GameScreen extends ScreenAdapter {
                     isDragging = false;
                     dragOffsetX = x;
                     dragOffsetY = y;
+                    touchDownStageX = event.getStageX();
+                    touchDownStageY = event.getStageY();
 
                     infoPopup.clearChildren();
                     infoPopup.add(new Label(card.name(), skin)).padTop(10).padBottom(5).row();
@@ -609,7 +670,14 @@ public class GameScreen extends ScreenAdapter {
                 public void touchDragged(InputEvent event, float x, float y, int pointer) {
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
 
-                    isDragging = true;
+                    if (!isDragging) {
+                        float dist = Vector2.dst(touchDownStageX, touchDownStageY, event.getStageX(), event.getStageY());
+                        if (dist < DRAG_THRESHOLD) {
+                            return;
+                        }
+                        isDragging = true;
+                    }
+
                     infoPopup.setVisible(false);
 
                     targetScale = 1.0f;
@@ -800,11 +868,19 @@ public class GameScreen extends ScreenAdapter {
             addActor(stack);
 
             addListener(new InputListener() {
+                private float touchDownStageX, touchDownStageY;
+                private static final float DRAG_THRESHOLD = 14f;
+
                 @Override
                 public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
                     if (currentState != GameState.WAITING_FOR_INPUT) return false;
+
                     isDragging = false;
-                    dragOffsetX = x; dragOffsetY = y;
+                    dragOffsetX = x;
+                    dragOffsetY = y;
+                    touchDownStageX = event.getStageX();
+                    touchDownStageY = event.getStageY();
+
                     toFront();
                     targetScale = 1.0f;
                     targetShadow = 0.3f;
@@ -814,7 +890,15 @@ public class GameScreen extends ScreenAdapter {
                 @Override
                 public void touchDragged(InputEvent event, float x, float y, int pointer) {
                     if (currentState != GameState.WAITING_FOR_INPUT) return;
-                    isDragging = true;
+
+                    if (!isDragging) {
+                        float dist = Vector2.dst(touchDownStageX, touchDownStageY, event.getStageX(), event.getStageY());
+                        if (dist < DRAG_THRESHOLD) {
+                            return;
+                        }
+                        isDragging = true;
+                    }
+
                     infoPopup.setVisible(false);
                     targetScale = 1.0f;
                     targetShadow = 0.6f;
@@ -827,8 +911,11 @@ public class GameScreen extends ScreenAdapter {
 
                 @Override
                 public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
+                    infoPopup.setVisible(false);
                     targetShadow = 0f;
                     targetScale = 1f;
+
+                    if (currentState != GameState.WAITING_FOR_INPUT) return;
 
                     if (isDragging) {
                         isDragging = false;
@@ -836,17 +923,15 @@ public class GameScreen extends ScreenAdapter {
                         Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
                         Vector2 bagPos = yokaiBagTable.localToStageCoordinates(new Vector2(0, 0));
 
-                        // Wenn die X-Koordinate links von der Yokai-Tasche ist, werten wir es als Drop auf dem Altar
                         boolean droppedOnAltar = stagePos.x < bagPos.x;
 
                         if (droppedOnAltar && !isAltar && !yokai.isExhausted() && activeAltarYokai == null) {
-                            activeAltarYokai = yokai; // Ins Altar-Feld gezogen
-                            usedYokaiInBattle.add(activeAltarYokai); // <--- HIER MERKEN WIR IHN FÜR DIE EP VOR!
+                            activeAltarYokai = yokai;
+                            usedYokaiInBattle.add(activeAltarYokai);
                         } else if (!droppedOnAltar && isAltar) {
-                            activeAltarYokai = null;  // Aus dem Altar-Feld gezogen
+                            activeAltarYokai = null;
                         }
 
-                        // Tasche nach X-Koordinaten neu sortieren (Drag & Drop im Inventar)
                         if (!isAltar && !droppedOnAltar) {
                             List<JuicyYokaiActor> actors = new ArrayList<>();
                             for (Actor a : yokaiBagTable.getChildren()) {
@@ -857,7 +942,6 @@ public class GameScreen extends ScreenAdapter {
                             List<Yokai> oldBag = new ArrayList<>(runSession.getYokaiBag());
                             runSession.getYokaiBag().clear();
 
-                            // Aktiven Altar-Yokai nicht vergessen
                             if (activeAltarYokai != null) runSession.getYokaiBag().add(activeAltarYokai);
 
                             for (JuicyYokaiActor a : actors) {
@@ -872,7 +956,6 @@ public class GameScreen extends ScreenAdapter {
                         updateLivePreview();
 
                     } else {
-                        // Regulärer Klick (weiterhin als komfortable Alternative nutzbar)
                         triggerPunchAnimation(JuicyYokaiActor.this);
                         infoPopup.clearChildren();
                         infoPopup.add(new Label(yokai.getName(), skin)).padTop(10).padBottom(5).row();
@@ -888,7 +971,7 @@ public class GameScreen extends ScreenAdapter {
                             updateLivePreview();
                         } else if (!yokai.isExhausted() && activeAltarYokai == null) {
                             activeAltarYokai = yokai;
-                            usedYokaiInBattle.add(activeAltarYokai); // <--- HIER AUCH BEIM KLICKEN MERKEN!
+                            usedYokaiInBattle.add(activeAltarYokai);
                             renderYokaiUI();
                             updateLivePreview();
                         }
@@ -909,6 +992,7 @@ public class GameScreen extends ScreenAdapter {
 
     private void renderOmamoris() {
         omamoriTable.clearChildren();
+
         for (Omamori omamori : activeOmamoris) {
             String className = omamori.getClass().getSimpleName();
             String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
@@ -916,73 +1000,22 @@ public class GameScreen extends ScreenAdapter {
 
             TextureRegion region = atlas.findRegion(regionName);
             if (region != null) {
-                JuicyOmamoriActor omamoriActor = new JuicyOmamoriActor(omamori, region);
-                omamoriTable.add(omamoriActor).width(72).height(96).pad(5);
-            } else {
-                TextButton fallback = new TextButton(omamori.getName(), skin);
-                omamoriTable.add(fallback).width(72).height(96).pad(5);
-            }
-        }
-    }
+                JuicyOmamoriActor omamoriActor = new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
+                    @Override
+                    public void onTap(JuicyOmamoriActor actor) {
+                        infoPopup.clearChildren();
+                        infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
+                        infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
+                        infoPopup.pack();
 
-    private class JuicyOmamoriActor extends Group {
-        private final Omamori omamori;
-        private final Image shadowImg;
-        private float currentShadow = 0f;
-        private float targetShadow = 0f;
-        private float targetScale = 1f;
-        private boolean isDragging = false;
-        private float dragOffsetX, dragOffsetY;
+                        Vector2 pos = actor.localToStageCoordinates(new Vector2(0, 0));
+                        infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
+                        infoPopup.setVisible(true);
+                    }
 
-        public JuicyOmamoriActor(Omamori omamori, TextureRegion tex) {
-            this.omamori = omamori;
-            setSize(72, 96);
-            setOrigin(36, 48);
-
-            shadowImg = new Image(tex);
-            shadowImg.setSize(72, 96);
-            shadowImg.setColor(0, 0, 0, 0f);
-            shadowImg.setPosition(-4, -6);
-            addActor(shadowImg);
-
-            Image mainImg = new Image(tex);
-            mainImg.setSize(72, 96);
-            addActor(mainImg);
-
-            addListener(new InputListener() {
-                @Override
-                public boolean touchDown(InputEvent event, float x, float y, int pointer, int button) {
-                    isDragging = false;
-                    dragOffsetX = x; dragOffsetY = y;
-                    toFront();
-
-                    targetScale = 1.0f;
-                    targetShadow = 0.3f;
-                    return true;
-                }
-
-                @Override
-                public void touchDragged(InputEvent event, float x, float y, int pointer) {
-                    isDragging = true;
-                    infoPopup.setVisible(false);
-
-                    targetScale = 1.0f;
-                    targetShadow = 0.6f;
-
-                    Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
-                    Vector2 parentPos = getParent().stageToLocalCoordinates(stagePos);
-                    setX(parentPos.x - dragOffsetX);
-                    setY(parentPos.y - dragOffsetY);
-                }
-
-                @Override
-                public void touchUp(InputEvent event, float x, float y, int pointer, int button) {
-                    targetShadow = 0f;
-                    targetScale = 1f;
-
-                    if (isDragging) {
-                        isDragging = false;
-
+                    @Override
+                    public void onDrop(JuicyOmamoriActor actor, Vector2 stagePos) {
+                        // Nach X-Koordinate in der Table neu sortieren
                         List<JuicyOmamoriActor> actors = new ArrayList<>();
                         for (Actor a : omamoriTable.getChildren()) {
                             if (a instanceof JuicyOmamoriActor) actors.add((JuicyOmamoriActor) a);
@@ -990,31 +1023,17 @@ public class GameScreen extends ScreenAdapter {
                         actors.sort(Comparator.comparing(a -> a.localToStageCoordinates(new Vector2(0, 0)).x));
 
                         activeOmamoris.clear();
-                        for(JuicyOmamoriActor a : actors) activeOmamoris.add(a.omamori);
+                        for (JuicyOmamoriActor a : actors) activeOmamoris.add(a.omamori);
 
                         renderOmamoris();
-                    } else {
-                        triggerPunchAnimation(JuicyOmamoriActor.this);
-                        infoPopup.clearChildren();
-                        infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
-                        infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
-                        infoPopup.pack();
-                        Vector2 pos = localToStageCoordinates(new Vector2(0, 0));
-                        infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
-                        infoPopup.setVisible(true);
                     }
-                }
-            });
-        }
+                });
 
-        @Override
-        public void act(float delta) {
-            super.act(delta);
-            currentShadow = MathUtils.lerp(currentShadow, targetShadow, 25f * delta);
-            shadowImg.setColor(0f, 0f, 0f, currentShadow);
-
-            float newScale = MathUtils.lerp(getScaleX(), targetScale, 35f * delta);
-            setScale(newScale, newScale);
+                omamoriTable.add(omamoriActor).width(72).height(96).pad(5);
+            } else {
+                TextButton fallback = new TextButton(omamori.getName(), skin);
+                omamoriTable.add(fallback).width(72).height(96).pad(5);
+            }
         }
     }
 
@@ -1123,6 +1142,11 @@ public class GameScreen extends ScreenAdapter {
     @Override
     public void dispose() {
         stage.dispose();
+        // Post-Processing
+        if (fbo != null) fbo.dispose();
+        if (screenBatch != null) screenBatch.dispose();
+        if (edgeShader != null) edgeShader.dispose();
+
         if (skin != null) skin.dispose();
         if (atlas != null) atlas.dispose();
         if (background != null) background.dispose();

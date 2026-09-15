@@ -2,64 +2,117 @@ package com.lychcs.koikoi.entities;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.Batch;
-import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
 
 public class Player {
+
     public Body body;
-    public final Rectangle hitbox = new Rectangle(); // Für Trigger-Abfragen (Shops/Gegner)
+    private Texture sheet;
 
-    private final float WIDTH = 64f;
-    private final float HEIGHT = 128f;
-    public final float SPEED = 128f;
+    // Animationen und Frame-Arrays für die 4 Richtungen
+    private Animation<TextureRegion> walkDown, walkUp, walkLeft, walkRight;
+    private TextureRegion[] downFrames, upFrames, leftFrames, rightFrames;
 
-    private Texture playerTexture;
     private float stateTime = 0f;
+    private String currentDirection = "down";
+
+    public final float SPEED = 120f;
 
     public Player(World world, float startX, float startY) {
-        // 1. Box2D Körper definieren (DynamicBody, damit er sich bewegen kann)
-        BodyDef bodyDef = new BodyDef();
-        bodyDef.type = BodyDef.BodyType.DynamicBody;
-        bodyDef.position.set(startX + WIDTH / 2f, startY + 24f / 2f); // Zentrum des Körpers auf die Füße legen
-        bodyDef.fixedRotation = true; // Verhindert, dass die Spielfigur umkippt
+        // 1. Box2D Physik-Körper (Dynamischer Körper für den Spieler)
+        BodyDef bdef = new BodyDef();
+        bdef.type = BodyDef.BodyType.DynamicBody;
+        bdef.position.set(startX, startY);
+        body = world.createBody(bdef);
+        body.setFixedRotation(true); // Verhindert, dass der Spieler umkippt
 
-        body = world.createBody(bodyDef);
-
-        // 2. Kollisions-Box (Fixture) für die Füße erstellen
         PolygonShape shape = new PolygonShape();
-        shape.setAsBox(WIDTH / 4f, 12f); // Eine feine Box an den Füßen
+        shape.setAsBox(12f, 6f); // Kleine Box für die Füße (Kollisionsbox)
 
-        FixtureDef fixtureDef = new FixtureDef();
-        fixtureDef.shape = shape;
-        fixtureDef.friction = 0f; // Keine Reibung an Wänden, damit man nicht kleben bleibt
-
-        body.createFixture(fixtureDef);
+        FixtureDef fdef = new FixtureDef();
+        fdef.shape = shape;
+        fdef.density = 1.0f;
+        body.createFixture(fdef);
         shape.dispose();
 
-        this.playerTexture = new Texture(Gdx.files.internal("entities/HERO_1.png"));
+        // 2. Das horizontale Sprite-Sheet laden und aufteilen (16 Frames gesamt: je 4 pro Richtung)
+        sheet = new Texture(Gdx.files.internal("entities/player.png"));
+
+        int totalFrames = 16;
+        int frameWidth = sheet.getWidth() / totalFrames;
+        int frameHeight = sheet.getHeight();
+
+        TextureRegion[][] tmp = TextureRegion.split(sheet, frameWidth, frameHeight);
+        TextureRegion[] allFrames = tmp[0];
+
+        // Frames blockweise den Richtungen zuordnen
+        downFrames  = new TextureRegion[]{ allFrames[0], allFrames[1], allFrames[2], allFrames[3] };
+        upFrames    = new TextureRegion[]{ allFrames[4], allFrames[5], allFrames[6], allFrames[7] };
+        leftFrames  = new TextureRegion[]{ allFrames[8], allFrames[9], allFrames[10], allFrames[11] };
+        rightFrames = new TextureRegion[]{ allFrames[12], allFrames[13], allFrames[14], allFrames[15] };
+
+        walkDown = new Animation<>(0.15f, downFrames);
+        walkUp = new Animation<>(0.15f, upFrames);
+        walkLeft = new Animation<>(0.15f, leftFrames);
+        walkRight = new Animation<>(0.15f, rightFrames);
+
+        walkDown.setPlayMode(Animation.PlayMode.LOOP);
+        walkUp.setPlayMode(Animation.PlayMode.LOOP);
+        walkLeft.setPlayMode(Animation.PlayMode.LOOP);
+        walkRight.setPlayMode(Animation.PlayMode.LOOP);
     }
 
-    public void update(float delta) {
-        stateTime += delta;
-        // Synchronisiere die Logik-Hitbox mit der aktuellen Physik-Position des Körpers
-        Vector2 pos = body.getPosition();
-        hitbox.set(pos.x - WIDTH / 2f, pos.y - 12f, WIDTH, 24f);
+    public void update(float delta, Vector2 velocity) {
+        // Richtung und Animationen nur aktualisieren, wenn sich der Spieler bewegt
+        if (velocity.len2() > 0) {
+            stateTime += delta;
+            if (Math.abs(velocity.x) > Math.abs(velocity.y)) {
+                currentDirection = velocity.x > 0 ? "right" : "left";
+            } else {
+                currentDirection = velocity.y > 0 ? "up" : "down";
+            }
+        } else {
+            stateTime = 0f; // Auf den Start zurücksetzen, wenn er steht
+        }
+    }
+
+    public void render(SpriteBatch batch) {
+        TextureRegion currentFrame;
+        boolean isMoving = body.getLinearVelocity().len2() > 0.1f;
+
+        switch (currentDirection) {
+            case "up":
+                // 1. Frame (Index 0) als Stand-Pose für Hoch
+                currentFrame = isMoving ? walkUp.getKeyFrame(stateTime) : upFrames[0];
+                break;
+            case "left":
+                // 3. Frame (Index 2) als Stand-Pose für Links
+                currentFrame = isMoving ? walkLeft.getKeyFrame(stateTime) : leftFrames[2];
+                break;
+            case "right":
+                // 3. Frame (Index 2) als Stand-Pose für Rechts
+                currentFrame = isMoving ? walkRight.getKeyFrame(stateTime) : rightFrames[2];
+                break;
+            default:
+                // 1. Frame (Index 0) als Stand-Pose für Runter (Default)
+                currentFrame = isMoving ? walkDown.getKeyFrame(stateTime) : downFrames[0];
+                break;
+        }
+
+        // Zeichnet das Sprite zentriert über dem Physik-Punkt (Fuß-Offset)
+        batch.draw(currentFrame, body.getPosition().x - 32f, body.getPosition().y - 12f);
     }
 
     public Vector2 getRenderPosition() {
-        // Gibt die untere linke Ecke für das Zeichnen der Grafik zurück (basierend auf der Physik-Position)
-        Vector2 pos = body.getPosition();
-        return new Vector2(pos.x - WIDTH / 2f, pos.y - 12f);
-    }
-
-    public void render(Batch batch) {
-        Vector2 renderPos = getRenderPosition();
-        batch.draw(playerTexture, renderPos.x, renderPos.y, WIDTH, HEIGHT);
+        // Exakter Offset passend zum batch.draw() für das Y-Sorting im OverworldScreen
+        return new Vector2(body.getPosition().x - 32f, body.getPosition().y - 12f);
     }
 
     public void dispose() {
-        if (playerTexture != null) playerTexture.dispose();
+        if (sheet != null) sheet.dispose();
     }
 }

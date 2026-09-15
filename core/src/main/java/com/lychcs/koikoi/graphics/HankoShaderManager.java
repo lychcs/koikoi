@@ -41,6 +41,15 @@ public final class HankoShaderManager {
     }
 
     public static ShaderProgram getPolychromeShader() {
+        if (polychromeShader == null) {
+            polychromeShader = new ShaderProgram(
+                Gdx.files.internal("shaders/holo_foil.vert"),
+                Gdx.files.internal("shaders/holo_foil.frag")
+            );
+            if (!polychromeShader.isCompiled()) {
+                Gdx.app.error("Shader", "Holo Foil Fehler:\n" + polychromeShader.getLog());
+            }
+        }
         return polychromeShader;
     }
 

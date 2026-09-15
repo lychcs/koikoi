@@ -74,10 +74,9 @@ public final class ScoreCalculator {
 
         // 5. Final Payout
         long handPayout = (long) acc.getChips() * acc.getMult();
-        long finalPayout = context.floatingBank() + handPayout;
+        long finalPayout = handPayout;
 
         return new CalculationBreakdown(
-            context.floatingBank(),
             yakuChips,
             yakuBaseMult,
             acc.getChips(),

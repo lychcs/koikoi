@@ -225,7 +225,7 @@ public class ShrineScreen extends ScreenAdapter {
         Table listTable = new Table();
         for (Yokai yokai : runSession.getYokaiBag()) {
             boolean alreadyEvolved = runSession.getShrineEvolvedThisVisit().contains(yokai);
-            boolean isMaxLevel = (yokai.getStage() == YokaiStage.LEVEL_3 || yokai.getStage() == YokaiStage.YAMI);
+            boolean isMaxLevel = (yokai.getLevel() == 3);
 
             String statusText = alreadyEvolved ? " (Bereits aufgewertet)" : (isMaxLevel ? " (Max Level)" : "");
             TextButton yokaiBtn = new TextButton(yokai.getName() + " [" + yokai.getStage().name() + "]" + statusText, indieButtonStyle);

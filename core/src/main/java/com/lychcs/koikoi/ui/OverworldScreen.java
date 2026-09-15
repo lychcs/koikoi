@@ -3,7 +3,15 @@ package com.lychcs.koikoi.ui;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.NinePatch;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureAtlas;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.maps.MapLayer;
 import com.badlogic.gdx.maps.MapObject;
 import com.badlogic.gdx.maps.objects.RectangleMapObject;
@@ -15,9 +23,17 @@ import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.entities.Player;
+import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.run.RunSession;
 
 import java.util.ArrayList;
@@ -33,18 +49,39 @@ public class OverworldScreen extends ScreenAdapter {
     private OrthogonalTiledMapRenderer mapRenderer;
     private OrthographicCamera camera;
     private Player player;
+    private Stage uiStage;
+    private Label promptLabel;
+    private ShaderProgram windShader;
+    private float overworldTime = 0f;
+    private Skin skin; // Falls noch nicht vorhanden
+    private InventoryOverlay inventoryOverlay;
+    private TextureAtlas gameAtlas; // Falls noch nicht in OverworldScreen geladen
+
+    // Post-Processing
+
+    private FrameBuffer fbo;
+    private SpriteBatch screenBatch;
+    private TextureRegion fboRegion;
+    private ShaderProgram edgeShader;
 
     // Box2D Physik-Welt
+
     private World world;
     private Box2DDebugRenderer debugRenderer; // Optional, zeigt die roten Physik-Boxen an falls gewünscht
 
     private static class RenderNode implements Comparable<RenderNode> {
         float y;
-        Player player;
+        com.lychcs.koikoi.entities.Player playerEntity; // Eindeutiger Name
         TiledMapTileMapObject mapObject;
 
-        public RenderNode(float y, Player player) { this.y = y; this.player = player; }
-        public RenderNode(float y, TiledMapTileMapObject mapObject) { this.y = y; this.mapObject = mapObject; }
+        public RenderNode(float y, com.lychcs.koikoi.entities.Player playerEntity) {
+            this.y = y;
+            this.playerEntity = playerEntity;
+        }
+        public RenderNode(float y, TiledMapTileMapObject mapObject) {
+            this.y = y;
+            this.mapObject = mapObject;
+        }
 
         @Override
         public int compareTo(RenderNode other) {
@@ -80,17 +117,75 @@ public class OverworldScreen extends ScreenAdapter {
 
         float startX = 100f;
         float startY = 100f;
-        MapLayer entityLayer = map.getLayers().get("entities");
-        if (entityLayer != null) {
-            MapObject spawnObj = entityLayer.getObjects().get("player_spawn");
-            if (spawnObj != null) {
-                startX = spawnObj.getProperties().get("x", Float.class);
-                startY = spawnObj.getProperties().get("y", Float.class);
+
+        // --- Prüfen, ob eine gespeicherte Position aus einem Shop/Schrein existiert ---
+        if (runSession.hasStoredPosition()) {
+            startX = runSession.getLastPlayerX();
+            startY = runSession.getLastPlayerY();
+        } else {
+            // Ansonsten den normalen Spawnpunkt von der Tiled-Map auslesen
+            MapLayer entityLayer = map.getLayers().get("entities");
+            if (entityLayer != null) {
+                MapObject spawnObj = entityLayer.getObjects().get("player_spawn");
+                if (spawnObj != null) {
+                    startX = spawnObj.getProperties().get("x", Float.class);
+                    startY = spawnObj.getProperties().get("y", Float.class);
+                }
             }
         }
 
-        // Spieler direkt in die Box2D-Welt spawnen
         player = new Player(world, startX, startY);
+
+        // UI Stage für Overworld-Popups (z.B. "Press E to Shop")
+        uiStage = new Stage(new FitViewport(1280, 720));
+        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+
+        promptLabel = new Label("", skin);
+        promptLabel.setFontScale(0.8f);
+
+        Table promptTable = new Table();
+        promptTable.setFillParent(true);
+        promptTable.bottom().padBottom(80); // Platziert es im unteren Bildschirmdrittel
+        promptTable.add(promptLabel); // Nutzt deinen schicken Panel-Hintergrund!
+        promptTable.pack();
+
+        uiStage.addActor(promptTable);
+        promptLabel.setVisible(false);
+
+        windShader = new ShaderProgram(
+            Gdx.files.internal("shaders/tree_wind.vert"),
+            Gdx.files.internal("shaders/tree_wind.frag")
+        );
+
+        if (!windShader.isCompiled()) {
+            Gdx.app.error("Shader", "Tree Wind Shader Fehler:\n" + windShader.getLog());
+        }
+
+        gameAtlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
+
+        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        TextButton.TextButtonStyle btnStyle = new TextButton.TextButtonStyle();
+        btnStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
+        btnStyle.down = ((NinePatchDrawable) btnStyle.up).tint(Color.LIGHT_GRAY);
+        btnStyle.font = FontManager.getFont();
+        btnStyle.fontColor = FontManager.COLOR_TEXT_MAIN;
+
+        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
+        NinePatchDrawable panelBg = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
+
+        inventoryOverlay = new InventoryOverlay(runSession, skin, gameAtlas, panelBg, btnStyle);
+        uiStage.addActor(inventoryOverlay);
+        // --- Edge Detection Post-Processing initialisieren ---
+        screenBatch = new SpriteBatch();
+        edgeShader = new ShaderProgram(
+            Gdx.files.internal("shaders/edge_detection.vert"),
+            Gdx.files.internal("shaders/edge_detection.frag")
+        );
+
+        if (!edgeShader.isCompiled()) {
+            Gdx.app.error("Shader", "Edge Shader Fehler:\n" + edgeShader.getLog());
+        }
     }
 
     private void createCollisionBoxes() {
@@ -119,8 +214,33 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     @Override
+    public void resize(int width, int height) {
+        uiStage.getViewport().update(width, height, true);
+
+        // 1. FBO an neue Bildschirmauflösung anpassen
+        if (fbo != null) fbo.dispose();
+        fbo = new FrameBuffer(com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888, width, height, false);
+        fboRegion = new TextureRegion(fbo.getColorBufferTexture());
+        fboRegion.flip(false, true);
+
+        // 2. ENTSCHEIDEND: screenBatch auf die neue Auflösung eichen!
+        if (screenBatch != null) {
+            screenBatch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+        }
+    }
+
+    @Override
     public void render(float delta) {
+        if (fbo == null) {
+            resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        }
+
+        // 1. PHASE: Welt in den FrameBuffer rendern
+        fbo.begin();
         ScreenUtils.clear(0, 0, 0, 1);
+
+        // Zeit für Shader-Animationen hochzählen
+        overworldTime += delta;
 
         // Physik-Welt vorwärtsrechnen (Step)
         world.step(delta, 6, 2);
@@ -128,13 +248,13 @@ public class OverworldScreen extends ScreenAdapter {
         handleMovement(delta);
         handleInteractions();
 
-        // Spieler-Logik (Hitbox synchronisieren) aktualisieren
-        player.update(delta);
+        // Spieler-Logik aktualisieren (mit Übergabe der Geschwindigkeit für die Animation)
+        player.update(delta, player.body.getLinearVelocity());
 
-        // Kamera folgt dem Spieler (basiert auf der echten Physik-Position)
+        // Kamera folgt dem Spieler (zentriert über die Render-Position)
         Vector2 renderPos = player.getRenderPosition();
-        float targetX = renderPos.x + 32f;
-        float targetY = renderPos.y + 64f;
+        float targetX = renderPos.x + 32f; // Mitte des Sprites (32f ist die halbe Breite)
+        float targetY = renderPos.y + 32f; // Mitte der Höhe des Sprites
 
         float camHalfWidth = camera.viewportWidth * 0.5f * camera.zoom;
         float camHalfHeight = camera.viewportHeight * 0.5f * camera.zoom;
@@ -148,14 +268,14 @@ public class OverworldScreen extends ScreenAdapter {
         mapRenderer.setView(camera);
         mapRenderer.getBatch().begin();
 
-        // 1. Kachelebenen zeichnen
+        // 1. Kachelebenen zeichnen (Boden, Wege, etc.)
         for (MapLayer layer : map.getLayers()) {
             if (layer instanceof TiledMapTileLayer) {
                 mapRenderer.renderTileLayer((TiledMapTileLayer) layer);
             }
         }
 
-        // 2. Y-Sorting Liste füllen (Nutzt jetzt die reibungsfreie Physik-Position des Spielers!)
+        // 2. Y-Sorting Liste füllen
         List<RenderNode> renderList = new ArrayList<>();
         renderList.add(new RenderNode(renderPos.y, player));
 
@@ -172,25 +292,94 @@ public class OverworldScreen extends ScreenAdapter {
 
         Collections.sort(renderList);
 
+        // 3. Sortierte Objekte zeichnen (inklusive Wind-Shader für Bäume)
         for (RenderNode node : renderList) {
-            if (node.player != null) {
-                node.player.render(mapRenderer.getBatch());
+            if (node.playerEntity != null) {
+                node.playerEntity.render((SpriteBatch) mapRenderer.getBatch());
             } else {
                 TiledMapTileMapObject tObj = node.mapObject;
-                mapRenderer.getBatch().draw(
-                    tObj.getTile().getTextureRegion(),
-                    tObj.getX(),
-                    tObj.getY()
-                );
+                TextureRegion region = tObj.getTile().getTextureRegion();
+
+                String type = tObj.getProperties().get("type", String.class);
+                if (type == null) type = tObj.getProperties().get("class", String.class);
+
+                boolean isTree = "tree".equalsIgnoreCase(type);
+
+                if (isTree && windShader != null && windShader.isCompiled()) {
+                    mapRenderer.getBatch().setShader(windShader);
+
+                    windShader.setUniformf("u_time", overworldTime);
+
+                    float u = region.getU();
+                    float v = region.getV();
+                    float uWidth = region.getU2() - u;
+                    float vHeight = region.getV2() - v;
+                    windShader.setUniformf("u_region", u, v, uWidth, vHeight);
+                    windShader.setUniformf("u_regionSizePx", region.getRegionWidth(), region.getRegionHeight());
+
+                    windShader.setUniformf("u_swayStrength", 2.0f);
+                    windShader.setUniformf("u_swaySpeed", 1.6f);
+                    windShader.setUniformf("u_swayHeightStart", 0.55f);
+
+                    windShader.setUniformf("u_windStrength", 0.8f);
+                    windShader.setUniformf("u_windScale", 8.0f);
+                    windShader.setUniformf("u_windSpeed", 2.0f);
+                    windShader.setUniformf("u_windHeightStart", 0.35f);
+
+                    mapRenderer.getBatch().draw(region, tObj.getX(), tObj.getY());
+                    mapRenderer.getBatch().setShader(null);
+                } else {
+                    mapRenderer.getBatch().draw(region, tObj.getX(), tObj.getY());
+                }
             }
         }
 
         mapRenderer.getBatch().end();
+        fbo.end();
 
-        // Optional zum Testen: debugRenderer.render(world, camera.combined); (Zeigt rote Kollisionsboxen)
+        // 2. PHASE: FBO-Textur mit Edge-Shader auf den Bildschirm zeichnen
+        // 2. PHASE: Reiner Ink- / Manga-Look
+        ScreenUtils.clear(0, 0, 0, 1);
+
+        screenBatch.begin();
+        screenBatch.setShader(edgeShader);
+
+        edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
+
+        // 1. Schwellenwert: Höher ansetzen (0.45f - 0.65f), damit nur echte Silhouetten
+        // und keine feinen Pixelsprünge als Linien gezeichnet werden!
+        edgeShader.setUniformf("u_threshold", 0.8f);
+
+        // 2. Tusche-Farbe (dunkles Sumi-e-Schwarz/Anthrazit)
+        edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
+
+        // 3. Hintergrund (warmes japanisches Reispapier / Washi-Ton)
+        edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
+
+        // 4. Modus: 0.0f = Texturen weg, nur Zeichnung
+        edgeShader.setUniformf("u_drawOriginal", 0.0f);
+
+        screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+        screenBatch.end();
+        screenBatch.setShader(null);
+
+        // 3. PHASE: UI scharf über die Post-Processing-Szene legen
+        uiStage.act(delta);
+        uiStage.draw();
     }
 
     private void handleMovement(float delta) {
+        // Taste 'I' toggelt das Inventar
+        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+            inventoryOverlay.toggle();
+        }
+
+        // Wenn das Inventar offen ist, stoppt die Spielfigur komplett!
+        if (inventoryOverlay.isOpen()) {
+            player.body.setLinearVelocity(0, 0);
+            return;
+        }
         float velX = 0;
         float velY = 0;
         float speed = player.SPEED;
@@ -205,17 +394,22 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     private void handleInteractions() {
+        if (inventoryOverlay.isOpen()) {
+            promptLabel.setVisible(false);
+            return;
+        }
+
         MapLayer triggersLayer = map.getLayers().get("triggers");
-        if (triggersLayer == null) return;
+        if (triggersLayer == null) {
+            promptLabel.setVisible(false);
+            return;
+        }
 
-        // Hol dir die exakte Physik-Position der Spielerfüße
         Vector2 playerPos = player.body.getPosition();
-
-        // Erstelle eine Interaktions-Box um den Spieler herum (z.B. 48x48 Pixel)
-        // Wir ziehen etwas ab, damit die Box zentriert ist
         Rectangle interactionBox = new Rectangle(playerPos.x - 24f, playerPos.y - 12f, 48f, 48f);
 
         boolean ePressed = Gdx.input.isKeyJustPressed(Input.Keys.E);
+        boolean nearAnyTrigger = false;
 
         for (MapObject object : triggersLayer.getObjects()) {
             if (object instanceof RectangleMapObject) {
@@ -226,20 +420,32 @@ public class OverworldScreen extends ScreenAdapter {
                     if (type == null) type = object.getProperties().get("class", String.class);
                     if (type == null) continue;
 
-                    // --- 1. AUTOMATISCHE TRIGGER ---
+                    // --- 1. AUTOMATISCHE TRIGGER (Gegner / Kampf) ---
                     if ("enemy1".equals(type) || "combat_zone".equals(type)) {
-                        System.out.println("Gegner berührt! Lade Kampf...");
                         ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
                         return;
                     }
 
-                    // --- 2. MANUELLE TRIGGER (Mit E) ---
-                    if (ePressed) {
-                        System.out.println("E gedrückt bei Trigger: " + type); // Zum Debuggen in der Konsole
-                        if ("shop".equals(type)) {
+                    // --- 2. MANUELLE TRIGGER (Shop / Schrein mit Prompt) ---
+                    if ("shop".equals(type)) {
+                        promptLabel.setText(" Press [E] : Open Shop ");
+                        promptLabel.setVisible(true);
+                        nearAnyTrigger = true;
+
+                        if (ePressed) {
+                            Vector2 currentPos = player.body.getPosition();
+                            runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 12f);
                             ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
                             return;
-                        } else if ("shrine".equals(type)) {
+                        }
+                    } else if ("shrine".equals(type)) {
+                        promptLabel.setText(" Press [E] : Visit Shrine ");
+                        promptLabel.setVisible(true);
+                        nearAnyTrigger = true;
+
+                        if (ePressed) {
+                            Vector2 currentPos = player.body.getPosition();
+                            runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 12f);
                             ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShrineScreen(runSession));
                             return;
                         }
@@ -247,14 +453,28 @@ public class OverworldScreen extends ScreenAdapter {
                 }
             }
         }
+
+        // Wenn der Spieler weggeht, wird das Schild sofort ausgeblendet
+        if (!nearAnyTrigger) {
+            promptLabel.setVisible(false);
+        }
     }
 
     @Override
     public void dispose() {
+        if (gameAtlas != null) gameAtlas.dispose();
         map.dispose();
+        // Post-Processing
+        if (fbo != null) fbo.dispose();
+        if (screenBatch != null) screenBatch.dispose();
+        if (edgeShader != null) edgeShader.dispose();
+
         mapRenderer.dispose();
         world.dispose(); // Physik-Welt sauber freigeben
         debugRenderer.dispose();
         player.dispose();
+        if (uiStage != null) uiStage.dispose();
+        if (skin != null) skin.dispose();
+        if (windShader != null) windShader.dispose();
     }
 }

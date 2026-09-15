@@ -5,5 +5,4 @@ public enum YokaiStage {
     LEVEL_1,
     LEVEL_2,
     LEVEL_3,
-    YAMI // Special Form durch Yami-Packs
 }
