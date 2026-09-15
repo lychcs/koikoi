@@ -18,6 +18,7 @@ import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
@@ -37,12 +38,8 @@ import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.scoring.*;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 
 import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
@@ -96,6 +93,7 @@ public class GameScreen extends ScreenAdapter {
     private Table omamoriTable;
     private Table altarTable;
     private Table yokaiBagTable;
+    private final Set<Yokai> usedYokaiInBattle = new HashSet<>();
     private Group handGroup;
 
     private TextButton playButton;
@@ -447,6 +445,14 @@ public class GameScreen extends ScreenAdapter {
         if (currentRoundScore >= currentTargetScore) {
             currentState = GameState.ROUND_END;
             yakuNameLabel.setText("VICTORY!");
+
+            int totalXpReward = 50; // Basis-EP für den gewonnenen Kampf
+            if (!usedYokaiInBattle.isEmpty()) {
+                int xpPerYokai = totalXpReward / usedYokaiInBattle.size(); // EP-Teiler durch Anzahl der genutzten Yokai
+                for (Yokai y : usedYokaiInBattle) {
+                    y.addXp(xpPerYokai);
+                }
+            }
 
             int voidDustEarned = 10 + (handsRemaining * 5) + (discardsRemaining * 2);
             runSession.addVoidDust(voidDustEarned);
@@ -835,6 +841,7 @@ public class GameScreen extends ScreenAdapter {
 
                         if (droppedOnAltar && !isAltar && !yokai.isExhausted() && activeAltarYokai == null) {
                             activeAltarYokai = yokai; // Ins Altar-Feld gezogen
+                            usedYokaiInBattle.add(activeAltarYokai); // <--- HIER MERKEN WIR IHN FÜR DIE EP VOR!
                         } else if (!droppedOnAltar && isAltar) {
                             activeAltarYokai = null;  // Aus dem Altar-Feld gezogen
                         }
@@ -881,6 +888,7 @@ public class GameScreen extends ScreenAdapter {
                             updateLivePreview();
                         } else if (!yokai.isExhausted() && activeAltarYokai == null) {
                             activeAltarYokai = yokai;
+                            usedYokaiInBattle.add(activeAltarYokai); // <--- HIER AUCH BEIM KLICKEN MERKEN!
                             renderYokaiUI();
                             updateLivePreview();
                         }

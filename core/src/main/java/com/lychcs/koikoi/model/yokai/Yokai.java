@@ -6,6 +6,7 @@ import com.lychcs.koikoi.scoring.ScoreContext;
 public abstract class Yokai {
     private YokaiStage stage;
     private boolean exhausted;
+    private int xp = 0;
 
     public Yokai(YokaiStage initialStage) {
         this.stage = initialStage;
@@ -29,12 +30,15 @@ public abstract class Yokai {
 
     public boolean isExhausted() { return exhausted; }
     public void setExhausted(boolean exhausted) { this.exhausted = exhausted; }
-
-    /**
-     * Wird während der Score-Berechnung aufgerufen, wenn der Yokai im Altar liegt.
-     * Skaliert idealerweise mit dem aktuellen getStage().
-     */
     public abstract boolean activate(ScoreContext context, ScoreAccumulator acc);
-
+    public void addXp(int amount) {
+        this.xp += amount;
+        if (xp >= 1000 && getStage() == YokaiStage.LEVEL_1) {
+            evolve();
+        } else if (xp >= 3000 && getStage() == YokaiStage.LEVEL_2) {
+            evolve();
+        }
+    }
+    public int getXp() { return xp; }
     public abstract String getAtlasRegionName();
 }
