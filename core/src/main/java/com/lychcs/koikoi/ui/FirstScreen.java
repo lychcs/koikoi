@@ -15,6 +15,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.run.RunSession;
 
 import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
@@ -66,7 +67,11 @@ public class FirstScreen extends ScreenAdapter {
         startButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                game.setScreen(new IntroScreen(game));
+                // 1. Neue Spieldaten-Session erstellen
+                RunSession currentRun = new RunSession();
+
+                // 2. Direkt auf die Overworld-Map springen!
+                game.setScreen(new OverworldScreen(currentRun));
             }
         });
 

@@ -90,7 +90,7 @@ public class CutsceneScreen extends ScreenAdapter {
                 if (isFinal) {
                     ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new FirstScreen((KoiKoiGame) Gdx.app.getApplicationListener()));
                 } else {
-                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
                 }
             }
         });

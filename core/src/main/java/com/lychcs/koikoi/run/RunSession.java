@@ -15,10 +15,6 @@ public class RunSession {
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1; // 1: Beast-Wahl, 2: Licht/Dunkel, 3: Kami-Boss
 
-    // Tracking der Pfad-Entscheidungen
-    private CardID activeBeastChoice = null;
-    private Rank activeAlignmentChoice = null;
-
     private final List<Omamori> activeOmamoris = new ArrayList<>();
 
     private int mon = 0; // Zurückgesetzt auf echtes Startkapital
@@ -66,8 +62,6 @@ public class RunSession {
         seasonEncounterStage++;
         if (seasonEncounterStage > 3) {
             seasonEncounterStage = 1;
-            activeBeastChoice = null;     // Reset für die neue Season
-            activeAlignmentChoice = null; // Reset für die neue Season
             advanceSeason();
         }
     }
@@ -82,30 +76,6 @@ public class RunSession {
             case FINAL -> GameSeason.FINAL;
         };
     }
-
-    public void setBeastChoice(CardID beastID) {
-        this.activeBeastChoice = beastID;
-    }
-
-    public void setAlignmentChoiceAndEvolve(Rank alignment) {
-        this.activeAlignmentChoice = alignment;
-
-        if (activeBeastChoice == null) return;
-        CardID evolvedId = EvolutionMapper.getEvolvedForm(activeBeastChoice, alignment);
-
-        // Finde das Basis-Beast im Deck und werte es auf
-        for (int i = 0; i < playerDeck.getCards().size(); i++) {
-            Card c = playerDeck.getCards().get(i);
-            if (c.id() == activeBeastChoice) {
-                Card evolvedCard = new Card(evolvedId, c.season(), alignment, c.name() + " (Erwacht)", c.effect());
-                playerDeck.getCards().set(i, evolvedCard);
-                break;
-            }
-        }
-    }
-
-    public boolean needsBeastChoice() { return activeBeastChoice == null; }
-    public boolean needsAlignmentChoice() { return activeAlignmentChoice == null; }
 
     // --- BANISH LOGIK ---
 

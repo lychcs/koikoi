@@ -464,7 +464,7 @@ public class GameScreen extends ScreenAdapter {
             } else if (defeatedSeason == GameSeason.FINAL) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
             } else {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new HubScreen(runSession));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
             }
 
         } else if (handsRemaining <= 0) {
