@@ -1,0 +1,44 @@
+{
+    "activeFile": "",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
+        "#TILESET_SPRING": {
+            "scaleInEditor": 1
+        },
+        "SHOP_WAGGON_1.tsx": {
+            "dynamicWrapping": true
+        },
+        "SPRING_TREE1.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "SPRING_TREE1_SET.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "TILESET_SPRING.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        }
+    },
+    "map.height": 10,
+    "map.lastUsedFormat": "tmx",
+    "map.width": 10,
+    "openFiles": [
+    ],
+    "project": "testrun_project.tiled-project",
+    "recentFiles": [
+        "TILESET_SPRING.tsx",
+        "SPRING_TREE1.tsx",
+        "SPRING_TREE1_SET.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.type": 1
+}
