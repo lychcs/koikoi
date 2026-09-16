@@ -3,6 +3,7 @@ package com.lychcs.koikoi.ui;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.*;
@@ -27,6 +28,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.graphics.CorruptionEngine;
 import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.graphics.HankoShaderManager;
 import com.lychcs.koikoi.model.Card;
@@ -114,6 +116,8 @@ public class GameScreen extends ScreenAdapter {
     private SpriteBatch screenBatch;
     private TextureRegion fboRegion;
     private ShaderProgram edgeShader;
+
+    private CorruptionEngine corruptionEngine;
 
     public GameScreen(RunSession runSession) {
         this.runSession = runSession;
@@ -340,39 +344,46 @@ public class GameScreen extends ScreenAdapter {
         infoPopup.setBackground(panelBackground);
         infoPopup.setVisible(false);
         stage.addActor(infoPopup);
+
+        corruptionEngine = new CorruptionEngine();
     }
 
     @Override
     public void render(float delta) {
         HankoShaderManager.update(delta);
 
+        // NEU: Gray Scott Engine im Hintergrund rechnen lassen
+        corruptionEngine.update(delta);
+
+        // 1. PHASE: Spiel in FBO rendern (Bleibt gleich)
         fbo.begin();
         ScreenUtils.clear(0f, 0f, 0f, 1f);
-
         float activeDelta = com.lychcs.koikoi.graphics.JuiceManager.update(delta, stage.getCamera());
-
         stage.getBatch().begin();
         stage.getBatch().draw(background, 0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         stage.getBatch().end();
-
         stage.act(activeDelta);
         stage.draw();
-
         fbo.end();
 
+        // 2. PHASE: Post-Processing
         ScreenUtils.clear(0, 0, 0, 1);
-
         screenBatch.begin();
         screenBatch.setShader(edgeShader);
 
+        // Standard Edge Uniforms
         edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
         edgeShader.setUniformf("u_threshold", 0.52f);
         edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
         edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
-        edgeShader.setUniformf("u_drawOriginal", 0.0f);
+        edgeShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
+
+        // NEU: Binde die Gray-Scott Textur auf Slot 1, das FBO ist auf Slot 0
+        corruptionEngine.getCorruptionMap().bind(1);
+        Gdx.gl.glActiveTexture(GL20.GL_TEXTURE0); // Wieder auf Slot 0 zurück!
+        edgeShader.setUniformi("u_corruptionMap", 1);
 
         screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-
         screenBatch.end();
         screenBatch.setShader(null);
 
@@ -819,11 +830,15 @@ public class GameScreen extends ScreenAdapter {
             multLabel.setText(String.valueOf(currentMult[0]));
 
             if (activeAltarYokai != null && altarFlames != null) {
+                // Injiziert Essenz mittig ins Gitter
+                corruptionEngine.injectDisturbance(0.5f, 0.5f, 0.15f);
+
                 altarFlames.ignite();
                 com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.7f);
-                com.lychcs.koikoi.graphics.JuiceManager.hitstop(0.08f);
-                com.lychcs.koikoi.graphics.JuiceManager.flashScreen(0.85f);
+                // ...
             } else {
+                // Kleine Dosis beim normalen Legen
+                corruptionEngine.injectDisturbance(0.5f, 0.3f, 0.05f);
                 com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.3f);
             }
         }));
@@ -898,7 +913,7 @@ public class GameScreen extends ScreenAdapter {
         if (fbo != null) fbo.dispose();
         if (screenBatch != null) screenBatch.dispose();
         if (edgeShader != null) edgeShader.dispose();
-
+        corruptionEngine.dispose();
         if (skin != null) skin.dispose();
         if (atlas != null) atlas.dispose();
         if (background != null) background.dispose();

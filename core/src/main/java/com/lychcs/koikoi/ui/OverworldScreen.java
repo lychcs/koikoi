@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
@@ -33,6 +34,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.entities.Player;
+import com.lychcs.koikoi.graphics.CorruptionEngine;
 import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.run.RunSession;
 
@@ -58,11 +60,12 @@ public class OverworldScreen extends ScreenAdapter {
     private TextureAtlas gameAtlas; // Falls noch nicht in OverworldScreen geladen
 
     // Post-Processing
-
+    public boolean enableEdgeDetection = true;
     private FrameBuffer fbo;
     private SpriteBatch screenBatch;
     private TextureRegion fboRegion;
     private ShaderProgram edgeShader;
+    private CorruptionEngine corruptionEngine;
 
     // Box2D Physik-Welt
 
@@ -186,6 +189,8 @@ public class OverworldScreen extends ScreenAdapter {
         if (!edgeShader.isCompiled()) {
             Gdx.app.error("Shader", "Edge Shader Fehler:\n" + edgeShader.getLog());
         }
+
+        corruptionEngine = new CorruptionEngine();
     }
 
     private void createCollisionBoxes() {
@@ -342,34 +347,41 @@ public class OverworldScreen extends ScreenAdapter {
         mapRenderer.getBatch().end();
         fbo.end();
 
-        // 2. PHASE: FBO-Textur mit Edge-Shader auf den Bildschirm zeichnen
-        // 2. PHASE: Reiner Ink- / Manga-Look
+        // Den Spieler als Störquelle einspeisen
+        com.badlogic.gdx.math.Vector3 screenPos = camera.project(new com.badlogic.gdx.math.Vector3(player.body.getPosition().x, player.body.getPosition().y + 16f, 0));
+        float normX = screenPos.x / Gdx.graphics.getWidth();
+        float normY = 1.0f - (screenPos.y / Gdx.graphics.getHeight());
+
+        // Feine Dauer-Injektion (0.02f statt riesigem Kreis)
+        corruptionEngine.injectDisturbance(normX, normY, 0.02f);
+
+        corruptionEngine.update(delta);
+
+        // 2. PHASE: Post-Processing mit der Corruption Map
         ScreenUtils.clear(0, 0, 0, 1);
 
         screenBatch.begin();
         screenBatch.setShader(edgeShader);
 
         edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
-
-        // 1. Schwellenwert: Höher ansetzen (0.45f - 0.65f), damit nur echte Silhouetten
-        // und keine feinen Pixelsprünge als Linien gezeichnet werden!
-        edgeShader.setUniformf("u_threshold", 0.8f);
-
-        // 2. Tusche-Farbe (dunkles Sumi-e-Schwarz/Anthrazit)
+        edgeShader.setUniformf("u_threshold", 0.1f);
         edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
-
-        // 3. Hintergrund (warmes japanisches Reispapier / Washi-Ton)
         edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
+        edgeShader.setUniformf("u_time", overworldTime);
 
-        // 4. Modus: 0.0f = Texturen weg, nur Zeichnung
-        edgeShader.setUniformf("u_drawOriginal", 0.0f);
+        // FIX: Den Schalter als sauberen Float übergeben!
+        edgeShader.setUniformf("u_enableEdges", enableEdgeDetection ? 1.0f : 0.0f);
+
+        corruptionEngine.getCorruptionMap().bind(1);
+        Gdx.gl.glActiveTexture(GL20.GL_TEXTURE0);
+        edgeShader.setUniformi("u_corruptionMap", 1);
 
         screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
         screenBatch.end();
         screenBatch.setShader(null);
 
-        // 3. PHASE: UI scharf über die Post-Processing-Szene legen
+        // 3. PHASE: UI scharf über die Szene legen
         uiStage.act(delta);
         uiStage.draw();
     }
@@ -480,6 +492,8 @@ public class OverworldScreen extends ScreenAdapter {
         if (fbo != null) fbo.dispose();
         if (screenBatch != null) screenBatch.dispose();
         if (edgeShader != null) edgeShader.dispose();
+
+        if (corruptionEngine != null) corruptionEngine.dispose(); // <--- DAS HIER FEHLTE NOCH
 
         mapRenderer.dispose();
         world.dispose(); // Physik-Welt sauber freigeben
