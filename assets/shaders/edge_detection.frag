@@ -2,8 +2,6 @@
 precision mediump float;
 #endif
 
-precision mediump float;
-
 uniform sampler2D u_texture;
 uniform sampler2D u_corruptionMap;
 
@@ -143,8 +141,6 @@ float sobel(vec2 uv)
 
 void main()
 {
-    gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
-    return;
 
     vec2 uv = v_texCoords;
 
@@ -609,4 +605,3 @@ void main()
     untouched.a
     );
 }
-/*

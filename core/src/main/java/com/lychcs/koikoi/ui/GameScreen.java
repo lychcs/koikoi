@@ -477,7 +477,7 @@ public class GameScreen extends ScreenAdapter {
 
             } else if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
                 if (com.badlogic.gdx.math.MathUtils.random(1, 4) == 1) {
-                    runSession.banishCardForSeason(playedCard);
+                    // ???
                 }
             }
         }
@@ -817,8 +817,8 @@ public class GameScreen extends ScreenAdapter {
 
     private void playScoringSequence(CalculationBreakdown breakdown, YakuResult bestYaku) {
         var sequence = Actions.sequence();
-        final int[] currentChips = { breakdown.yakuChips() };
-        final int[] currentMult = { breakdown.yakuBaseMult() };
+        final long[] currentChips = { breakdown.yakuChips() };
+        final long[] currentMult = { breakdown.yakuBaseMult() };
 
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;

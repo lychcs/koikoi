@@ -106,26 +106,6 @@ public class RunSession {
         };
     }
 
-    // --- BANISH LOGIK ---
-
-    public void banishCardForSeason(Card card) {
-        if (card != null && playerDeck != null) {
-            playerDeck.getCards().remove(card);
-            banishedThisSeason.add(card);
-        }
-    }
-
-    public void restoreSeasonBanishedCards() {
-        if (playerDeck != null && !banishedThisSeason.isEmpty()) {
-            playerDeck.getCards().addAll(banishedThisSeason);
-            banishedThisSeason.clear();
-        }
-    }
-
-    public List<Card> getBanishedThisSeason() {
-        return Collections.unmodifiableList(banishedThisSeason);
-    }
-
     // --- PROGRESSION & DECK ---
 
     public YakuProgression getYakuProgression() { return yakuProgression; }

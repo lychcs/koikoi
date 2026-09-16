@@ -30,6 +30,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.badlogic.gdx.utils.GdxRuntimeException;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
@@ -187,7 +188,10 @@ public class OverworldScreen extends ScreenAdapter {
         );
 
         if (!edgeShader.isCompiled()) {
-            Gdx.app.error("Shader", "Edge Shader Fehler:\n" + edgeShader.getLog());
+            throw new GdxRuntimeException(
+                "edge_detection Shader konnte nicht kompiliert werden:\n"
+                    + edgeShader.getLog()
+            );
         }
 
         corruptionEngine = new CorruptionEngine();
