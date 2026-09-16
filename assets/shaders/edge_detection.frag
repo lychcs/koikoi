@@ -15,20 +15,14 @@ uniform float u_enableEdges;
 varying vec2 v_texCoords;
 
 
-// ------------------------------------------------------------
-// BASIC UTILITIES
-// ------------------------------------------------------------
+// ============================================================
+// UTILITIES
+// ============================================================
 
 float luminance(vec3 c)
 {
     return dot(c, vec3(0.299, 0.587, 0.114));
 }
-
-
-// ------------------------------------------------------------
-// HASH / NOISE
-// WebGL 1.0 / GLSL ES 1.00 compatible
-// ------------------------------------------------------------
 
 float hash21(vec2 p)
 {
@@ -37,7 +31,7 @@ float hash21(vec2 p)
     return fract(p.x * p.y);
 }
 
-float valueNoise(vec2 p)
+float noise2D(vec2 p)
 {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -60,48 +54,74 @@ float fbm(vec2 p)
 {
     float v = 0.0;
 
-    v += valueNoise(p)        * 0.500;
-    v += valueNoise(p * 2.03) * 0.250;
-    v += valueNoise(p * 4.07) * 0.125;
-    v += valueNoise(p * 8.11) * 0.0625;
+    v += noise2D(p)        * 0.5000;
+    v += noise2D(p * 2.03) * 0.2500;
+    v += noise2D(p * 4.07) * 0.1250;
+    v += noise2D(p * 8.11) * 0.0625;
 
     return v / 0.9375;
 }
 
 
-// ------------------------------------------------------------
-// CORRUPTION MAP SAMPLING
-// ------------------------------------------------------------
+// ============================================================
+// CORRUPTION MAP
+// ============================================================
 
-float corruptionAt(vec2 uv)
+float corruptionSample(vec2 uv)
 {
     return texture2D(u_corruptionMap, uv).g;
 }
 
 
-// ------------------------------------------------------------
-// SOBEL EDGE DETECTION
-// Uses the ORIGINAL scene texture so edges survive even when
-// the underlying colour is heavily corrupted.
-// ------------------------------------------------------------
+// Soft sampling intentionally removes the obvious
+// "Gray-Scott blob boundary".
+float smoothCorruption(vec2 uv)
+{
+    float c = corruptionSample(uv) * 0.40;
 
-float sceneLum(vec2 uv)
+    c += corruptionSample(
+        uv + vec2( u_pixelSize.x * 3.0, 0.0)
+    ) * 0.15;
+
+    c += corruptionSample(
+        uv + vec2(-u_pixelSize.x * 3.0, 0.0)
+    ) * 0.15;
+
+    c += corruptionSample(
+        uv + vec2(0.0,  u_pixelSize.y * 3.0)
+    ) * 0.15;
+
+    c += corruptionSample(
+        uv + vec2(0.0, -u_pixelSize.y * 3.0)
+    ) * 0.15;
+
+    return c;
+}
+
+
+// ============================================================
+// SOBEL
+// ============================================================
+
+float sourceLuma(vec2 uv)
 {
     return luminance(texture2D(u_texture, uv).rgb);
 }
 
-float sobelEdge(vec2 uv, vec2 px)
+float sobel(vec2 uv)
 {
-    float tl = sceneLum(uv + vec2(-px.x,  px.y));
-    float tc = sceneLum(uv + vec2( 0.0,   px.y));
-    float tr = sceneLum(uv + vec2( px.x,  px.y));
+    vec2 px = u_pixelSize;
 
-    float ml = sceneLum(uv + vec2(-px.x,  0.0));
-    float mr = sceneLum(uv + vec2( px.x,  0.0));
+    float tl = sourceLuma(uv + vec2(-px.x,  px.y));
+    float tc = sourceLuma(uv + vec2( 0.0,   px.y));
+    float tr = sourceLuma(uv + vec2( px.x,  px.y));
 
-    float bl = sceneLum(uv + vec2(-px.x, -px.y));
-    float bc = sceneLum(uv + vec2( 0.0,  -px.y));
-    float br = sceneLum(uv + vec2( px.x, -px.y));
+    float ml = sourceLuma(uv + vec2(-px.x, 0.0));
+    float mr = sourceLuma(uv + vec2( px.x, 0.0));
+
+    float bl = sourceLuma(uv + vec2(-px.x, -px.y));
+    float bc = sourceLuma(uv + vec2( 0.0,  -px.y));
+    float br = sourceLuma(uv + vec2( px.x, -px.y));
 
     float gx =
     -tl - 2.0 * ml - bl +
@@ -115,432 +135,476 @@ float sobelEdge(vec2 uv, vec2 px)
 }
 
 
-// ------------------------------------------------------------
-// CORRUPTION BOUNDARY
-// Gives extra ink around reaction-diffusion structures.
-// ------------------------------------------------------------
-
-float corruptionEdge(vec2 uv)
-{
-    float l = corruptionAt(uv - vec2(u_pixelSize.x, 0.0));
-    float r = corruptionAt(uv + vec2(u_pixelSize.x, 0.0));
-    float d = corruptionAt(uv - vec2(0.0, u_pixelSize.y));
-    float u = corruptionAt(uv + vec2(0.0, u_pixelSize.y));
-
-    float gx = r - l;
-    float gy = u - d;
-
-    return sqrt(gx * gx + gy * gy);
-}
-
+// ============================================================
+// MAIN
+// ============================================================
 
 void main()
 {
+    gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
+    return;
+
     vec2 uv = v_texCoords;
 
-    vec4 original = texture2D(u_texture, uv);
+    vec4 untouched = texture2D(u_texture, uv);
+
 
     // --------------------------------------------------------
-    // RAW CORRUPTION
+    // 1. INVISIBLE CORRUPTION INFLUENCE
     // --------------------------------------------------------
 
-    float corruptionRaw = corruptionAt(uv);
+    float corruptionRaw = smoothCorruption(uv);
 
-    // u_threshold determines where visible corruption begins.
-    float threshold = clamp(u_threshold, 0.0, 0.98);
+    float threshold = clamp(
+        u_threshold,
+        0.0,
+        0.9
+    );
 
+    // Extremely wide transition.
+    //
+    // This is important:
+    // we do NOT want the viewer to see where the effect
+    // geometrically begins.
     float corruption = smoothstep(
         threshold,
-        min(threshold + 0.30, 1.0),
-        corruptionRaw
-    );
-
-    float severeCorruption = smoothstep(
-        min(threshold + 0.15, 0.95),
-        1.0,
+        min(threshold + 0.45, 1.0),
         corruptionRaw
     );
 
 
     // --------------------------------------------------------
-    // ORGANIC NOISE
+    // 2. ORGANIC BREAKUP
+    // --------------------------------------------------------
+
+    vec2 pixelPos =
+    uv / max(u_pixelSize, vec2(0.00001));
+
+    // Time is deliberately quantised.
     //
-    // Multiple different frequencies stop the dissolve from
-    // looking like uniform TV/static noise.
-    // --------------------------------------------------------
+    // Smooth sine-wave motion feels like water/heat.
+    // Small temporal steps feel subtly "wrong" in pixel art.
+    float steppedTime =
+    floor(u_time * 8.0) / 8.0;
 
-    vec2 pixelCoord = uv / max(u_pixelSize, vec2(0.00001));
-
-    float slowTime = u_time * 0.035;
-
-    float largeGrowth = fbm(
-        pixelCoord * 0.018 +
-        vec2(slowTime, -slowTime * 0.37)
+    float organicA = fbm(
+        pixelPos * 0.025 +
+        vec2(
+        steppedTime * 0.15,
+        -steppedTime * 0.09
+        )
     );
 
-    float mediumDecay = fbm(
-        pixelCoord * 0.055 +
-        vec2(-slowTime * 0.27, slowTime * 0.19)
+    float organicB = fbm(
+        pixelPos * 0.061 +
+        vec2(
+        -steppedTime * 0.07,
+        steppedTime * 0.11
+        )
     );
 
-    float fineRot = valueNoise(
-        pixelCoord * 0.19 +
-        vec2(slowTime * 0.11, slowTime * 0.07)
+    float organic =
+    organicA * 0.68 +
+    organicB * 0.32;
+
+
+    // Prevent the corruption from looking like one perfectly
+    // uniform circular field.
+    float breakup =
+    smoothstep(
+        0.18,
+        0.82,
+        organic + corruption * 0.36
     );
 
-    float organicNoise =
-    largeGrowth * 0.55 +
-    mediumDecay * 0.32 +
-    fineRot * 0.13;
+    float influence =
+    corruption *
+    mix(0.38, 1.0, breakup);
 
 
-    // --------------------------------------------------------
-    // DEAD / ASH COLOUR
+    // Very gentle breathing.
     //
-    // Almost all chroma is removed. The small tonal variation
-    // makes the corrupted image feel dirty rather than simply
-    // using a standard grayscale filter.
-    // --------------------------------------------------------
-
-    float gray = luminance(original.rgb);
-
-    float ashNoise =
-    valueNoise(pixelCoord * 0.08) * 0.10 - 0.05;
-
-    vec3 ashColor =
-    vec3(gray * 0.72 + ashNoise);
-
-    // Cold/dead neutral tone. Deliberately low chroma.
-    ashColor *= vec3(0.94, 0.94, 0.92);
-
-    // Crushing contrast creates the harsh ink / dead-world look.
-    ashColor = (ashColor - 0.5) * 1.28 + 0.5;
-    ashColor = clamp(ashColor, 0.0, 1.0);
-
-    // Corruption progressively destroys colour information.
-    vec3 deadWorld = mix(
-        original.rgb,
-        ashColor,
-        corruption
+    // Not enough to look like a magical pulse.
+    float breathing =
+    0.94 +
+    0.06 *
+    sin(
+        u_time * 1.17 +
+        organicA * 5.0
     );
 
-    // At very high corruption the remaining surfaces become
-    // darker and more lifeless.
-    deadWorld *= mix(
-        1.0,
-        0.52,
-        severeCorruption
-    );
+    influence *= breathing;
 
-
-    // --------------------------------------------------------
-    // ORGANIC DISSOLVE / EROSION
-    //
-    // corruption + noise controls which physical parts of the
-    // rendered world are eaten by the void.
-    //
-    // Higher corruption lowers the amount of noise required to
-    // erase a pixel.
-    // --------------------------------------------------------
-
-    float erosionField =
-    organicNoise * 0.78 +
-    corruptionRaw * 0.62;
-
-    float erosionThreshold =
-    1.08 - corruption * 0.48;
-
-    float dissolve = smoothstep(
-        erosionThreshold - 0.075,
-        erosionThreshold + 0.075,
-        erosionField
-    );
-
-    // Stronger destruction in deeply corrupted regions.
-    dissolve = max(
-        dissolve,
-        severeCorruption *
-        smoothstep(0.47, 0.72, organicNoise)
-    );
-
-
-    // --------------------------------------------------------
-    // FRAYED / BURNT-PAPER BORDER
-    //
-    // The narrow band immediately before total disappearance
-    // is heavily darkened, creating mold/burnt organic borders.
-    // --------------------------------------------------------
-
-    float dissolveCore = smoothstep(
-        erosionThreshold + 0.025,
-        erosionThreshold + 0.105,
-        erosionField
-    );
-
-    float dissolveOuter = smoothstep(
-        erosionThreshold - 0.13,
-        erosionThreshold + 0.015,
-        erosionField
-    );
-
-    float rotRim = clamp(
-        dissolveOuter - dissolveCore,
+    influence = clamp(
+        influence,
         0.0,
         1.0
     );
 
-    rotRim *= corruption;
-
-
-    // Small speckled lesions around the advancing boundary.
-    float speckThreshold = mix(
-        0.83,
-        0.43,
-        corruption
-    );
-
-    float specks = smoothstep(
-        speckThreshold,
-        speckThreshold + 0.08,
-        fineRot
-    );
-
-    specks *= corruption;
-    specks *= 1.0 - dissolveCore;
-
-    // Keep isolated damage less aggressive outside strongly
-    // corrupted areas.
-    specks *= smoothstep(0.15, 0.75, corruption);
-
 
     // --------------------------------------------------------
-    // VOID COLOUR
+    // 3. READ LOCAL GRADIENT OF THE GRAY-SCOTT FIELD
+    // --------------------------------------------------------
+
+    float cL = corruptionSample(
+        uv - vec2(u_pixelSize.x * 2.0, 0.0)
+    );
+
+    float cR = corruptionSample(
+        uv + vec2(u_pixelSize.x * 2.0, 0.0)
+    );
+
+    float cD = corruptionSample(
+        uv - vec2(0.0, u_pixelSize.y * 2.0)
+    );
+
+    float cU = corruptionSample(
+        uv + vec2(0.0, u_pixelSize.y * 2.0)
+    );
+
+    vec2 gradient = vec2(
+    cR - cL,
+    cU - cD
+    );
+
+
+    // Rotate gradient 90 degrees.
     //
-    // u_backgroundColor acts as the configured base, but the
-    // result is forced into a nearly colourless black/void so
-    // saturated backgrounds cannot turn this into neon.
-    // --------------------------------------------------------
-
-    float bgLum = luminance(u_backgroundColor.rgb);
-
-    vec3 neutralBackground = vec3(bgLum);
-
-    vec3 voidColor = mix(
-        vec3(0.0),
-        neutralBackground * 0.16,
-        0.25
+    // This causes textures to subtly crawl ALONG the
+    // corruption structures instead of merely expanding
+    // radially from the centre.
+    vec2 tangent = vec2(
+    -gradient.y,
+    gradient.x
     );
 
-    // Tiny, non-luminous variation inside the darkness.
-    float voidTexture =
-    fbm(pixelCoord * 0.035 + vec2(4.7, -8.2));
+    float tangentLength =
+    length(tangent);
 
-    voidColor += vec3(voidTexture * 0.018);
-    voidColor = clamp(voidColor, 0.0, 0.075);
-
-
-    // Burn / mold rim.
-    deadWorld = mix(
-        deadWorld,
-        voidColor,
-        rotRim * 0.86
-    );
-
-    // Fine holes appearing before the larger chunks disappear.
-    deadWorld = mix(
-        deadWorld,
-        voidColor,
-        specks * 0.50
-    );
-
-    // Fully eaten regions.
-    deadWorld = mix(
-        deadWorld,
-        voidColor,
-        dissolveCore
-    );
+    if (tangentLength > 0.0001)
+    {
+        tangent /= tangentLength;
+    }
+    else
+    {
+        tangent = vec2(1.0, 0.0);
+    }
 
 
     // --------------------------------------------------------
-    // SOBEL INK EDGES
+    // 4. PROCEDURAL PIXEL DISPLACEMENT
+    // --------------------------------------------------------
+
+    float directionNoise =
+    noise2D(
+        floor(pixelPos * 0.125) +
+        steppedTime * 3.1
+    );
+
+    vec2 noiseDirection = vec2(
+    directionNoise * 2.0 - 1.0,
+    noise2D(
+        floor(pixelPos * 0.125) +
+        vec2(41.7, 13.1) +
+        steppedTime * 2.3
+    ) * 2.0 - 1.0
+    );
+
+    vec2 displacementDirection =
+    tangent * 0.62 +
+    noiseDirection * 0.38;
+
+
+    // Maximum movement in PIXELS.
     //
-    // In corrupted regions the edge lookup receives a tiny
-    // irregular displacement. This does NOT create chromatic
-    // aberration; every colour channel samples the same UV.
-    // It merely makes the line work less mechanically stable.
+    // This is intentionally small.
+    float displacementPixels =
+    influence *
+    mix(
+        0.35,
+        1.80,
+        organic
+    );
+
+
+    vec2 displacement =
+    displacementDirection *
+    displacementPixels;
+
+
+    // --------------------------------------------------------
+    // 5. HARD PIXEL QUANTISATION
+    //
+    // Important for your pixel-art aesthetic.
+    //
+    // Instead of smooth UV warping, pixels genuinely jump
+    // to neighbouring texels.
     // --------------------------------------------------------
 
-    float jitterNoise = valueNoise(
-        pixelCoord * 0.12 +
-        vec2(
-        u_time * 0.21,
-        -u_time * 0.17
-        )
+    vec2 quantizedDisplacement =
+    sign(displacement) *
+    floor(abs(displacement) + vec2(0.5));
+
+
+    vec2 warpedUV =
+    uv +
+    quantizedDisplacement *
+    u_pixelSize;
+
+
+    // --------------------------------------------------------
+    // 6. SMALL LOCAL TEXTURE "MISREGISTRATION"
+    //
+    // This is NOT a glitch line.
+    //
+    // Small irregular chunks of the texture occasionally
+    // occupy a neighbouring pixel position.
+    // --------------------------------------------------------
+
+    vec2 cell =
+    floor(pixelPos / 4.0);
+
+    float cellNoise =
+    hash21(
+        cell +
+        floor(steppedTime * 3.0)
     );
 
-    float jitterSign = jitterNoise * 2.0 - 1.0;
-
-    vec2 jitterOffset = vec2(
-    jitterSign,
-    -jitterSign * 0.63
+    float wrongCell =
+    smoothstep(
+        0.77,
+        0.94,
+        cellNoise
     );
 
-    jitterOffset *=
+    wrongCell *=
+    influence *
+    influence;
+
+
+    vec2 microOffsetDirection = vec2(
+    hash21(cell + 7.31) * 2.0 - 1.0,
+    hash21(cell + 19.73) * 2.0 - 1.0
+    );
+
+    vec2 microOffset =
+    sign(microOffsetDirection) *
     u_pixelSize *
-    corruption *
-    1.35;
+    wrongCell;
 
-    float edgeNormal = sobelEdge(
-        uv,
-        u_pixelSize
-    );
 
-    float edgeJittered = sobelEdge(
-        uv + jitterOffset,
-        u_pixelSize
-    );
+    warpedUV += microOffset;
 
-    float sceneEdge = mix(
-        edgeNormal,
-        edgeJittered,
-        corruption
+
+    // Keep sampling valid.
+    warpedUV = clamp(
+        warpedUV,
+        vec2(0.001),
+        vec2(0.999)
     );
 
 
     // --------------------------------------------------------
-    // REACTION-DIFFUSION INK VEINS
+    // 7. SAMPLE THE SICK WORLD
+    // --------------------------------------------------------
+
+    vec4 warped =
+    texture2D(
+        u_texture,
+        warpedUV
+    );
+
+
+    // --------------------------------------------------------
+    // 8. VERY SMALL LOSS OF COLOUR STABILITY
     //
-    // Makes the Gray-Scott shapes themselves acquire black
-    // organic boundaries.
-    // --------------------------------------------------------
-
-    float mapEdge = corruptionEdge(uv);
-
-    float inkThreshold = mix(
-        0.23,
-        0.12,
-        corruption
-    );
-
-    float inkEdge = smoothstep(
-        inkThreshold,
-        inkThreshold + 0.22,
-        sceneEdge
-    );
-
-    float corruptionInk = smoothstep(
-        0.015,
-        0.085,
-        mapEdge
-    );
-
-    corruptionInk *= corruption;
-
-
-    // Increase outline dominance as the environment dies.
-    float combinedInk = max(
-        inkEdge * mix(1.0, 1.45, corruption),
-        corruptionInk * 0.90
-    );
-
-    combinedInk = clamp(combinedInk, 0.0, 1.0);
-
-
-    // --------------------------------------------------------
-    // LINE COLOUR
+    // NOT grayscale.
+    // NOT a visible desaturation filter.
     //
-    // Preserve u_lineColor, but force corrupted ink toward
-    // black so brightly configured line colours cannot become
-    // cyberpunk/neon.
+    // It merely makes corrupted pixels feel slightly less
+    // alive than their neighbours.
     // --------------------------------------------------------
 
-    float lineLum = luminance(u_lineColor.rgb);
+    float warpedLum =
+    luminance(warped.rgb);
 
-    vec3 normalLine = u_lineColor.rgb;
+    vec3 neutral =
+    vec3(warpedLum);
 
-    vec3 corruptedLine =
-    vec3(lineLum) * 0.14;
 
-    vec3 finalLineColor = mix(
-        normalLine,
-        corruptedLine,
-        corruption
+    // We still deliberately consume u_backgroundColor, but
+    // only as a tiny tuning influence -- never as an overlay.
+    float backgroundLum =
+    luminance(u_backgroundColor.rgb);
+
+    float sicknessAmount =
+    influence *
+    (
+    0.035 +
+    backgroundLum * 0.025
     );
 
-    finalLineColor = mix(
-        finalLineColor,
-        vec3(0.0),
-        severeCorruption * 0.85
+
+    vec3 sickColor =
+    mix(
+        warped.rgb,
+        neutral,
+        sicknessAmount
     );
 
 
     // --------------------------------------------------------
-    // EDGE PRESERVATION INSIDE DISSOLVE
+    // 9. LOCAL CONTRAST INSTABILITY
     //
-    // Allows black remnants / contour fragments to persist
-    // briefly after surrounding surfaces have been eaten.
+    // A tiny luminance error makes textures appear "infected"
+    // without painting anything on top of them.
     // --------------------------------------------------------
 
-    float survivingInk =
-    combinedInk *
-    (1.0 - dissolveCore * 0.42);
-
-    float edgeAmount =
-    survivingInk *
-    clamp(u_enableEdges, 0.0, 1.0);
-
-    vec3 finalColor = mix(
-        deadWorld,
-        finalLineColor,
-        edgeAmount
+    float textureDisease =
+    noise2D(
+        pixelPos * 0.18 +
+        floor(steppedTime * 4.0)
     );
 
+    float diseaseSignal =
+    (textureDisease - 0.5) *
+    influence;
+
+
+    sickColor +=
+    vec3(diseaseSignal * 0.035);
+
 
     // --------------------------------------------------------
-    // FINAL DECAY
+    // 10. NEIGHBOUR PIXEL CONTAMINATION
     //
-    // Extremely corrupted areas receive uneven black stains,
-    // giving the surviving material an infected / printed-ink
-    // quality rather than a smooth digital fade.
+    // Some pixels borrow information from a neighbouring
+    // texel. All RGB channels use THE SAME coordinates:
+    // therefore no chromatic aberration.
     // --------------------------------------------------------
 
-    float blackStainNoise = fbm(
-        pixelCoord * 0.027 +
-        vec2(17.31, -5.77)
+    float neighbourChoice =
+    noise2D(
+        floor(pixelPos * 0.5) +
+        vec2(91.7, 14.2)
     );
 
-    float blackStains = smoothstep(
-        0.50,
-        0.79,
-        blackStainNoise + severeCorruption * 0.32
+    vec2 neighbourOffset;
+
+    if (neighbourChoice < 0.25)
+    neighbourOffset = vec2( 1.0,  0.0);
+    else if (neighbourChoice < 0.50)
+    neighbourOffset = vec2(-1.0,  0.0);
+    else if (neighbourChoice < 0.75)
+    neighbourOffset = vec2( 0.0,  1.0);
+    else
+    neighbourOffset = vec2( 0.0, -1.0);
+
+
+    vec3 neighbour =
+    texture2D(
+        u_texture,
+        clamp(
+            warpedUV +
+            neighbourOffset *
+            u_pixelSize,
+            vec2(0.001),
+            vec2(0.999)
+        )
+    ).rgb;
+
+
+    float contamination =
+    influence *
+    wrongCell *
+    0.20;
+
+
+    sickColor =
+    mix(
+        sickColor,
+        neighbour,
+        contamination
     );
 
-    blackStains *= severeCorruption;
-    blackStains *= 1.0 - edgeAmount * 0.35;
 
-    finalColor = mix(
-        finalColor,
-        voidColor,
-        blackStains * 0.42
+    // --------------------------------------------------------
+    // 11. SOBEL / INK
+    //
+    // Important distinction:
+    //
+    // We DO NOT detect edges in the corruption map.
+    //
+    // Therefore the aura itself can NEVER receive a black
+    // outline.
+    // --------------------------------------------------------
+
+    float edge =
+    sobel(warpedUV);
+
+    float edgeMask =
+    smoothstep(
+        0.20,
+        0.58,
+        edge
     );
 
 
-    // Absolute final colour clamp. Prevent accidental bright
-    // corrupted pixels from surviving.
-    vec3 corruptedClamp = min(
-        finalColor,
-        vec3(0.72)
+    // Existing normal ink rendering.
+    float normalInk =
+    edgeMask *
+    u_enableEdges *
+    0.16;
+
+
+    // Corruption makes EXISTING texture edges slightly more
+    // unstable / pronounced.
+    //
+    // It never outlines the corruption itself.
+    float sickInk =
+    edgeMask *
+    influence *
+    u_enableEdges *
+    0.18;
+
+
+    float inkAmount =
+    clamp(
+        normalInk + sickInk,
+        0.0,
+        0.38
     );
 
-    finalColor = mix(
-        finalColor,
-        corruptedClamp,
-        corruption
+
+    sickColor =
+    mix(
+        sickColor,
+        u_lineColor.rgb,
+        inkAmount
+    );
+
+
+    // --------------------------------------------------------
+    // 12. FINAL
+    //
+    // Outside corruption:
+    // result ~= untouched original.
+    //
+    // Inside corruption:
+    // the TEXTURE itself behaves incorrectly.
+    // --------------------------------------------------------
+
+    vec3 finalColor =
+    mix(
+        untouched.rgb,
+        sickColor,
+        influence
     );
 
 
     gl_FragColor = vec4(
     finalColor,
-    original.a
+    untouched.a
     );
 }
+/*

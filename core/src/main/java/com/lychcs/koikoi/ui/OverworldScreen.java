@@ -242,59 +242,131 @@ public class OverworldScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         if (fbo == null) {
-            resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+            resize(
+                Gdx.graphics.getWidth(),
+                Gdx.graphics.getHeight()
+            );
         }
 
-        // 1. PHASE: Welt in den FrameBuffer rendern
-        fbo.begin();
-        ScreenUtils.clear(0, 0, 0, 1);
+        int screenWidth = Gdx.graphics.getWidth();
+        int screenHeight = Gdx.graphics.getHeight();
 
-        // Zeit für Shader-Animationen hochzählen
         overworldTime += delta;
 
-        // Physik-Welt vorwärtsrechnen (Step)
         world.step(delta, 6, 2);
 
         handleMovement(delta);
         handleInteractions();
 
-        // Spieler-Logik aktualisieren (mit Übergabe der Geschwindigkeit für die Animation)
-        player.update(delta, player.body.getLinearVelocity());
+        player.update(
+            delta,
+            player.body.getLinearVelocity()
+        );
 
-        // Kamera folgt dem Spieler (zentriert über die Render-Position)
+        // ============================================================
+        // KAMERA
+        // ============================================================
+
         Vector2 renderPos = player.getRenderPosition();
-        float targetX = renderPos.x + 32f; // Mitte des Sprites (32f ist die halbe Breite)
-        float targetY = renderPos.y + 32f; // Mitte der Höhe des Sprites
 
-        float camHalfWidth = camera.viewportWidth * 0.5f * camera.zoom;
-        float camHalfHeight = camera.viewportHeight * 0.5f * camera.zoom;
+        float targetX = renderPos.x + 32f;
+        float targetY = renderPos.y + 32f;
 
-        float clampedX = com.badlogic.gdx.math.MathUtils.clamp(targetX, camHalfWidth, mapPixelWidth - camHalfWidth);
-        float clampedY = com.badlogic.gdx.math.MathUtils.clamp(targetY, camHalfHeight, mapPixelHeight - camHalfHeight);
+        float camHalfWidth =
+            camera.viewportWidth * 0.5f * camera.zoom;
 
-        camera.position.set(clampedX, clampedY, 0);
+        float camHalfHeight =
+            camera.viewportHeight * 0.5f * camera.zoom;
+
+        float clampedX;
+
+        if (mapPixelWidth <= camHalfWidth * 2f) {
+            clampedX = mapPixelWidth * 0.5f;
+        } else {
+            clampedX = com.badlogic.gdx.math.MathUtils.clamp(
+                targetX,
+                camHalfWidth,
+                mapPixelWidth - camHalfWidth
+            );
+        }
+
+        float clampedY;
+
+        if (mapPixelHeight <= camHalfHeight * 2f) {
+            clampedY = mapPixelHeight * 0.5f;
+        } else {
+            clampedY = com.badlogic.gdx.math.MathUtils.clamp(
+                targetY,
+                camHalfHeight,
+                mapPixelHeight - camHalfHeight
+            );
+        }
+
+        camera.position.set(
+            clampedX,
+            clampedY,
+            0f
+        );
+
         camera.update();
 
+        // ============================================================
+        // PHASE 1: WELT IN DEN FRAMEBUFFER RENDERN
+        // ============================================================
+
+        fbo.begin();
+
+        Gdx.gl.glViewport(
+            0,
+            0,
+            fbo.getWidth(),
+            fbo.getHeight()
+        );
+
+        ScreenUtils.clear(
+            0f,
+            0f,
+            0f,
+            1f
+        );
+
         mapRenderer.setView(camera);
+
+        mapRenderer.getBatch().setShader(null);
         mapRenderer.getBatch().begin();
 
-        // 1. Kachelebenen zeichnen (Boden, Wege, etc.)
+        // Kachelebenen zeichnen
         for (MapLayer layer : map.getLayers()) {
             if (layer instanceof TiledMapTileLayer) {
-                mapRenderer.renderTileLayer((TiledMapTileLayer) layer);
+                mapRenderer.renderTileLayer(
+                    (TiledMapTileLayer) layer
+                );
             }
         }
 
-        // 2. Y-Sorting Liste füllen
+        // Y-Sorting-Liste aufbauen
         List<RenderNode> renderList = new ArrayList<>();
-        renderList.add(new RenderNode(renderPos.y, player));
+
+        renderList.add(
+            new RenderNode(
+                renderPos.y,
+                player
+            )
+        );
 
         for (MapLayer layer : map.getLayers()) {
             if (!(layer instanceof TiledMapTileLayer)) {
                 for (MapObject obj : layer.getObjects()) {
                     if (obj instanceof TiledMapTileMapObject) {
-                        TiledMapTileMapObject tObj = (TiledMapTileMapObject) obj;
-                        renderList.add(new RenderNode(tObj.getY(), tObj));
+                        TiledMapTileMapObject tiledObject =
+                            (TiledMapTileMapObject) obj;
+
+                        renderList.add(
+                            new RenderNode(
+                                tiledObject.getY(),
+                                tiledObject
+                            )
+                        );
                     }
                 }
             }
@@ -302,86 +374,180 @@ public class OverworldScreen extends ScreenAdapter {
 
         Collections.sort(renderList);
 
-        // 3. Sortierte Objekte zeichnen (inklusive Wind-Shader für Bäume)
+        // Sortierte Objekte zeichnen
         for (RenderNode node : renderList) {
             if (node.playerEntity != null) {
-                node.playerEntity.render((SpriteBatch) mapRenderer.getBatch());
+                node.playerEntity.render(
+                    (SpriteBatch) mapRenderer.getBatch()
+                );
+
+                continue;
+            }
+
+            TiledMapTileMapObject tiledObject =
+                node.mapObject;
+
+            TextureRegion region =
+                tiledObject
+                    .getTile()
+                    .getTextureRegion();
+
+            String type =
+                tiledObject
+                    .getProperties()
+                    .get(
+                        "type",
+                        String.class
+                    );
+
+            if (type == null) {
+                type =
+                    tiledObject
+                        .getProperties()
+                        .get(
+                            "class",
+                            String.class
+                        );
+            }
+
+            boolean isTree =
+                "tree".equalsIgnoreCase(type);
+
+            if (
+                isTree &&
+                    windShader != null &&
+                    windShader.isCompiled()
+            ) {
+                mapRenderer
+                    .getBatch()
+                    .setShader(windShader);
+
+                windShader.setUniformf(
+                    "u_time",
+                    overworldTime
+                );
+
+                float u = region.getU();
+                float v = region.getV();
+
+                float uWidth =
+                    region.getU2() - u;
+
+                float vHeight =
+                    region.getV2() - v;
+
+                windShader.setUniformf(
+                    "u_region",
+                    u,
+                    v,
+                    uWidth,
+                    vHeight
+                );
+
+                windShader.setUniformf(
+                    "u_regionSizePx",
+                    region.getRegionWidth(),
+                    region.getRegionHeight()
+                );
+
+                windShader.setUniformf(
+                    "u_swayStrength",
+                    2.0f
+                );
+
+                windShader.setUniformf(
+                    "u_swaySpeed",
+                    1.6f
+                );
+
+                windShader.setUniformf(
+                    "u_swayHeightStart",
+                    0.55f
+                );
+
+                windShader.setUniformf(
+                    "u_windStrength",
+                    0.8f
+                );
+
+                windShader.setUniformf(
+                    "u_windScale",
+                    8.0f
+                );
+
+                windShader.setUniformf(
+                    "u_windSpeed",
+                    2.0f
+                );
+
+                windShader.setUniformf(
+                    "u_windHeightStart",
+                    0.35f
+                );
+
+                mapRenderer.getBatch().draw(
+                    region,
+                    tiledObject.getX(),
+                    tiledObject.getY()
+                );
+
+                mapRenderer
+                    .getBatch()
+                    .setShader(null);
             } else {
-                TiledMapTileMapObject tObj = node.mapObject;
-                TextureRegion region = tObj.getTile().getTextureRegion();
-
-                String type = tObj.getProperties().get("type", String.class);
-                if (type == null) type = tObj.getProperties().get("class", String.class);
-
-                boolean isTree = "tree".equalsIgnoreCase(type);
-
-                if (isTree && windShader != null && windShader.isCompiled()) {
-                    mapRenderer.getBatch().setShader(windShader);
-
-                    windShader.setUniformf("u_time", overworldTime);
-
-                    float u = region.getU();
-                    float v = region.getV();
-                    float uWidth = region.getU2() - u;
-                    float vHeight = region.getV2() - v;
-                    windShader.setUniformf("u_region", u, v, uWidth, vHeight);
-                    windShader.setUniformf("u_regionSizePx", region.getRegionWidth(), region.getRegionHeight());
-
-                    windShader.setUniformf("u_swayStrength", 2.0f);
-                    windShader.setUniformf("u_swaySpeed", 1.6f);
-                    windShader.setUniformf("u_swayHeightStart", 0.55f);
-
-                    windShader.setUniformf("u_windStrength", 0.8f);
-                    windShader.setUniformf("u_windScale", 8.0f);
-                    windShader.setUniformf("u_windSpeed", 2.0f);
-                    windShader.setUniformf("u_windHeightStart", 0.35f);
-
-                    mapRenderer.getBatch().draw(region, tObj.getX(), tObj.getY());
-                    mapRenderer.getBatch().setShader(null);
-                } else {
-                    mapRenderer.getBatch().draw(region, tObj.getX(), tObj.getY());
-                }
+                mapRenderer.getBatch().draw(
+                    region,
+                    tiledObject.getX(),
+                    tiledObject.getY()
+                );
             }
         }
 
+        mapRenderer.getBatch().setShader(null);
         mapRenderer.getBatch().end();
+
         fbo.end();
 
-        // Den Spieler als Störquelle einspeisen
-        com.badlogic.gdx.math.Vector3 screenPos = camera.project(new com.badlogic.gdx.math.Vector3(player.body.getPosition().x, player.body.getPosition().y + 16f, 0));
-        float normX = screenPos.x / Gdx.graphics.getWidth();
-        float normY = 1.0f - (screenPos.y / Gdx.graphics.getHeight());
-
-        // Feine Dauer-Injektion (0.02f statt riesigem Kreis)
-        corruptionEngine.injectDisturbance(normX, normY, 0.02f);
+        // ============================================================
+// CORRUPTION-SIMULATION
+// ============================================================
 
         corruptionEngine.update(delta);
 
-        // 2. PHASE: Post-Processing mit der Corruption Map
-        ScreenUtils.clear(0, 0, 0, 1);
+// screenWidth und screenHeight wurden bereits oben deklariert
+        Gdx.gl.glViewport(
+            0,
+            0,
+            screenWidth,
+            screenHeight
+        );
 
-        screenBatch.begin();
+        ScreenUtils.clear(0f, 0f, 0f, 1f);
+
+        screenBatch.getProjectionMatrix().setToOrtho2D(
+            0f,
+            0f,
+            screenWidth,
+            screenHeight
+        );
+
+// Pink-Testshader aktivieren
         screenBatch.setShader(edgeShader);
+        screenBatch.begin();
 
-        edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
-        edgeShader.setUniformf("u_threshold", 0.1f);
-        edgeShader.setUniformf("u_lineColor", 0.12f, 0.10f, 0.14f, 1.0f);
-        edgeShader.setUniformf("u_backgroundColor", 0.94f, 0.91f, 0.83f, 1.0f);
-        edgeShader.setUniformf("u_time", overworldTime);
-
-        // FIX: Den Schalter als sauberen Float übergeben!
-        edgeShader.setUniformf("u_enableEdges", enableEdgeDetection ? 1.0f : 0.0f);
-
-        corruptionEngine.getCorruptionMap().bind(1);
-        Gdx.gl.glActiveTexture(GL20.GL_TEXTURE0);
-        edgeShader.setUniformi("u_corruptionMap", 1);
-
-        screenBatch.draw(fboRegion, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        screenBatch.draw(
+            fboRegion,
+            0f,
+            0f,
+            screenWidth,
+            screenHeight
+        );
 
         screenBatch.end();
         screenBatch.setShader(null);
 
-        // 3. PHASE: UI scharf über die Szene legen
+// UI bleibt vom Shader unbeeinflusst
+        uiStage.getViewport().apply();
         uiStage.act(delta);
         uiStage.draw();
     }
