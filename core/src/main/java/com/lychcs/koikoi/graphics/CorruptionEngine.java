@@ -78,7 +78,7 @@ public class CorruptionEngine {
 
     public void update(float delta) {
         time += delta; // Zeit hochzählen
-        int iterations = 15;
+        int iterations = 2;
         for (int i = 0; i < iterations; i++) {
             FrameBuffer source = isPingPong ? fboA : fboB;
             FrameBuffer target = isPingPong ? fboB : fboA;

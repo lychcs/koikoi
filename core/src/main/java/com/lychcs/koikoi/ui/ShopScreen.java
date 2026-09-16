@@ -64,7 +64,6 @@ public class ShopScreen extends ScreenAdapter {
 
     private void initAssets() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
@@ -150,7 +149,7 @@ public class ShopScreen extends ScreenAdapter {
         exitButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
             }
         });
 

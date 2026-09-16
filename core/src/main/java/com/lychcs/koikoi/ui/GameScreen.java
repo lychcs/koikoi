@@ -148,9 +148,6 @@ public class GameScreen extends ScreenAdapter {
         activeOmamoris.addAll(runSession.getActiveOmamoris());
         renderOmamoris();
 
-        if (runSession.getYokaiBag() != null) {
-            runSession.getYokaiBag().forEach(y -> y.setExhausted(false));
-        }
         activeAltarYokai = null;
         renderYokaiUI();
 
@@ -368,8 +365,8 @@ public class GameScreen extends ScreenAdapter {
 
         // 2. PHASE: Post-Processing
         ScreenUtils.clear(0, 0, 0, 1);
-        screenBatch.begin();
         screenBatch.setShader(edgeShader);
+        screenBatch.begin();
 
         // Standard Edge Uniforms
         edgeShader.setUniformf("u_pixelSize", 1f / Gdx.graphics.getWidth(), 1f / Gdx.graphics.getHeight());
@@ -553,11 +550,11 @@ public class GameScreen extends ScreenAdapter {
             runSession.advanceEncounterStage();
 
             if (completedStage == 3) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, defeatedSeason));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new CutsceneScreen(runSession, defeatedSeason));
             } else if (defeatedSeason == GameSeason.FINAL) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
             } else {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
             }
 
         } else if (handsRemaining <= 0) {
@@ -569,7 +566,7 @@ public class GameScreen extends ScreenAdapter {
             stage.addAction(Actions.sequence(
                 Actions.delay(1.5f),
                 Actions.run(() -> {
-                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
+                    ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
                 })
             ));
         } else {

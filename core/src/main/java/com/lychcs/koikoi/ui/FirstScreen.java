@@ -46,7 +46,6 @@ public class FirstScreen extends ScreenAdapter {
         logoTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
@@ -71,7 +70,7 @@ public class FirstScreen extends ScreenAdapter {
                 RunSession currentRun = new RunSession();
 
                 // 2. Direkt auf die Overworld-Map springen!
-                game.setScreen(new OverworldScreen(currentRun));
+                game.changeScreen(new OverworldScreen(currentRun));
             }
         });
 

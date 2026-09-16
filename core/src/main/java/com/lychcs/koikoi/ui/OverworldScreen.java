@@ -610,9 +610,9 @@ public class OverworldScreen extends ScreenAdapter {
                         // Position speichern (wie beim Shop mit Sprite-Offset -32f / -12f)
                         // Optional: Einen kleinen Schritt zurücksetzen (z. B. y - 10f),
                         // damit man nach dem Kampf nicht sofort wieder mitten im Trigger steht!
-                        runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 20f);
+                        runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
 
-                        ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new GameScreen(runSession));
+                        ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new GameScreen(runSession));
                         return;
                     }
 
@@ -624,8 +624,8 @@ public class OverworldScreen extends ScreenAdapter {
 
                         if (ePressed) {
                             Vector2 currentPos = player.body.getPosition();
-                            runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 12f);
-                            ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShopScreen(runSession));
+                            runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
+                            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new ShopScreen(runSession));
                             return;
                         }
                     } else if ("shrine".equals(type)) {
@@ -635,8 +635,8 @@ public class OverworldScreen extends ScreenAdapter {
 
                         if (ePressed) {
                             Vector2 currentPos = player.body.getPosition();
-                            runSession.setLastPlayerPosition(currentPos.x - 32f, currentPos.y - 12f);
-                            ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new ShrineScreen(runSession));
+                            runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
+                            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new ShrineScreen(runSession));
                             return;
                         }
                     }

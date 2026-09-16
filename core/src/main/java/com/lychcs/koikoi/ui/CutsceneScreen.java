@@ -46,7 +46,6 @@ public class CutsceneScreen extends ScreenAdapter {
     private void initAssets() {
 
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
@@ -88,9 +87,9 @@ public class CutsceneScreen extends ScreenAdapter {
         proceedButton.addListener(new ClickListener() {
             @Override public void clicked(InputEvent event, float x, float y) {
                 if (isFinal) {
-                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new FirstScreen((KoiKoiGame) Gdx.app.getApplicationListener()));
+                    ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new FirstScreen((KoiKoiGame) Gdx.app.getApplicationListener()));
                 } else {
-                    ((KoiKoiGame) Gdx.app.getApplicationListener()).setScreen(new OverworldScreen(runSession));
+                    ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
                 }
             }
         });
