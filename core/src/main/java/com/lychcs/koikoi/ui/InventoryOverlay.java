@@ -4,20 +4,33 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
-import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.lychcs.koikoi.model.Card;
+import com.lychcs.koikoi.model.hanko.Hanko;
+import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.Yokai;
 import com.lychcs.koikoi.run.RunSession;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 public class InventoryOverlay extends Group {
 
@@ -31,96 +44,80 @@ public class InventoryOverlay extends Group {
     private final Table contentArea;
     private final Label currencyLabel;
     private final TextButton hankoTab;
-    private boolean isOpen = false;
 
-    private HankoEffect selectedHankoToApply = null;
+    private boolean open;
+    private HankoEffect selectedHankoToApply;
 
-    public InventoryOverlay(RunSession session, Skin skin, TextureAtlas atlas,
-                            NinePatchDrawable panelBg, TextButton.TextButtonStyle btnStyle) {
-        this.runSession = session;
+    public InventoryOverlay(
+        RunSession runSession,
+        Skin skin,
+        TextureAtlas atlas,
+        NinePatchDrawable panelBackground,
+        TextButton.TextButtonStyle buttonStyle
+    ) {
+        this.runSession = runSession;
         this.skin = skin;
         this.atlas = atlas;
-        this.panelBackground = panelBg;
-        this.buttonStyle = btnStyle;
+        this.panelBackground = panelBackground;
+        this.buttonStyle = buttonStyle;
 
-        setSize(1280, 720);
+        setSize(1280f, 720f);
         setVisible(false);
 
-        // 1. Hintergrund-Dimmer: Fängt Klicks ab, damit man nicht durch das Menü klickt
         Image dimBackground = new Image(skin.getRegion("white"));
-        dimBackground.setSize(1280, 720);
+        dimBackground.setSize(1280f, 720f);
         dimBackground.setColor(0f, 0f, 0f, 0.65f);
         dimBackground.setTouchable(Touchable.enabled);
         dimBackground.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                // Klick auf den abgedunkelten Rand schließt das Inventar
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
                 toggle();
             }
         });
         addActor(dimBackground);
 
-        // 2. Zentrales Fenster
         mainPanel = new Table();
-        mainPanel.setSize(1000, 580);
-        mainPanel.setPosition(140, 70);
-        mainPanel.setOrigin(500, 290);
+        mainPanel.setSize(1000f, 580f);
+        mainPanel.setPosition(140f, 70f);
+        mainPanel.setOrigin(500f, 290f);
         mainPanel.setBackground(panelBackground);
         mainPanel.setTouchable(Touchable.enabled);
-        mainPanel.pad(20);
-
-        // Klicks auf das Fenster selbst nicht an den Hintergrund weitergeben
+        mainPanel.pad(20f);
         mainPanel.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {}
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                event.stop();
+            }
         });
 
-        // Header
         Table header = new Table();
         TextButton deckTab = new TextButton("Deck", buttonStyle);
         TextButton omamoriTab = new TextButton("Omamori", buttonStyle);
         TextButton yokaiTab = new TextButton("Yokai", buttonStyle);
         hankoTab = new TextButton("Hankos", buttonStyle);
-        TextButton closeBtn = new TextButton("X", buttonStyle);
+        TextButton closeButton = new TextButton("X", buttonStyle);
 
         currencyLabel = new Label("", skin);
         currencyLabel.setFontScale(0.9f);
 
-        deckTab.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                selectedHankoToApply = null;
-                showDeckTab();
-            }
-        });
-        omamoriTab.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                selectedHankoToApply = null;
-                showOmamoriTab();
-            }
-        });
-        yokaiTab.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                selectedHankoToApply = null;
-                showYokaiTab();
-            }
-        });
-        hankoTab.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
-                showHankoTab();
-            }
-        });
-        closeBtn.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) {
+        deckTab.addListener(tabListener(this::showDeckTab));
+        omamoriTab.addListener(tabListener(this::showOmamoriTab));
+        yokaiTab.addListener(tabListener(this::showYokaiTab));
+        hankoTab.addListener(tabListener(this::showHankoTab));
+        closeButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
                 toggle();
             }
         });
 
-        header.add(deckTab).width(115).height(45).padRight(8);
-        header.add(omamoriTab).width(115).height(45).padRight(8);
-        header.add(yokaiTab).width(115).height(45).padRight(8);
-        header.add(hankoTab).width(135).height(45).padRight(20);
+        header.add(deckTab).width(115f).height(45f).padRight(8f);
+        header.add(omamoriTab).width(115f).height(45f).padRight(8f);
+        header.add(yokaiTab).width(115f).height(45f).padRight(8f);
+        header.add(hankoTab).width(135f).height(45f).padRight(20f);
         header.add(currencyLabel).expandX().left();
-        header.add(closeBtn).width(45).height(45).right();
-
-        mainPanel.add(header).expandX().fillX().padBottom(15).row();
+        header.add(closeButton).width(45f).height(45f).right();
+        mainPanel.add(header).expandX().fillX().padBottom(15f).row();
 
         contentArea = new Table();
         contentArea.top().left();
@@ -128,25 +125,36 @@ public class InventoryOverlay extends Group {
         ScrollPane scrollPane = new ScrollPane(contentArea, skin);
         scrollPane.setFadeScrollBars(false);
         scrollPane.setScrollingDisabled(true, false);
-
         mainPanel.add(scrollPane).expand().fill().row();
+
         addActor(mainPanel);
     }
 
-    public void toggle() {
-        isOpen = !isOpen;
+    private ClickListener tabListener(Runnable action) {
+        return new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                selectedHankoToApply = null;
+                action.run();
+            }
+        };
+    }
 
-        if (isOpen) {
+    public void toggle() {
+        open = !open;
+
+        if (open) {
             selectedHankoToApply = null;
             updateCurrencies();
             updateHankoTabBadge();
             showDeckTab();
             setVisible(true);
+
             mainPanel.setScale(0.85f);
             mainPanel.setColor(1f, 1f, 1f, 0f);
             mainPanel.clearActions();
             mainPanel.addAction(Actions.parallel(
-                Actions.scaleTo(1.0f, 1.0f, 0.18f, Interpolation.swingOut),
+                Actions.scaleTo(1f, 1f, 0.18f, Interpolation.swingOut),
                 Actions.fadeIn(0.12f)
             ));
         } else {
@@ -163,11 +171,14 @@ public class InventoryOverlay extends Group {
     }
 
     public boolean isOpen() {
-        return isOpen;
+        return open;
     }
 
     private void updateCurrencies() {
-            currencyLabel.setText("Mon: " + runSession.getMon() + "  |  VOID DUST: " + runSession.getVoidDust());
+        currencyLabel.setText(
+            "Mon: " + runSession.getMon()
+                + "  |  VOID DUST: " + runSession.getVoidDust()
+        );
     }
 
     private void updateHankoTabBadge() {
@@ -175,143 +186,220 @@ public class InventoryOverlay extends Group {
         hankoTab.setText(count > 0 ? "Hankos (" + count + ")" : "Hankos");
     }
 
+    // ---------------------------------------------------------------------
+    // Deck und Hanko-Anwendung
+    // ---------------------------------------------------------------------
+
     private void showDeckTab() {
         contentArea.clearChildren();
         updateHankoTabBadge();
 
-        // Stempel-Leiste
         if (!runSession.getPurchasedHankos().isEmpty()) {
-            Table shelf = new Table();
-            shelf.setBackground(panelBackground);
-            shelf.pad(10);
-
-            Label shelfLabel = new Label("Hanko anwenden:", skin);
-            shelfLabel.setFontScale(0.85f);
-            shelf.add(shelfLabel).padRight(15);
-
-            for (HankoEffect effect : runSession.getPurchasedHankos()) {
-                TextureRegion hRegion = atlas.findRegion("HANKO_" + effect.name());
-                Table hBtn = new Table();
-                hBtn.setTouchable(Touchable.enabled); // Klickbar machen
-                hBtn.pad(6);
-
-                boolean isSelected = (selectedHankoToApply == effect);
-                if (isSelected) {
-                    hBtn.setBackground(panelBackground);
-                }
-
-                if (hRegion != null) {
-                    Image icon = new Image(hRegion);
-                    hBtn.add(icon).size(28, 28).padRight(6);
-                }
-                Label nameLbl = new Label(getHankoShortName(effect), skin);
-                nameLbl.setFontScale(0.75f);
-                if (isSelected) nameLbl.setColor(Color.GOLD);
-                hBtn.add(nameLbl);
-
-                hBtn.addListener(new ClickListener() {
-                    @Override public void clicked(InputEvent e, float x, float y) {
-                        selectedHankoToApply = (selectedHankoToApply == effect) ? null : effect;
-                        showDeckTab();
-                    }
-                });
-
-                shelf.add(hBtn).padRight(12);
-            }
-
-            if (selectedHankoToApply != null) {
-                TextButton cancelBtn = new TextButton("Abbrechen", buttonStyle);
-                cancelBtn.addListener(new ClickListener() {
-                    @Override public void clicked(InputEvent e, float x, float y) {
-                        selectedHankoToApply = null;
-                        showDeckTab();
-                    }
-                });
-                shelf.add(cancelBtn).width(110).height(35).padLeft(10);
-            }
-
-            contentArea.add(shelf).expandX().fillX().padBottom(15).row();
-
-            if (selectedHankoToApply != null) {
-                Label hint = new Label("Waehle eine Karte! (Bestehendes Siegel wird ueberschrieben)", skin);
-                hint.setColor(Color.GOLD);
-                hint.setFontScale(0.85f);
-                hint.setAlignment(Align.center);
-                contentArea.add(hint).padBottom(10).row();
-            }
+            contentArea.add(createHankoShelf()).expandX().fillX().padBottom(12f).row();
         }
 
-        // Karten-Raster
+        if (selectedHankoToApply != null) {
+            Label hint = new Label(
+                "Waehle eine unversiegelte Karte fuer "
+                    + HankoCatalog.getName(selectedHankoToApply) + ".",
+                skin
+            );
+            hint.setColor(Color.GOLD);
+            hint.setAlignment(Align.center);
+            contentArea.add(hint).expandX().fillX().padBottom(10f).row();
+        }
+
         Table cardsGrid = new Table();
-        int col = 0;
+        int column = 0;
 
         for (Card card : runSession.getPlayerDeck().getCards()) {
-            TextureRegion region = atlas.findRegion(card.id().name());
-            Table cardBox = new Table();
-            cardBox.setTouchable(Touchable.enabled); // Ganze Karte inklusive Text klickbar
-            cardBox.setTransform(true);
-            cardBox.setOrigin(30, 60);
-
-            Stack cardStack = new Stack();
-
-            if (region != null) {
-                Image cardImg = new Image(new TextureRegionDrawable(region));
-                cardImg.setSize(60, 106);
-                cardStack.add(cardImg);
+            cardsGrid.add(createCardBox(card)).pad(8f);
+            column++;
+            if (column % 9 == 0) {
+                cardsGrid.row();
             }
-
-            if (card.hasHanko()) {
-                TextureRegion hRegion = atlas.findRegion("HANKO_" + card.effect().name());
-                if (hRegion != null) {
-                    Image badge = new Image(hRegion);
-                    Table badgeContainer = new Table();
-                    badgeContainer.top().right();
-                    badgeContainer.add(badge).size(20, 20).pad(2);
-                    cardStack.add(badgeContainer);
-                }
-            }
-
-            cardBox.add(cardStack).size(60, 106).padBottom(4).row();
-
-            Label nameLbl = new Label(card.name(), skin);
-            nameLbl.setFontScale(0.65f);
-            cardBox.add(nameLbl).row();
-
-            cardBox.addListener(new ClickListener() {
-                @Override public void clicked(InputEvent e, float x, float y) {
-                    if (selectedHankoToApply != null) {
-                        applyHankoToCard(card, selectedHankoToApply);
-                    } else {
-                        cardBox.clearActions();
-                        cardBox.addAction(Actions.sequence(
-                            Actions.scaleTo(1.15f, 1.15f, 0.08f),
-                            Actions.scaleTo(1.0f, 1.0f, 0.1f)
-                        ));
-                    }
-                }
-            });
-
-            cardsGrid.add(cardBox).pad(8);
-            col++;
-            if (col % 9 == 0) cardsGrid.row();
         }
 
         contentArea.add(cardsGrid).expand().fill().row();
     }
 
-    private void applyHankoToCard(Card targetCard, HankoEffect newEffect) {
-        Card modifiedCard = new Card(
-            targetCard.id(),
-            targetCard.season(),
-            targetCard.rank(),
-            targetCard.name(),
-            newEffect
+    private Table createHankoShelf() {
+        Table shelf = new Table();
+        shelf.setBackground(panelBackground);
+        shelf.pad(10f);
+
+        shelf.add(new Label("Hanko anwenden:", skin)).padRight(15f);
+
+        Map<HankoEffect, Integer> counts = new EnumMap<>(HankoEffect.class);
+        for (HankoEffect effect : runSession.getPurchasedHankos()) {
+            counts.merge(effect, 1, Integer::sum);
+        }
+
+        for (Map.Entry<HankoEffect, Integer> entry : counts.entrySet()) {
+            HankoEffect effect = entry.getKey();
+            Table button = new Table();
+            button.setTouchable(Touchable.enabled);
+            button.pad(6f);
+
+            boolean selected = effect == selectedHankoToApply;
+            if (selected) {
+                button.setBackground(panelBackground);
+            }
+
+            TextureRegion region = atlas.findRegion("HANKO_" + effect.name());
+            if (region != null) {
+                button.add(new Image(region)).size(28f).padRight(6f);
+            }
+
+            Label label = new Label(
+                HankoCatalog.getName(effect) + " x" + entry.getValue(),
+                skin
+            );
+            label.setFontScale(0.72f);
+            if (selected) {
+                label.setColor(Color.GOLD);
+            }
+            button.add(label);
+
+            button.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    selectedHankoToApply = selected ? null : effect;
+                    showDeckTab();
+                }
+            });
+
+            shelf.add(button).padRight(9f);
+        }
+
+        if (selectedHankoToApply != null) {
+            TextButton cancel = new TextButton("Abbrechen", buttonStyle);
+            cancel.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    selectedHankoToApply = null;
+                    showDeckTab();
+                }
+            });
+            shelf.add(cancel).width(105f).height(34f).padLeft(8f);
+        }
+
+        return shelf;
+    }
+
+    private Table createCardBox(Card card) {
+        Table cardBox = new Table();
+        cardBox.setTransform(true);
+        cardBox.setOrigin(30f, 60f);
+
+        Hanko selectedHanko = selectedHankoToApply == null
+            ? null
+            : HankoCatalog.create(selectedHankoToApply);
+        boolean canApply = selectedHanko == null || selectedHanko.canTarget(card);
+
+        cardBox.setTouchable(canApply ? Touchable.enabled : Touchable.disabled);
+
+        Stack cardStack = new Stack();
+        TextureRegion cardRegion = atlas.findRegion(card.id().name());
+        if (cardRegion != null) {
+            Image cardImage = new Image(new TextureRegionDrawable(cardRegion));
+            cardImage.setColor(1f, 1f, 1f, canApply ? 1f : 0.38f);
+            cardStack.add(cardImage);
+        }
+
+        if (card.hasHanko()) {
+            TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
+            if (hankoRegion != null) {
+                Table badgeContainer = new Table();
+                badgeContainer.top().right();
+                badgeContainer.add(new Image(hankoRegion)).size(20f).pad(2f);
+                cardStack.add(badgeContainer);
+            }
+        }
+
+        cardBox.add(cardStack).size(60f, 106f).padBottom(4f).row();
+
+        Label name = new Label(card.name(), skin);
+        name.setFontScale(0.62f);
+        if (selectedHanko != null) {
+            name.setColor(canApply ? Color.GOLD : Color.GRAY);
+        }
+        cardBox.add(name).width(82f).row();
+
+        if (selectedHanko != null && !canApply) {
+            Label sealed = new Label("Versiegelt", skin);
+            sealed.setFontScale(0.55f);
+            sealed.setColor(Color.GRAY);
+            cardBox.add(sealed);
+        }
+
+        cardBox.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (selectedHankoToApply != null) {
+                    requestHankoConfirmation(card, selectedHankoToApply);
+                    return;
+                }
+
+                cardBox.clearActions();
+                cardBox.addAction(Actions.sequence(
+                    Actions.scaleTo(1.15f, 1.15f, 0.08f),
+                    Actions.scaleTo(1f, 1f, 0.1f)
+                ));
+            }
+        });
+
+        return cardBox;
+    }
+
+    private void requestHankoConfirmation(Card targetCard, HankoEffect effect) {
+        Hanko hanko = HankoCatalog.create(effect);
+        if (!hanko.canTarget(targetCard)
+            || !runSession.getPurchasedHankos().contains(effect)
+            || getStage() == null) {
+            return;
+        }
+
+        Dialog dialog = new Dialog("Hanko anwenden", skin) {
+            @Override
+            protected void result(Object object) {
+                if (Boolean.TRUE.equals(object)) {
+                    applyHankoToCard(targetCard, effect);
+                }
+            }
+        };
+
+        Label text = new Label(
+            HankoCatalog.getName(effect) + " auf\n" + targetCard.name()
+                + " anwenden?\n\n" + HankoCatalog.getDescription(effect),
+            skin
         );
+        text.setAlignment(Align.center);
+        text.setWrap(true);
 
-        runSession.getPlayerDeck().evolveCard(targetCard, modifiedCard);
-        runSession.getPurchasedHankos().remove(newEffect);
+        dialog.getContentTable().add(text).width(420f).pad(20f);
+        dialog.button("Abbrechen", false);
+        dialog.button("Anwenden", true);
+        dialog.show(getStage());
+    }
+
+    private void applyHankoToCard(Card targetCard, HankoEffect effect) {
+        Hanko hanko = HankoCatalog.create(effect);
+        if (!hanko.canTarget(targetCard)
+            || !runSession.getPurchasedHankos().contains(effect)) {
+            selectedHankoToApply = null;
+            showDeckTab();
+            return;
+        }
+
+        Card modifiedCard = hanko.applyEffect(targetCard);
+        if (runSession.getPlayerDeck().evolveCard(targetCard, modifiedCard)) {
+            // remove(Object) entfernt genau ein Exemplar dieses stapelbaren Hankos.
+            runSession.getPurchasedHankos().remove(effect);
+        }
+
         selectedHankoToApply = null;
-
+        updateHankoTabBadge();
         showDeckTab();
     }
 
@@ -320,135 +408,254 @@ public class InventoryOverlay extends Group {
         updateHankoTabBadge();
 
         if (runSession.getPurchasedHankos().isEmpty()) {
-            Table emptyBox = new Table();
-            emptyBox.pad(40);
-            Label emptyLbl = new Label("Keine Hankos im Vorrat.\nKaufe Booster-Packs im Markt, um neue Siegel zu erhalten!", skin);
-            emptyLbl.setAlignment(Align.center);
-            emptyLbl.setFontScale(1.0f);
-            emptyBox.add(emptyLbl);
-            contentArea.add(emptyBox).expand().center();
+            Label empty = new Label(
+                "Keine Hankos im Vorrat.\nKaufe sie im Tengu-Markt.",
+                skin
+            );
+            empty.setAlignment(Align.center);
+            contentArea.add(empty).expand().center();
             return;
         }
 
+        Map<HankoEffect, Integer> counts = new EnumMap<>(HankoEffect.class);
         for (HankoEffect effect : runSession.getPurchasedHankos()) {
-            Table itemBox = new Table();
-            itemBox.setBackground(panelBackground);
-            itemBox.pad(15);
+            counts.merge(effect, 1, Integer::sum);
+        }
 
-            TextureRegion hRegion = atlas.findRegion("HANKO_" + effect.name());
-            if (hRegion != null) {
-                itemBox.add(new Image(hRegion)).size(48, 48).padRight(20);
+        for (Map.Entry<HankoEffect, Integer> entry : counts.entrySet()) {
+            HankoEffect effect = entry.getKey();
+            Table item = new Table();
+            item.setBackground(panelBackground);
+            item.pad(15f);
+
+            TextureRegion region = atlas.findRegion("HANKO_" + effect.name());
+            if (region != null) {
+                item.add(new Image(region)).size(48f).padRight(20f);
             }
 
-            Table textTable = new Table();
-            textTable.left();
-            Label title = new Label(getHankoShortName(effect), skin);
-            title.setFontScale(1.0f);
-            textTable.add(title).left().row();
+            Table text = new Table();
+            text.left();
+            Label title = new Label(
+                HankoCatalog.getName(effect) + " x" + entry.getValue(),
+                skin
+            );
+            Label description = new Label(HankoCatalog.getDescription(effect), skin);
+            description.setFontScale(0.8f);
+            description.setColor(Color.LIGHT_GRAY);
+            description.setWrap(true);
+            text.add(title).left().row();
+            text.add(description).width(500f).left();
+            item.add(text).expandX().fillX();
 
-            Label desc = new Label(getHankoDescription(effect), skin);
-            desc.setFontScale(0.8f);
-            desc.setColor(Color.LIGHT_GRAY);
-            textTable.add(desc).left();
-
-            itemBox.add(textTable).expandX().left();
-
-            TextButton useBtn = new TextButton("Stempeln", buttonStyle);
-            useBtn.addListener(new ClickListener() {
-                @Override public void clicked(InputEvent e, float x, float y) {
+            TextButton use = new TextButton("Stempeln", buttonStyle);
+            use.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
                     selectedHankoToApply = effect;
                     showDeckTab();
                 }
             });
+            item.add(use).width(130f).height(45f).padLeft(15f);
 
-            itemBox.add(useBtn).width(130).height(45).padLeft(15);
-            contentArea.add(itemBox).expandX().fillX().pad(8).row();
+            contentArea.add(item).expandX().fillX().pad(8f).row();
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Omamori-Lager und drei aktive Slots
+    // ---------------------------------------------------------------------
 
     private void showOmamoriTab() {
         contentArea.clearChildren();
 
-        for (Omamori omamori : runSession.getActiveOmamoris()) {
-            String className = omamori.getClass().getSimpleName();
-            String regionName = "OMAMORI_" + className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
-            TextureRegion region = atlas.findRegion(regionName);
+        Label activeTitle = new Label(
+            "Aktive Omamori (" + runSession.getActiveOmamoris().size()
+                + "/" + runSession.getMaxActiveOmamoris() + ")",
+            skin
+        );
+        activeTitle.setFontScale(1.05f);
+        contentArea.add(activeTitle).left().padBottom(8f).row();
 
-            if (region != null) {
-                JuicyOmamoriActor actor = new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
-                    @Override public void onTap(JuicyOmamoriActor a) {}
-                    @Override public void onDrop(JuicyOmamoriActor a, com.badlogic.gdx.math.Vector2 p) {}
-                });
+        Table activeSlots = new Table();
+        for (int slot = 0; slot < runSession.getMaxActiveOmamoris(); slot++) {
+            Table slotBox = new Table();
+            slotBox.setBackground(panelBackground);
+            slotBox.pad(8f);
 
-                Table box = new Table();
-                box.add(actor).size(72, 96).padRight(15);
-
-                Table textTable = new Table();
-                textTable.left();
-                textTable.add(new Label(omamori.getName(), skin)).left().row();
-                Label desc = new Label(omamori.getDescription(), skin);
-                desc.setFontScale(0.8f);
-                desc.setWrap(true);
-                textTable.add(desc).width(500).left();
-
-                box.add(textTable).expandX().fillX();
-                contentArea.add(box).expandX().fillX().pad(10).row();
+            if (slot < runSession.getActiveOmamoris().size()) {
+                Omamori omamori = runSession.getActiveOmamoris().get(slot);
+                addActiveOmamoriSlotContent(slotBox, omamori, slot);
+            } else {
+                Label empty = new Label("Slot " + (slot + 1) + "\nLeer", skin);
+                empty.setAlignment(Align.center);
+                empty.setColor(Color.GRAY);
+                slotBox.add(empty).expand().center();
             }
+
+            activeSlots.add(slotBox).width(285f).height(155f).pad(6f);
+        }
+        contentArea.add(activeSlots).expandX().fillX().padBottom(18f).row();
+
+        Label storageTitle = new Label("Omamori-Lager", skin);
+        storageTitle.setFontScale(1.05f);
+        contentArea.add(storageTitle).left().padBottom(8f).row();
+
+        if (runSession.getOwnedOmamoris().isEmpty()) {
+            Label empty = new Label("Noch keine Omamori gekauft.", skin);
+            empty.setColor(Color.LIGHT_GRAY);
+            contentArea.add(empty).left().pad(20f).row();
+            return;
+        }
+
+        for (Omamori omamori : runSession.getOwnedOmamoris()) {
+            contentArea.add(createStoredOmamoriRow(omamori))
+                .expandX()
+                .fillX()
+                .pad(7f)
+                .row();
         }
     }
+
+    private void addActiveOmamoriSlotContent(Table slotBox, Omamori omamori, int slot) {
+        TextureRegion region = findOmamoriRegion(omamori);
+        if (region != null) {
+            slotBox.add(new Image(region)).size(48f, 64f).padRight(8f);
+        }
+
+        Table text = new Table();
+        text.left();
+        Label name = new Label((slot + 1) + ". " + omamori.getName(), skin);
+        name.setFontScale(0.75f);
+        text.add(name).left().colspan(3).row();
+
+        TextButton left = new TextButton("<", buttonStyle);
+        left.setDisabled(slot == 0);
+        left.getColor().a = left.isDisabled() ? 0.4f : 1f;
+        left.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (runSession.moveActiveOmamori(omamori, -1)) {
+                    showOmamoriTab();
+                }
+            }
+        });
+
+        TextButton remove = new TextButton("Ablegen", buttonStyle);
+        remove.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                runSession.unequipOmamori(omamori);
+                showOmamoriTab();
+            }
+        });
+
+        TextButton right = new TextButton(">", buttonStyle);
+        right.setDisabled(slot >= runSession.getActiveOmamoris().size() - 1);
+        right.getColor().a = right.isDisabled() ? 0.4f : 1f;
+        right.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (runSession.moveActiveOmamori(omamori, 1)) {
+                    showOmamoriTab();
+                }
+            }
+        });
+
+        text.add(left).size(35f, 30f).padTop(8f);
+        text.add(remove).width(90f).height(30f).pad(8f, 4f, 0f, 4f);
+        text.add(right).size(35f, 30f).padTop(8f);
+        slotBox.add(text).expand().fill();
+    }
+
+    private Table createStoredOmamoriRow(Omamori omamori) {
+        Table row = new Table();
+        row.setBackground(panelBackground);
+        row.pad(12f);
+
+        TextureRegion region = findOmamoriRegion(omamori);
+        if (region != null) {
+            row.add(new Image(region)).size(60f, 80f).padRight(15f);
+        }
+
+        Table text = new Table();
+        text.left();
+        Label name = new Label(omamori.getName(), skin);
+        Label description = new Label(omamori.getDescription(), skin);
+        description.setFontScale(0.78f);
+        description.setWrap(true);
+        description.setColor(Color.LIGHT_GRAY);
+        text.add(name).left().row();
+        text.add(description).width(570f).left();
+        row.add(text).expandX().fillX();
+
+        boolean active = runSession.isOmamoriActive(omamori);
+        boolean slotsFull = runSession.getActiveOmamoris().size()
+            >= runSession.getMaxActiveOmamoris();
+
+        TextButton equip = new TextButton(active ? "Aktiv" : "Ausruesten", buttonStyle);
+        equip.setDisabled(active || slotsFull);
+        equip.getColor().a = equip.isDisabled() ? 0.45f : 1f;
+        equip.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (runSession.equipOmamori(omamori)) {
+                    showOmamoriTab();
+                }
+            }
+        });
+        row.add(equip).width(135f).height(42f).padLeft(12f);
+        return row;
+    }
+
+    private TextureRegion findOmamoriRegion(Omamori omamori) {
+        String className = omamori.getClass().getSimpleName();
+        String regionName = "OMAMORI_"
+            + className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
+        return atlas.findRegion(regionName);
+    }
+
+    // ---------------------------------------------------------------------
+    // Yokai-Ansicht (bestehendes Verhalten)
+    // ---------------------------------------------------------------------
 
     private void showYokaiTab() {
         contentArea.clearChildren();
 
-        if (runSession.getYokaiBag() != null) {
-            for (Yokai yokai : runSession.getYokaiBag()) {
-                TextureRegion region = atlas.findRegion(yokai.getAtlasRegionName());
-                if (region != null) {
-                    JuicyYokaiActor actor = new JuicyYokaiActor(yokai, region, false, skin, new JuicyYokaiActor.YokaiListener() {
-                        @Override public void onTap(JuicyYokaiActor a) {}
-                        @Override public void onDrop(JuicyYokaiActor a, com.badlogic.gdx.math.Vector2 p) {}
-                    });
-
-                    Table box = new Table();
-                    box.add(actor).size(80, 142).padRight(15);
-
-                    Table infoTable = new Table();
-                    infoTable.left();
-                    infoTable.add(new Label(yokai.getName(), skin)).left().row();
-                    Label xpLbl = new Label("XP: " + yokai.getCurrentXp() + " / " + yokai.getXpToNextLevel(), skin);
-                    xpLbl.setFontScale(0.8f);
-                    infoTable.add(xpLbl).left().row();
-
-                    box.add(infoTable).expandX().fillX();
-                    contentArea.add(box).expandX().fillX().pad(8).row();
-                }
+        for (Yokai yokai : runSession.getYokaiBag()) {
+            TextureRegion region = atlas.findRegion(yokai.getAtlasRegionName());
+            if (region == null) {
+                continue;
             }
+
+            JuicyYokaiActor actor = new JuicyYokaiActor(
+                yokai,
+                region,
+                false,
+                skin,
+                new JuicyYokaiActor.YokaiListener() {
+                    @Override
+                    public void onTap(JuicyYokaiActor actor) {}
+
+                    @Override
+                    public void onDrop(JuicyYokaiActor actor, Vector2 position) {}
+                }
+            );
+
+            Table box = new Table();
+            box.add(actor).size(80f, 142f).padRight(15f);
+
+            Table info = new Table();
+            info.left();
+            info.add(new Label(yokai.getName(), skin)).left().row();
+            Label xp = new Label(
+                "XP: " + yokai.getCurrentXp() + " / " + yokai.getXpToNextLevel(),
+                skin
+            );
+            xp.setFontScale(0.8f);
+            info.add(xp).left();
+
+            box.add(info).expandX().fillX();
+            contentArea.add(box).expandX().fillX().pad(8f).row();
         }
-    }
-
-    private String getHankoShortName(HankoEffect effect) {
-        return switch (effect) {
-            case WHITE_SEAL -> "White Seal";
-            case BLACK_SEAL -> "Black Seal";
-            case GOLDEN_SEAL -> "Golden Seal";
-            case VOID_SEAL -> "Void Seal";
-            case STONE_SEAL -> "Stone Seal";
-            case POLYCHROME_SEAL -> "Polychrome Seal";
-            case BLOOD_SEAL -> "Blood Seal";
-            default -> effect.name();
-        };
-    }
-
-    private String getHankoDescription(HankoEffect effect) {
-        return switch (effect) {
-            case WHITE_SEAL -> "+30 Basis-Chips beim Ausspielen.";
-            case BLACK_SEAL -> "+4 Mult beim Ausspielen.";
-            case GOLDEN_SEAL -> "Chance auf +3 oder +10 Mon bei Wertung.";
-            case VOID_SEAL -> "Chance auf +5 oder +10 Void Dust bei Wertung.";
-            case STONE_SEAL -> "Kann nicht discarded werden. Gibt beim Werten +50 Chips.";
-            case POLYCHROME_SEAL -> "Zaehlt gleichzeitig fuer alle 4 Jahreszeiten.";
-            case BLOOD_SEAL -> "+50 Chips & +10 Mult, aber 25% Chance auf Verbannung.";
-            default -> "Kein spezieller Effekt.";
-        };
     }
 }

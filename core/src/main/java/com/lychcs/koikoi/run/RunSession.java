@@ -1,26 +1,33 @@
 package com.lychcs.koikoi.run;
 
-import com.lychcs.koikoi.model.Card;
-import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.Deck;
-import com.lychcs.koikoi.model.Rank;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.Oni;
 import com.lychcs.koikoi.model.yokai.Yokai;
 import com.lychcs.koikoi.model.yokai.YokaiStage;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class RunSession {
 
-    // Feste, unantastbare Basiswerte für jeden Kampf
     public static final int BASE_HANDS = 4;
     public static final int BASE_DISCARDS = 3;
+    public static final int MAX_ACTIVE_OMAMORIS = 3;
 
     private GameSeason currentSeason = GameSeason.SPRING;
     private int seasonEncounterStage = 1;
+
+    /** Alle im aktuellen Run gekauften Omamori. */
+    private final List<Omamori> ownedOmamoris = new ArrayList<>();
+
+    /** Ausgeruestete Omamori. Ihre Reihenfolge ist fuer Yata Mirror relevant. */
     private final List<Omamori> activeOmamoris = new ArrayList<>();
+
     private int mon = 10000;
     private int voidDust = 5000;
 
@@ -28,10 +35,8 @@ public class RunSession {
     private int maxYokaiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
-    private final List<Card> banishedThisSeason = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
 
-    // Checkpoint- & Schrine-Tracking (for Teleport & Respawn)
     private final Map<String, float[]> unlockedShrines = new LinkedHashMap<>();
     private String lastVisitedShrineName = "Dorf-Schrein";
     private float lastPlayerX = -1f;
@@ -40,17 +45,19 @@ public class RunSession {
     private int shrineRank = 0;
 
     public RunSession() {
-        this.playerDeck = new Deck();
-        this.playerDeck.initializeDeck();
-        this.yokaiBag.add(new Oni(YokaiStage.LEVEL_1));
+        playerDeck = new Deck();
+        playerDeck.initializeDeck();
+        yokaiBag.add(new Oni(YokaiStage.LEVEL_1));
     }
 
-    // --- SHRINE & TELEPORT SYSTEM ---
+    // ---------------------------------------------------------------------
+    // Shrine und Position
+    // ---------------------------------------------------------------------
 
     public void registerAndActivateShrine(String shrineName, float x, float y) {
-        this.unlockedShrines.put(shrineName, new float[]{x, y});
-        this.lastVisitedShrineName = shrineName;
-        setLastPlayerPosition(x, y); // Neuer Respawn-Ort!
+        unlockedShrines.put(shrineName, new float[]{x, y});
+        lastVisitedShrineName = shrineName;
+        setLastPlayerPosition(x, y);
     }
 
     public Map<String, float[]> getUnlockedShrines() {
@@ -66,27 +73,35 @@ public class RunSession {
     }
 
     public void addClearedShrine() {
-        this.shrineRank++;
+        shrineRank++;
         System.out.println("Schrein geläutert! Spirituelles Ansehen gestiegen auf Rang: " + shrineRank);
     }
 
     public boolean hasRequiredRank(int requiredRank) {
-        return this.shrineRank >= requiredRank;
+        return shrineRank >= requiredRank;
     }
-
-    // --- PLAYER POSITION & RESPAWN ---
 
     public void setLastPlayerPosition(float x, float y) {
-        this.lastPlayerX = x;
-        this.lastPlayerY = y;
-        this.hasStoredPosition = true;
+        lastPlayerX = x;
+        lastPlayerY = y;
+        hasStoredPosition = true;
     }
 
-    public boolean hasStoredPosition() { return hasStoredPosition; }
-    public float getLastPlayerX() { return lastPlayerX; }
-    public float getLastPlayerY() { return lastPlayerY; }
+    public boolean hasStoredPosition() {
+        return hasStoredPosition;
+    }
 
-    // --- SEASONS ---
+    public float getLastPlayerX() {
+        return lastPlayerX;
+    }
+
+    public float getLastPlayerY() {
+        return lastPlayerY;
+    }
+
+    // ---------------------------------------------------------------------
+    // Seasons (bestehendes Verhalten unveraendert)
+    // ---------------------------------------------------------------------
 
     public void advanceEncounterStage() {
         seasonEncounterStage++;
@@ -106,28 +121,160 @@ public class RunSession {
         };
     }
 
-    // --- PROGRESSION & DECK ---
+    // ---------------------------------------------------------------------
+    // Omamori-Lager und Ausruestung
+    // ---------------------------------------------------------------------
 
-    public YakuProgression getYakuProgression() { return yakuProgression; }
-    public List<Yokai> getYokaiBag() { return yokaiBag; }
-    public int getMaxYokaiBag() { return maxYokaiBag; }
-    public Deck getPlayerDeck() { return playerDeck; }
-    public List<Omamori> getActiveOmamoris() { return activeOmamoris; }
-    public List<HankoEffect> getPurchasedHankos() { return purchasedHankos; }
+    public List<Omamori> getOwnedOmamoris() {
+        return Collections.unmodifiableList(ownedOmamoris);
+    }
 
-    // --- WÄHRUNGEN ---
+    public List<Omamori> getActiveOmamoris() {
+        return Collections.unmodifiableList(activeOmamoris);
+    }
 
-    public int getMon() { return this.mon; }
-    public void addMon(int amount) { this.mon += amount; }
-    public int getVoidDust() { return voidDust; }
-    public void addVoidDust(int amount) { this.voidDust += amount; }
+    public int getMaxActiveOmamoris() {
+        return MAX_ACTIVE_OMAMORIS;
+    }
 
-    // --- FIGHT-CONSTANTS GETTER ---
+    public boolean ownsOmamori(Class<? extends Omamori> type) {
+        if (type == null) {
+            return false;
+        }
 
-    public int getBaseHands() { return BASE_HANDS; }
-    public int getBaseDiscards() { return BASE_DISCARDS; }
+        for (Omamori omamori : ownedOmamoris) {
+            if (omamori.getClass().equals(type)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    public GameSeason getCurrentSeason() { return currentSeason; }
-    public void setCurrentSeason(GameSeason season) { this.currentSeason = season; }
-    public int getSeasonEncounterStage() { return seasonEncounterStage; }
+    public boolean addOwnedOmamori(Omamori omamori) {
+        if (omamori == null || ownsOmamori(omamori.getClass())) {
+            return false;
+        }
+        ownedOmamoris.add(omamori);
+        return true;
+    }
+
+    public boolean isOmamoriActive(Omamori omamori) {
+        return activeOmamoris.contains(omamori);
+    }
+
+    public boolean equipOmamori(Omamori omamori) {
+        if (omamori == null
+            || !ownedOmamoris.contains(omamori)
+            || activeOmamoris.contains(omamori)
+            || activeOmamoris.size() >= MAX_ACTIVE_OMAMORIS) {
+            return false;
+        }
+
+        activeOmamoris.add(omamori);
+        return true;
+    }
+
+    public boolean unequipOmamori(Omamori omamori) {
+        return activeOmamoris.remove(omamori);
+    }
+
+    /**
+     * Verschiebt ein aktives Omamori um einen Slot. Das ist besonders fuer
+     * Yata Mirror wichtig, weil dessen linker Nachbar ausgewertet wird.
+     */
+    public boolean moveActiveOmamori(Omamori omamori, int direction) {
+        int currentIndex = activeOmamoris.indexOf(omamori);
+        if (currentIndex < 0 || direction == 0) {
+            return false;
+        }
+
+        int newIndex = currentIndex + (direction < 0 ? -1 : 1);
+        if (newIndex < 0 || newIndex >= activeOmamoris.size()) {
+            return false;
+        }
+
+        Collections.swap(activeOmamoris, currentIndex, newIndex);
+        return true;
+    }
+
+    // ---------------------------------------------------------------------
+    // Progression und Deck
+    // ---------------------------------------------------------------------
+
+    public YakuProgression getYakuProgression() {
+        return yakuProgression;
+    }
+
+    public List<Yokai> getYokaiBag() {
+        return yokaiBag;
+    }
+
+    public int getMaxYokaiBag() {
+        return maxYokaiBag;
+    }
+
+    public Deck getPlayerDeck() {
+        return playerDeck;
+    }
+
+    public List<HankoEffect> getPurchasedHankos() {
+        return purchasedHankos;
+    }
+
+    // ---------------------------------------------------------------------
+    // Waehrungen
+    // ---------------------------------------------------------------------
+
+    public int getMon() {
+        return mon;
+    }
+
+    public void addMon(int amount) {
+        long result = (long) mon + amount;
+        mon = (int) Math.max(0L, Math.min(Integer.MAX_VALUE, result));
+    }
+
+    public boolean spendMon(int amount) {
+        if (amount < 0) {
+            throw new IllegalArgumentException("amount darf nicht negativ sein");
+        }
+        if (mon < amount) {
+            return false;
+        }
+        mon -= amount;
+        return true;
+    }
+
+    public int getVoidDust() {
+        return voidDust;
+    }
+
+    public void addVoidDust(int amount) {
+        long result = (long) voidDust + amount;
+        voidDust = (int) Math.max(0L, Math.min(Integer.MAX_VALUE, result));
+    }
+
+    // ---------------------------------------------------------------------
+    // Kampfwerte und Season
+    // ---------------------------------------------------------------------
+
+    public int getBaseHands() {
+        return BASE_HANDS;
+    }
+
+    public int getBaseDiscards() {
+        return BASE_DISCARDS;
+    }
+
+    public GameSeason getCurrentSeason() {
+        return currentSeason;
+    }
+
+    public void setCurrentSeason(GameSeason season) {
+        currentSeason = season;
+    }
+
+    public int getSeasonEncounterStage() {
+        return seasonEncounterStage;
+    }
 }

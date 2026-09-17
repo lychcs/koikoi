@@ -11,12 +11,12 @@ public class BloodSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +50 Base Chips and +10 Mult when scored.\n1 in 4 chance to destroy this card for the season.";
+        return "Grants +50 Chips and +10 Mult when scored.";
     }
 
     @Override
     public boolean canTarget(Card card) {
-        return !card.hasHanko();
+        return card != null && !card.hasHanko();
     }
 
     @Override

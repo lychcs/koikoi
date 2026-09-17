@@ -1,12 +1,12 @@
 package com.lychcs.koikoi.model.hanko;
 
 public enum HankoEffect {
-    NONE,           // Standard, kein Stempel
-    WHITE_SEAL,     // +Points
-    BLACK_SEAL,      // +Mult
-    GOLDEN_SEAL,  // Chance of 1-4 for +3 Mon, 1-20 for +10 Mon
-    VOID_SEAL,   // Chance of 1-4 for +5 Void Dust, 1-20 for +10 Void Dust
-    STONE_SEAL, // Cannot be discarded, grants +50 Chips when scored
-    POLYCHROME_SEAL,     // Zählt als alle Jahreszeiten
-    BLOOD_SEAL       // Chance of 1-4 to destroy card for the season
+    NONE,
+    WHITE_SEAL,       // +30 Chips
+    BLACK_SEAL,       // +4 Mult
+    GOLDEN_SEAL,      // Chance auf Mon
+    VOID_SEAL,        // Chance auf Void Dust
+    STONE_SEAL,       // Nicht discardbar, +50 Chips
+    POLYCHROME_SEAL,  // Zaehlt als alle Jahreszeiten
+    BLOOD_SEAL        // +50 Chips und +10 Mult
 }
