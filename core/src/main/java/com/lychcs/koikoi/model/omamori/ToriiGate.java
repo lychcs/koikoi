@@ -10,7 +10,9 @@ public class ToriiGate implements Omamori {
     public String getName() { return "Torii Gate"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants x1.5 Mult if played hand contains no Beast and no Yami cards.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }

@@ -12,7 +12,9 @@ public class KitsuneMask implements Omamori {
     }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +5 Mult for each unplayed Winter card remaining in hand.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

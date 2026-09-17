@@ -8,7 +8,9 @@ public class KintsugiBowl implements Omamori {
     public String getName() { return "Kintsugi Bowl"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +40 Chips and +4 Mult if exactly 1 card is played.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.RARE; }

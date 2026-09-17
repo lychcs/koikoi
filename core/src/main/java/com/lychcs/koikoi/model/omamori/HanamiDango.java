@@ -9,7 +9,9 @@ public class HanamiDango implements Omamori {
     public String getName() { return "Hanami Dango"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +15 Chips if at least one Spring card is played.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

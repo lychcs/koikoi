@@ -10,7 +10,9 @@ public class DarumaDoll implements Omamori {
     }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "If played hand contains 1 to 3 cards, grants x2.0 Mult.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

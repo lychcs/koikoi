@@ -11,7 +11,9 @@ public class Furin implements Omamori {
     public String getName() { return "Wind Chime (Furin)"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +10 Chips for each unplayed Summer card remaining in hand.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }

@@ -21,16 +21,16 @@ public enum YakuType {
     IMPERIAL_COURT("Imperial Court", 400, 9); // Alle 4 Hikari
 
     private final String displayName;
-    private final int baseChips;
-    private final int baseMult;
+    private final long baseChips;
+    private final long baseMult;
 
-    YakuType(String displayName, int baseChips, int baseMult) {
+    YakuType(String displayName, long baseChips, long baseMult) {
         this.displayName = displayName;
         this.baseChips = baseChips;
         this.baseMult = baseMult;
     }
 
-    public int getEffectiveScore() {
+    public long getEffectiveScore() {
         return baseChips * baseMult;
     }
 
@@ -38,11 +38,11 @@ public enum YakuType {
         return displayName;
     }
 
-    public int getBaseChips() {
+    public long getBaseChips() {
         return baseChips;
     }
 
-    public int getBaseMult() {
+    public long getBaseMult() {
         return baseMult;
     }
 }

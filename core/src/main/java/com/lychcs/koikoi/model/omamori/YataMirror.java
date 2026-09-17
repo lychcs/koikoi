@@ -11,7 +11,9 @@ public class YataMirror implements Omamori {
     public String getName() { return "Yata no Kagami"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Copies the effect of the adjacent Omamori to its left.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.EPIC; }

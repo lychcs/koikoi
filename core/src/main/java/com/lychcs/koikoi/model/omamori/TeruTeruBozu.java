@@ -11,7 +11,9 @@ public class TeruTeruBozu implements Omamori {
     public String getName() { return "Teru Teru Bozu"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +10 Chips for each unplayed Petal card remaining in hand.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }

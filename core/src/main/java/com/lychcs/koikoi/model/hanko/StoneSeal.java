@@ -4,6 +4,8 @@ import com.lychcs.koikoi.model.Card;
 
 public class StoneSeal implements Hanko {
 
+    public static final long LEVEL_1_CHIP_BONUS = 50L;
+
     @Override
     public String getName() {
         return "Stone Seal";
@@ -11,7 +13,7 @@ public class StoneSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Returns this card back to your hand after being played.\nThe seal breaks (is removed) afterwards.";
+        return "Cannot be discarded.\nGrants +" + LEVEL_1_CHIP_BONUS + " Chips when scored.";
     }
 
     @Override

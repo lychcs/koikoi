@@ -7,26 +7,39 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.badlogic.gdx.utils.GdxRuntimeException;
 
 public class CorruptionEngine {
     private static final int SIM_SIZE = 256;
+    private static final float FIXED_TIME_STEP = 1f / 60f;
+    private static final int ITERATIONS_PER_TICK = 2;
+    private static final int MAX_TICKS_PER_FRAME = 4;
+    private static final float MAX_FRAME_DELTA = 0.25f;
+
+    private static final float FEED = 0.035f;
+    private static final float KILL = 0.058f;
 
     private final SpriteBatch batch;
     private final FrameBuffer fboA, fboB;
     private final ShaderProgram simShader;
 
     private boolean isPingPong = true;
-    private float injectX = -1f, injectY = -1f, injectRadius = 0f;
+    private boolean active = false;
+    private float accumulator = 0f;
 
-    private float time = 0f;
+    private boolean hasPendingInjection = false;
+    private float pendingInjectRadius = 0f;
+    private float injectX = -1f;
+    private float injectY = -1f;
 
     private static final String VERT =
-        "attribute vec4 a_position; attribute vec2 a_texCoord0; varying vec2 v_texCoords; uniform mat4 u_projTrans; void main() { v_texCoords = a_texCoord0; gl_Position = u_projTrans * a_position; }";
+        "#ifdef GL_ES\nprecision mediump float;\n#endif\n" +
+            "attribute vec4 a_position; attribute vec2 a_texCoord0; varying vec2 v_texCoords; uniform mat4 u_projTrans; void main() { v_texCoords = a_texCoord0; gl_Position = u_projTrans * a_position; }";
 
     private static final String FRAG =
-        "#ifdef GL_ES\nprecision highp float;\n#endif\n" +
+        "#ifdef GL_ES\nprecision mediump float;\n#endif\n" +
             "varying vec2 v_texCoords; uniform sampler2D u_texture; uniform vec2 u_resolution;\n" +
-            "uniform float u_feed; uniform float u_kill; uniform float u_time;\n" +
+            "uniform float u_feed; uniform float u_kill;\n" +
             "uniform vec2 u_injectPos; uniform float u_injectRadius;\n" +
             "void main() {\n" +
             "    vec2 step = 1.0 / u_resolution; vec2 uv = v_texCoords;\n" +
@@ -53,61 +66,136 @@ public class CorruptionEngine {
 
     public CorruptionEngine() {
         batch = new SpriteBatch();
-
-        // HIER IST DER FIX: Wir zwingen den Batch exakt auf das 256x256 FBO!
         batch.getProjectionMatrix().setToOrtho2D(0, 0, SIM_SIZE, SIM_SIZE);
 
         simShader = new ShaderProgram(VERT, FRAG);
+        if (!simShader.isCompiled()) {
+            throw new GdxRuntimeException(
+                "CorruptionEngine Gray-Scott-Shader konnte nicht kompiliert werden:\n" + simShader.getLog()
+            );
+        }
 
         fboA = new FrameBuffer(Pixmap.Format.RGBA8888, SIM_SIZE, SIM_SIZE, false);
         fboA.getColorBufferTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        fboA.getColorBufferTexture().setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
+
         fboB = new FrameBuffer(Pixmap.Format.RGBA8888, SIM_SIZE, SIM_SIZE, false);
         fboB.getColorBufferTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        fboB.getColorBufferTexture().setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
 
-        fboA.begin();
+        clearFbo(fboA);
+        clearFbo(fboB);
+        isPingPong = true;
+        active = false;
+    }
+
+    private void clearFbo(FrameBuffer fbo) {
+        fbo.begin();
         Gdx.gl.glClearColor(1f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        fboA.end();
+        fbo.end();
+    }
+
+    public void reset() {
+        clearFbo(fboA);
+        clearFbo(fboB);
+        isPingPong = true;
+        accumulator = 0f;
+        hasPendingInjection = false;
+        pendingInjectRadius = 0f;
+        injectX = -1f;
+        injectY = -1f;
+        active = false;
     }
 
     public void injectDisturbance(float normalizedX, float normalizedY, float radius) {
-        this.injectX = normalizedX;
-        this.injectY = normalizedY;
-        this.injectRadius = radius;
+        if (radius > 0f) {
+            this.injectX = normalizedX;
+            this.injectY = normalizedY;
+            this.pendingInjectRadius = radius;
+            this.hasPendingInjection = true;
+            this.active = true;
+        }
     }
 
     public void update(float delta) {
-        time += delta; // Zeit hochzählen
-        int iterations = 2;
-        for (int i = 0; i < iterations; i++) {
-            FrameBuffer source = isPingPong ? fboA : fboB;
-            FrameBuffer target = isPingPong ? fboB : fboA;
-
-            target.begin();
-            batch.setShader(simShader);
-            batch.begin();
-            simShader.setUniformf("u_resolution", SIM_SIZE, SIM_SIZE);
-            simShader.setUniformf("u_time", time); // Zeit an Shader übergeben
-            simShader.setUniformf("u_feed", 0.035f);
-            simShader.setUniformf("u_kill", 0.058f);
-            simShader.setUniformf("u_injectPos", injectX, injectY);
-            simShader.setUniformf("u_injectRadius", injectRadius);
-
-            // FBO korrekt zeichnen (verhindert das umkippen)
-            batch.draw(source.getColorBufferTexture(), 0, 0, SIM_SIZE, SIM_SIZE, 0, 0, SIM_SIZE, SIM_SIZE, false, true);
-            batch.end();
-            target.end();
-
-            isPingPong = !isPingPong;
+        if (!active) {
+            return;
         }
-        injectRadius = 0f;
+
+        if (delta <= 0f) {
+            return;
+        }
+
+        if (delta > MAX_FRAME_DELTA) {
+            delta = MAX_FRAME_DELTA;
+        }
+
+        accumulator += delta;
+
+        int ticks = 0;
+        while (accumulator >= FIXED_TIME_STEP && ticks < MAX_TICKS_PER_FRAME) {
+            float currentRadius = hasPendingInjection ? pendingInjectRadius : 0f;
+            hasPendingInjection = false;
+            pendingInjectRadius = 0f;
+
+            for (int i = 0; i < ITERATIONS_PER_TICK; i++) {
+                stepSimulation(currentRadius);
+            }
+
+            accumulator -= FIXED_TIME_STEP;
+            ticks++;
+        }
+
+        if (accumulator >= FIXED_TIME_STEP) {
+            accumulator = 0f;
+        }
+    }
+
+    private void stepSimulation(float radius) {
+        FrameBuffer source = isPingPong ? fboA : fboB;
+        FrameBuffer target = isPingPong ? fboB : fboA;
+
+        target.begin();
+        batch.setShader(simShader);
+        batch.begin();
+
+        setSimulationUniforms();
+        setInjectionUniforms(radius);
+
+        batch.draw(source.getColorBufferTexture(), 0, 0, SIM_SIZE, SIM_SIZE, 0, 0, SIM_SIZE, SIM_SIZE, false, true);
+
+        batch.end();
+        batch.setShader(null);
+        target.end();
+
+        isPingPong = !isPingPong;
+    }
+
+    private void setSimulationUniforms() {
+        simShader.setUniformi("u_texture", 0);
+        simShader.setUniformf("u_resolution", SIM_SIZE, SIM_SIZE);
+        simShader.setUniformf("u_feed", FEED);
+        simShader.setUniformf("u_kill", KILL);
+    }
+
+    private void setInjectionUniforms(float radius) {
+        simShader.setUniformf("u_injectPos", injectX, injectY);
+        simShader.setUniformf("u_injectRadius", radius);
     }
 
     public Texture getCorruptionMap() {
         return isPingPong ? fboA.getColorBufferTexture() : fboB.getColorBufferTexture();
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
     public void dispose() {
-        batch.dispose(); fboA.dispose(); fboB.dispose(); simShader.dispose();
+        batch.dispose();
+        fboA.dispose();
+        fboB.dispose();
+        simShader.dispose();
     }
 }

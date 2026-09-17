@@ -9,7 +9,9 @@ public class InoshishiTusk implements Omamori {
     public String getName() { return "Inoshishi Tusk"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +15 Mult if played hand contains exactly 5 cards.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }

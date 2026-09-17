@@ -24,6 +24,7 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.GdxRuntimeException;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -66,7 +67,7 @@ public class GameScreen extends ScreenAdapter {
 
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
-    private static final int INITIAL_TARGET_SCORE = 200;
+    private static final long INITIAL_TARGET_SCORE = 200L;
 
     private final List<Card> playerHand = new ArrayList<>();
     private final List<Card> selectedCards = new ArrayList<>();
@@ -76,8 +77,8 @@ public class GameScreen extends ScreenAdapter {
     private Yokai activeAltarYokai = null;
     private GameState currentState = GameState.WAITING_FOR_INPUT;
 
-    private int currentTargetScore = INITIAL_TARGET_SCORE;
-    private int currentRoundScore = 0;
+    private long currentTargetScore = INITIAL_TARGET_SCORE;
+    private long currentRoundScore = 0L;
     private int maxDiscards = INITIAL_MAX_DISCARDS;
     private int discardsRemaining = maxDiscards;
     private int maxHands = INITIAL_MAX_HANDS;
@@ -134,13 +135,20 @@ public class GameScreen extends ScreenAdapter {
             Gdx.files.internal("shaders/edge_detection.frag")
         );
 
+        if (!edgeShader.isCompiled()) {
+            throw new GdxRuntimeException(
+                "edge_detection Shader konnte nicht kompiliert werden:\n"
+                    + edgeShader.getLog()
+            );
+        }
+
         initUiElements();
         startEncounter();
         dealCardsToUI();
     }
 
     private void startEncounter() {
-        currentRoundScore = 0;
+        currentRoundScore = 0L;
         discardsRemaining = runSession.getBaseDiscards();
         handsRemaining = runSession.getBaseHands();
 
@@ -196,7 +204,6 @@ public class GameScreen extends ScreenAdapter {
 
     private void initUiElements() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        skin.add("default-font", FontManager.getFont(), BitmapFont.class);
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         loadIndieAssets();
@@ -436,16 +443,6 @@ public class GameScreen extends ScreenAdapter {
             playerHand.removeAll(selectedCards);
             selectedCards.clear();
 
-            for (Card playedCard : playedCards) {
-                if (playedCard.effect() == HankoEffect.STONE_SEAL) {
-                    Card strippedCard = new Card(
-                        playedCard.id(), playedCard.season(), playedCard.rank(),
-                        playedCard.name(), HankoEffect.NONE
-                    );
-                    playerHand.add(strippedCard);
-                }
-            }
-
             if (activeAltarYokai != null) {
                 activeAltarYokai.setExhausted(true);
                 activeAltarYokai = null;
@@ -468,14 +465,7 @@ public class GameScreen extends ScreenAdapter {
         selectedCards.clear();
 
         for (Card playedCard : playedCards) {
-            if (playedCard.effect() == HankoEffect.STONE_SEAL) {
-                Card strippedCard = new Card(
-                    playedCard.id(), playedCard.season(), playedCard.rank(),
-                    playedCard.name(), HankoEffect.NONE
-                );
-                playerHand.add(strippedCard);
-
-            } else if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
+            if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
                 if (com.badlogic.gdx.math.MathUtils.random(1, 4) == 1) {
                     // ???
                 }
@@ -486,6 +476,20 @@ public class GameScreen extends ScreenAdapter {
         updateLivePreview();
 
         playScoringSequence(breakdown, bestYaku);
+    }
+
+    private boolean isCardDiscardable(Card card) {
+        return card != null && card.effect() != HankoEffect.STONE_SEAL;
+    }
+
+    private List<Card> getDiscardableSelectedCards() {
+        List<Card> discardable = new ArrayList<>();
+        for (Card c : selectedCards) {
+            if (isCardDiscardable(c)) {
+                discardable.add(c);
+            }
+        }
+        return discardable;
     }
 
     private void updateLivePreview() {
@@ -509,7 +513,8 @@ public class GameScreen extends ScreenAdapter {
         else if (bestYaku != null) yakuNameLabel.setText(bestYaku.type().getDisplayName());
         else yakuNameLabel.setText("");
 
-        if (selectedCards.isEmpty() || discardsRemaining <= 0) discardButton.getColor().a = 0.5f;
+        boolean canDiscard = discardsRemaining > 0 && !getDiscardableSelectedCards().isEmpty();
+        if (!canDiscard) discardButton.getColor().a = 0.5f;
         else discardButton.getColor().a = 1.0f;
 
         if (selectedCards.isEmpty() || handsRemaining <= 0) playButton.getColor().a = 0.5f;
@@ -517,10 +522,13 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void onDiscardClicked() {
-        if (currentState != GameState.WAITING_FOR_INPUT || selectedCards.isEmpty() || discardsRemaining <= 0) return;
+        if (currentState != GameState.WAITING_FOR_INPUT || discardsRemaining <= 0) return;
+        List<Card> cardsToDiscard = getDiscardableSelectedCards();
+        if (cardsToDiscard.isEmpty()) return;
+
         discardsRemaining--;
         discardLabel.setText("Discards: " + discardsRemaining);
-        playerHand.removeAll(selectedCards);
+        playerHand.removeAll(cardsToDiscard);
         selectedCards.clear();
         drawCardsToHand(MAX_HAND_SIZE);
         dealCardsToUI();
@@ -542,7 +550,7 @@ public class GameScreen extends ScreenAdapter {
 
             int voidDustEarned = 10 + (handsRemaining * 5) + (discardsRemaining * 2);
             runSession.addVoidDust(voidDustEarned);
-            runSession.addMon(currentRoundScore / 100);
+            runSession.addMon((int) Math.min(Integer.MAX_VALUE, currentRoundScore / 100L));
 
             GameSeason defeatedSeason = runSession.getCurrentSeason();
             int completedStage = runSession.getSeasonEncounterStage();
@@ -842,12 +850,12 @@ public class GameScreen extends ScreenAdapter {
         sequence.addAction(Actions.delay(0.2f));
 
         for (ScoringEvent event : breakdown.events()) {
-            if (event.addedChips() == 0 && event.addedMult() == 0 && event.xMult() == 1.0) continue;
+            if (event.addedChips() == 0L && event.addedMult() == 0L && event.xMult() == 1.0) continue;
 
             sequence.addAction(Actions.run(() -> {
-                if (event.addedChips() > 0) currentChips[0] += event.addedChips();
-                if (event.addedMult() > 0) currentMult[0] += event.addedMult();
-                if (event.xMult() > 1.0) currentMult[0] = (int) Math.round(currentMult[0] * event.xMult());
+                if (event.addedChips() > 0L) currentChips[0] += event.addedChips();
+                if (event.addedMult() > 0L) currentMult[0] += event.addedMult();
+                if (event.xMult() > 1.0) currentMult[0] = Math.round(currentMult[0] * event.xMult());
 
                 chipsLabel.setText(String.valueOf(currentChips[0]));
                 multLabel.setText(String.valueOf(currentMult[0]));

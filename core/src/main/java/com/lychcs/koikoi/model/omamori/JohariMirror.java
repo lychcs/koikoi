@@ -8,24 +8,26 @@ public class JohariMirror implements Omamori {
     public String getName() { return "Johari no Kagami"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Reflects base values: adds half of base Chips as Mult, and 10x base Mult as Chips.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.LEGENDARY; }
 
     @Override
     public boolean evaluate(ScoreContext context, ScoreAccumulator acc) {
-        int baseChips = context.getYakuBaseChips();
-        int baseMult = context.getYakuBaseMult();
+        long baseChips = context.getYakuBaseChips();
+        long baseMult = context.getYakuBaseMult();
 
         // Der Spiegel des Enma richtet über die Basiswerte und kehrt sie um
         if (baseChips > 0 || baseMult > 0) {
 
             // Chips werden zu Mult (halbiert, um Balance zu wahren)
-            int karmaMult = baseChips / 2;
+            long karmaMult = baseChips / 2L;
 
             // Mult wird zu Chips (verzehnfacht, damit es sich wuchtig anfühlt)
-            int karmaChips = baseMult * 10;
+            long karmaChips = baseMult * 10L;
 
             acc.addChips("Karma Reflected (Chips)", karmaChips);
             acc.addMult("Karma Reflected (Mult)", karmaMult);

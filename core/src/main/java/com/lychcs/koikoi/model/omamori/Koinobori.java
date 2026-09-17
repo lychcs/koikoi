@@ -9,7 +9,9 @@ public class Koinobori implements Omamori {
     public String getName() { return "Koinobori"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Currently dormant. Grants no scoring effect.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.UNCOMMON; }

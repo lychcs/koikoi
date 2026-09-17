@@ -11,7 +11,9 @@ public class TenguFeather implements Omamori {
     }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +20 Chips and +3 Mult for each played Ribbon card.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

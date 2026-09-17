@@ -9,7 +9,9 @@ public class SakeCup implements Omamori {
     public String getName() { return "Sake Cup"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +3 Mult if at least one Petal card is played.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

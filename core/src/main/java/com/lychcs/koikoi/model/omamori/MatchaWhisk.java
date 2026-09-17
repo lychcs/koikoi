@@ -10,7 +10,9 @@ public class MatchaWhisk implements Omamori {
     public String getName() { return "Matcha Whisk"; }
 
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "Grants +50 Chips if played cards come from exactly 2 different seasons.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

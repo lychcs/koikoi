@@ -68,6 +68,11 @@ public class OverworldScreen extends ScreenAdapter {
     private ShaderProgram edgeShader;
     private CorruptionEngine corruptionEngine;
 
+    // Verhindert, dass eine Kampfzone direkt nach der Rückkehr aus
+    // einem Kampf erneut ausgelöst wird. Die Sperre endet erst, wenn
+    // der Spieler alle automatischen Kampfzonen verlassen hat.
+    private boolean automaticCombatLocked;
+
     // Box2D Physik-Welt
 
     private World world;
@@ -121,6 +126,9 @@ public class OverworldScreen extends ScreenAdapter {
 
         float startX = 100f;
         float startY = 100f;
+
+        // Eine gespeicherte Position kann noch innerhalb der Kampfzone liegen.
+        automaticCombatLocked = runSession.hasStoredPosition();
 
         // --- Prüfen, ob eine gespeicherte Position aus einem Shop/Schrein existiert ---
         if (runSession.hasStoredPosition()) {
@@ -257,15 +265,15 @@ public class OverworldScreen extends ScreenAdapter {
 
         overworldTime += delta;
 
-        world.step(delta, 6, 2);
-
         handleMovement(delta);
-        handleInteractions();
+        world.step(delta, 6, 2);
 
         player.update(
             delta,
             player.body.getLinearVelocity()
         );
+
+        handleInteractions();
 
         // ============================================================
         // KAMERA
@@ -589,6 +597,7 @@ public class OverworldScreen extends ScreenAdapter {
         MapLayer triggersLayer = map.getLayers().get("triggers");
         if (triggersLayer == null) {
             promptLabel.setVisible(false);
+            automaticCombatLocked = false;
             return;
         }
 
@@ -596,60 +605,76 @@ public class OverworldScreen extends ScreenAdapter {
         Rectangle interactionBox = new Rectangle(playerPos.x - 24f, playerPos.y - 12f, 48f, 48f);
 
         boolean ePressed = Gdx.input.isKeyJustPressed(Input.Keys.E);
-        boolean nearAnyTrigger = false;
+        boolean nearAnyManualTrigger = false;
+        boolean insideAutomaticCombatZone = false;
 
         for (MapObject object : triggersLayer.getObjects()) {
-            if (object instanceof RectangleMapObject) {
-                Rectangle rect = ((RectangleMapObject) object).getRectangle();
+            if (!(object instanceof RectangleMapObject)) {
+                continue;
+            }
 
-                if (interactionBox.overlaps(rect)) {
-                    String type = object.getProperties().get("type", String.class);
-                    if (type == null) type = object.getProperties().get("class", String.class);
-                    if (type == null) continue;
+            Rectangle rect = ((RectangleMapObject) object).getRectangle();
+            if (!interactionBox.overlaps(rect)) {
+                continue;
+            }
 
-                    // --- 1. AUTOMATISCHE TRIGGER (Gegner / Kampf) ---
-                    if ("enemy1".equals(type) || "combat_zone".equals(type)) {
-                        Vector2 currentPos = player.body.getPosition();
+            String type = object.getProperties().get("type", String.class);
+            if (type == null) type = object.getProperties().get("class", String.class);
+            if (type == null) continue;
 
-                        // Position speichern (wie beim Shop mit Sprite-Offset -32f / -12f)
-                        // Optional: Einen kleinen Schritt zurücksetzen (z. B. y - 10f),
-                        // damit man nach dem Kampf nicht sofort wieder mitten im Trigger steht!
-                        runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
+            // --- 1. AUTOMATISCHE TRIGGER (Gegner / Kampf) ---
+            if ("enemy1".equals(type) || "combat_zone".equals(type)) {
+                insideAutomaticCombatZone = true;
 
-                        ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new GameScreen(runSession));
-                        return;
-                    }
+                if (!automaticCombatLocked) {
+                    // Sofort sperren, damit bis zum verzögerten Screen-Wechsel
+                    // kein zweiter Kampf eingeplant werden kann.
+                    automaticCombatLocked = true;
 
-                    // --- 2. MANUELLE TRIGGER (Shop / Schrein mit Prompt) ---
-                    if ("shop".equals(type)) {
-                        promptLabel.setText(" Press [E] : Open Shop ");
-                        promptLabel.setVisible(true);
-                        nearAnyTrigger = true;
+                    runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
+                    promptLabel.setVisible(false);
 
-                        if (ePressed) {
-                            Vector2 currentPos = player.body.getPosition();
-                            runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
-                            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new ShopScreen(runSession));
-                            return;
-                        }
-                    } else if ("shrine".equals(type)) {
-                        promptLabel.setText(" Press [E] : Visit Shrine ");
-                        promptLabel.setVisible(true);
-                        nearAnyTrigger = true;
+                    ((KoiKoiGame) Gdx.app.getApplicationListener())
+                        .changeScreen(new GameScreen(runSession));
+                    return;
+                }
 
-                        if (ePressed) {
-                            Vector2 currentPos = player.body.getPosition();
-                            runSession.setLastPlayerPosition(currentPos.x, currentPos.y);
-                            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new ShrineScreen(runSession));
-                            return;
-                        }
-                    }
+                continue;
+            }
+
+            // --- 2. MANUELLE TRIGGER (Shop / Schrein mit Prompt) ---
+            if ("shop".equals(type)) {
+                promptLabel.setText(" Press [E] : Open Shop ");
+                promptLabel.setVisible(true);
+                nearAnyManualTrigger = true;
+
+                if (ePressed) {
+                    runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
+                    ((KoiKoiGame) Gdx.app.getApplicationListener())
+                        .changeScreen(new ShopScreen(runSession));
+                    return;
+                }
+            } else if ("shrine".equals(type)) {
+                promptLabel.setText(" Press [E] : Visit Shrine ");
+                promptLabel.setVisible(true);
+                nearAnyManualTrigger = true;
+
+                if (ePressed) {
+                    runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
+                    ((KoiKoiGame) Gdx.app.getApplicationListener())
+                        .changeScreen(new ShrineScreen(runSession));
+                    return;
                 }
             }
         }
 
-        // Wenn der Spieler weggeht, wird das Schild sofort ausgeblendet
-        if (!nearAnyTrigger) {
+        // Erst nach dem vollständigen Verlassen aller Kampfzonen darf
+        // ein späteres erneutes Betreten wieder einen Kampf starten.
+        if (!insideAutomaticCombatZone) {
+            automaticCombatLocked = false;
+        }
+
+        if (!nearAnyManualTrigger) {
             promptLabel.setVisible(false);
         }
     }

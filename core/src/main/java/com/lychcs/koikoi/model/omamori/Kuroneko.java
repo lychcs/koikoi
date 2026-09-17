@@ -10,7 +10,9 @@ public class Kuroneko implements Omamori {
         return "Kuroneko";
     }
     @Override
-    public String getDescription() { return "..."; }
+    public String getDescription() {
+        return "If any Beast card is played, grants +15 Chips per played Beast and x1.5 Mult.";
+    }
 
     @Override
     public Rarity getRarity() { return Rarity.COMMON; }

@@ -11,8 +11,8 @@ import java.util.Objects;
  */
 public record YakuResult(
     YakuType type,
-    int baseChips,
-    int baseMult,
+    long baseChips,
+    long baseMult,
     List<Card> contributingCards
 ) {
     public YakuResult {
@@ -31,7 +31,7 @@ public record YakuResult(
     /**
      * Total strength of this specific hand result for ranking/selection.
      */
-    public int getEffectiveScore() {
+    public long getEffectiveScore() {
         return baseChips * baseMult;
     }
 

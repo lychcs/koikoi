@@ -2,36 +2,50 @@ package com.lychcs.koikoi.model.omamori;
 
 import com.badlogic.gdx.math.MathUtils;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class OmamoriPool {
 
-    // Alle Omamoris, die im Spiel existieren, werden hier 1x registriert
-    private static final List<Omamori> ALL_OMAMORIS = List.of(
-        new DarumaDoll(), new Furin(), new HanamiDango(), new InoshishiTusk(),
-        new JohariMirror(), new KintsugiBowl(), new KitsuneMask(), new Koinobori(),
-        new Kuroneko(), new MatchaWhisk(), new SakeCup(), new TenguFeather(),
-        new TeruTeruBozu(), new ToriiGate(), new YataMirror()
+    private record OmamoriEntry(Supplier<Omamori> factory, Rarity rarity) {}
+
+    // Registrierung aller Omamoris als Constructor-Factorys
+    private static final List<OmamoriEntry> ENTRIES = List.of(
+        new OmamoriEntry(DarumaDoll::new, Rarity.COMMON),
+        new OmamoriEntry(Furin::new, Rarity.UNCOMMON),
+        new OmamoriEntry(HanamiDango::new, Rarity.COMMON),
+        new OmamoriEntry(InoshishiTusk::new, Rarity.UNCOMMON),
+        new OmamoriEntry(JohariMirror::new, Rarity.LEGENDARY),
+        new OmamoriEntry(KintsugiBowl::new, Rarity.RARE),
+        new OmamoriEntry(KitsuneMask::new, Rarity.COMMON),
+        new OmamoriEntry(Koinobori::new, Rarity.UNCOMMON),
+        new OmamoriEntry(Kuroneko::new, Rarity.COMMON),
+        new OmamoriEntry(MatchaWhisk::new, Rarity.COMMON),
+        new OmamoriEntry(SakeCup::new, Rarity.COMMON),
+        new OmamoriEntry(TenguFeather::new, Rarity.COMMON),
+        new OmamoriEntry(TeruTeruBozu::new, Rarity.UNCOMMON),
+        new OmamoriEntry(ToriiGate::new, Rarity.UNCOMMON),
+        new OmamoriEntry(YataMirror::new, Rarity.EPIC)
     );
 
     /**
-     * Zieht ein zufälliges Omamori basierend auf der Seltenheit.
+     * Zieht ein zufälliges Omamori basierend auf der Seltenheit als neue Instanz.
      */
     public static Omamori getRandomOmamori() {
         int totalWeight = 0;
-        for (Omamori o : ALL_OMAMORIS) {
-            totalWeight += getWeight(o.getRarity());
+        for (OmamoriEntry entry : ENTRIES) {
+            totalWeight += getWeight(entry.rarity());
         }
 
         int random = MathUtils.random(0, totalWeight - 1);
         int current = 0;
 
-        for (Omamori o : ALL_OMAMORIS) {
-            current += getWeight(o.getRarity());
+        for (OmamoriEntry entry : ENTRIES) {
+            current += getWeight(entry.rarity());
             if (random < current) {
-                return o;
+                return entry.factory().get();
             }
         }
-        return ALL_OMAMORIS.get(0); // Fallback
+        return ENTRIES.get(0).factory().get(); // Fallback als neue Instanz
     }
 
     /**

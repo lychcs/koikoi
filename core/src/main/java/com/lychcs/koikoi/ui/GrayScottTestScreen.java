@@ -56,7 +56,7 @@ public class GrayScottTestScreen extends ScreenAdapter {
     // ==========================================
     private static final String SIM_FRAG_SHADER =
         "#ifdef GL_ES\n" +
-            "precision highp float;\n" +
+            "precision mediump float;\n" +
             "#endif\n" +
             "varying vec2 v_texCoords;\n" +
             "uniform sampler2D u_texture;\n" +

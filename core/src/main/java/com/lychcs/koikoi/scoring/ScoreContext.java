@@ -28,16 +28,16 @@ public record ScoreContext(
         return new ScoreContext(hand, unplayedCards, bestYaku, List.of(), activeAltarYokai, progression);
     }
 
-    public int getYakuBaseChips() {
-        if (bestYaku == null) return 0;
+    public long getYakuBaseChips() {
+        if (bestYaku == null) return 0L;
         if (progression != null) {
             return progression.getUpgradedChips(bestYaku.type());
         }
         return bestYaku.baseChips();
     }
 
-    public int getYakuBaseMult() {
-        if (bestYaku == null) return 0;
+    public long getYakuBaseMult() {
+        if (bestYaku == null) return 0L;
         if (progression != null) {
             return progression.getUpgradedMult(bestYaku.type());
         }

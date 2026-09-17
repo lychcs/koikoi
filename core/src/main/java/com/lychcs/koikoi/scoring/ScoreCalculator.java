@@ -2,6 +2,7 @@ package com.lychcs.koikoi.scoring;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
+import com.lychcs.koikoi.model.hanko.StoneSeal;
 
 import java.util.List;
 
@@ -10,25 +11,25 @@ public final class ScoreCalculator {
     private ScoreCalculator() {}
 
     public static CalculationBreakdown calculate(ScoreContext context) {
-        int yakuChips = context.getYakuBaseChips();
-        int yakuBaseMult = context.getYakuBaseMult();
+        long yakuChips = context.getYakuBaseChips();
+        long yakuBaseMult = context.getYakuBaseMult();
         String yakuName = context.bestYaku() != null ? context.bestYaku().type().getDisplayName() : "High Card";
 
         // 1. Base Setup
-        int startingChips = yakuChips;
-        int startingMult = Math.max(1, yakuBaseMult);
+        long startingChips = yakuChips;
+        long startingMult = Math.max(1L, yakuBaseMult);
 
         ScoreAccumulator acc = new ScoreAccumulator(startingChips, startingMult);
-        acc.addChips("Base " + yakuName, 0);
+        acc.addChips("Base " + yakuName, 0L);
 
         // 2. Card Effects (Hankos / Seals)
         for (var card : context.hand().getAllCards()) {
             switch (card.effect()) {
                 case WHITE_SEAL -> {
-                    acc.addChips(card.name() + " (White Seal)", 30);
+                    acc.addChips(card.name() + " (White Seal)", 30L);
                 }
                 case BLACK_SEAL -> {
-                    acc.addMult(card.name() + " (Black Seal)", 4);
+                    acc.addMult(card.name() + " (Black Seal)", 4L);
                 }
                 case GOLDEN_SEAL -> {
                     if (MathUtils.random(1, 4) == 1) {
@@ -47,11 +48,11 @@ public final class ScoreCalculator {
                     }
                 }
                 case BLOOD_SEAL -> {
-                    acc.addChips(card.name() + " (Blood Sacrifice)", 50);
-                    acc.addMult(card.name() + " (Blood Surge)", 10);
+                    acc.addChips(card.name() + " (Blood Sacrifice)", 50L);
+                    acc.addMult(card.name() + " (Blood Surge)", 10L);
                 }
                 case STONE_SEAL -> {
-                    // Wird im GameScreen verarbeitet
+                    acc.addChips(card.name() + " (Stone Seal)", StoneSeal.LEVEL_1_CHIP_BONUS);
                 }
                 case POLYCHROME_SEAL -> {
                     // Wird im HandContext verarbeitet
@@ -73,7 +74,7 @@ public final class ScoreCalculator {
         }
 
         // 5. Final Payout
-        long handPayout = (long) acc.getChips() * acc.getMult();
+        long handPayout = acc.getChips() * acc.getMult();
         long finalPayout = handPayout;
 
         return new CalculationBreakdown(

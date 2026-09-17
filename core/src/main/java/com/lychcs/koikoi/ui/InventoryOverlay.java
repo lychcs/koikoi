@@ -445,7 +445,7 @@ public class InventoryOverlay extends Group {
             case BLACK_SEAL -> "+4 Mult beim Ausspielen.";
             case GOLDEN_SEAL -> "Chance auf +3 oder +10 Mon bei Wertung.";
             case VOID_SEAL -> "Chance auf +5 oder +10 Void Dust bei Wertung.";
-            case STONE_SEAL -> "Kehrt nach dem Ausspielen 1x auf die Hand zurueck.";
+            case STONE_SEAL -> "Kann nicht discarded werden. Gibt beim Werten +50 Chips.";
             case POLYCHROME_SEAL -> "Zaehlt gleichzeitig fuer alle 4 Jahreszeiten.";
             case BLOOD_SEAL -> "+50 Chips & +10 Mult, aber 25% Chance auf Verbannung.";
             default -> "Kein spezieller Effekt.";
