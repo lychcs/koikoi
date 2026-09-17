@@ -14,7 +14,8 @@ public record ScoreContext(
     YakuResult bestYaku,
     List<Omamori> omamoris,
     Shikigami activeAltarShikigami,
-    YakuProgression progression
+    YakuProgression progression,
+    List<Card> orderedScoringCards
 ) {
     public ScoreContext {
         Objects.requireNonNull(hand, "hand must not be null");
@@ -22,10 +23,11 @@ public record ScoreContext(
         Objects.requireNonNull(omamoris, "omamoris must not be null");
         unplayedCards = List.copyOf(unplayedCards);
         omamoris = List.copyOf(omamoris);
+        orderedScoringCards = orderedScoringCards == null ? List.of() : List.copyOf(orderedScoringCards);
     }
 
     public static ScoreContext preview(HandContext hand, List<Card> unplayedCards, YakuResult bestYaku, Shikigami activeAltarShikigami, YakuProgression progression) {
-        return new ScoreContext(hand, unplayedCards, bestYaku, List.of(), activeAltarShikigami, progression);
+        return new ScoreContext(hand, unplayedCards, bestYaku, List.of(), activeAltarShikigami, progression, List.of());
     }
 
     public double getYakuBaseChips() {
@@ -50,5 +52,18 @@ public record ScoreContext(
      */
     public List<Card> matchedCards() {
         return bestYaku == null ? List.of() : bestYaku.matchedCards();
+    }
+
+    /**
+     * Karten, die tatsaechlich gewertet werden – in der sichtbaren
+     * Links-nach-rechts-Reihenfolge der ausgespielten Hand (gefiltert auf
+     * {@link #matchedCards()}). Ist keine Reihenfolge gesetzt, gilt die
+     * Reihenfolge der Yaku-Erkennung.
+     */
+    public List<Card> scoringCards() {
+        if (orderedScoringCards.isEmpty()) {
+            return matchedCards();
+        }
+        return orderedScoringCards;
     }
 }

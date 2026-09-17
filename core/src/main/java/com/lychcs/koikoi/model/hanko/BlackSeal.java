@@ -4,6 +4,9 @@ import com.lychcs.koikoi.model.Card;
 
 public class BlackSeal implements Hanko {
 
+    /** Additiver Mult-Bonus beim Werten (zentrale Quelle fuer Wertung und Auswahlprioritaet). */
+    public static final double MULT_BONUS = 4.0;
+
     @Override
     public String getName() {
         return "Black Seal";
@@ -11,7 +14,7 @@ public class BlackSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +4 Multiplier when this card is played.";
+        return "Grants +" + (long) MULT_BONUS + " Multiplier when this card is played.";
     }
 
     @Override

@@ -21,8 +21,9 @@ public class MatchaWhisk implements Omamori {
     public boolean evaluate(ScoreContext context, ScoreAccumulator acc) {
         int uniqueSeasons = 0;
 
+        // Natuerliche Seasons: PolyChrome zaehlt nur mit seiner eigenen Season.
         for (Season s : Season.values()) {
-            if (context.hand().getSeasonCount(s) > 0) {
+            if (context.hand().getNaturalSeasonCount(s) > 0) {
                 uniqueSeasons++;
             }
         }

@@ -2,7 +2,8 @@ package com.lychcs.koikoi.scoring;
 
 /**
  * Alle Yaku mit dezimalen Basiswerten. Die Reihenfolge der Konstanten ist die
- * stabile Prioritaet bei identischem EffectiveScore (siehe YakuDetector).
+ * stabile Detektions-/Tie-Break-Reihenfolge in {@link YakuDetector}; die Auswahl
+ * des besten Yakus trifft {@link YakuSelector} anhand der realen Auszahlung.
  */
 public enum YakuType {
 

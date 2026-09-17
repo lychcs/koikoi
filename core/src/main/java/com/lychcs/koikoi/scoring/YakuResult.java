@@ -40,6 +40,11 @@ public record YakuResult(
 
     /**
      * Total strength of this specific hand result for ranking/selection.
+     *
+     * <p>Hinweis: Das ist der UNGELEVELTE Enum-Basiswert (baseChips x baseMult).
+     * Die Auswahl des besten Yakus erfolgt seit Phase 2 ausschliesslich ueber die
+     * reale Auszahlung in {@link YakuSelector} (Yaku-Level, Kartenbasis, Hankos,
+     * Shikigami, Omamori). Dieser Wert bleibt fuer Vergleiche und Debug erhalten.</p>
      */
     public double getEffectiveScore() {
         return baseChips * baseMult;

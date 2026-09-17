@@ -1,10 +1,10 @@
 package com.lychcs.koikoi.model;
 
 public enum Rank {
-    PETAL(1),
-    RIBBON(5),
-    BEAST(10),
-    HIKARI(20);
+    PETAL(5),
+    RIBBON(10),
+    BEAST(20),
+    HIKARI(25);
 
     private final double baseValue;
 

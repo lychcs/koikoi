@@ -4,6 +4,9 @@ import com.lychcs.koikoi.model.Card;
 
 public class WhiteSeal implements Hanko {
 
+    /** Chips-Bonus beim Werten (zentrale Quelle fuer Wertung und Auswahlprioritaet). */
+    public static final double CHIP_BONUS = 30.0;
+
     @Override
     public String getName() {
         return "White Seal";
@@ -11,7 +14,7 @@ public class WhiteSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +30 Base Chips when this card is played.";
+        return "Grants +" + (long) CHIP_BONUS + " Base Chips when this card is played.";
     }
 
     @Override

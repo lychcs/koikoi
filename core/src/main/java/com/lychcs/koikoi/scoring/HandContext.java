@@ -14,7 +14,10 @@ import java.util.Set;
 public final class HandContext {
 
     private final Map<Rank, List<Card>> cardsByRank = new EnumMap<>(Rank.class);
-    private final Map<Season, List<Card>> cardsBySeason = new EnumMap<>(Season.class);
+    /** Virtuelle Season-Sicht fuer die Yaku-Erkennung (PolyChrome zaehlt als jede Season). */
+    private final Map<Season, List<Card>> cardsByVirtualSeason = new EnumMap<>(Season.class);
+    /** Natuerliche Season-Sicht (jede Karte zaehlt ausschliesslich mit card.season()). */
+    private final Map<Season, List<Card>> cardsByNaturalSeason = new EnumMap<>(Season.class);
     private final Set<CardID> cardIds = EnumSet.noneOf(CardID.class);
     private final List<Card> allCards;
 
@@ -26,21 +29,24 @@ public final class HandContext {
             cardsByRank.put(rank, new ArrayList<>());
         }
         for (Season season : Season.values()) {
-            cardsBySeason.put(season, new ArrayList<>());
+            cardsByVirtualSeason.put(season, new ArrayList<>());
+            cardsByNaturalSeason.put(season, new ArrayList<>());
         }
 
         // Single pass aggregation
         for (Card card : cards) {
             cardsByRank.get(card.rank()).add(card);
 
-            // Polychrome Logik
+            // Natuerliche Sicht: unveraendert die eigene Season der Karte.
+            cardsByNaturalSeason.get(card.season()).add(card);
+
+            // Virtuelle Sicht: Polychrome zaehlt bei der Yaku-Erkennung als jede Season.
             if (card.effect() == HankoEffect.POLYCHROME_SEAL) {
-                // Diese Karte zählt als Frühling, Sommer, Herbst und Winter!
                 for (Season season : Season.values()) {
-                    cardsBySeason.get(season).add(card);
+                    cardsByVirtualSeason.get(season).add(card);
                 }
             } else {
-                cardsBySeason.get(card.season()).add(card);
+                cardsByVirtualSeason.get(card.season()).add(card);
             }
 
             cardIds.add(card.id());
@@ -51,16 +57,50 @@ public final class HandContext {
         return Collections.unmodifiableList(cardsByRank.get(rank));
     }
 
+    /**
+     * Virtuelle Season-Sicht fuer die Yaku-Erkennung:
+     * eine Polychrome-Karte zaehlt als jede Season.
+     */
+    public List<Card> getVirtualCardsBySeason(Season season) {
+        return Collections.unmodifiableList(cardsByVirtualSeason.get(season));
+    }
+
+    /** Virtuelle Season-Anzahl (Yaku-Erkennung, Polychrome zaehlt ueberall mit). */
+    public int getVirtualSeasonCount(Season season) {
+        return cardsByVirtualSeason.get(season).size();
+    }
+
+    /**
+     * Natuerliche Season-Sicht: jede Karte zaehlt ausschliesslich mit
+     * {@code card.season()} (fuer seasonabhaengige Omamori).
+     */
+    public List<Card> getNaturalCardsBySeason(Season season) {
+        return Collections.unmodifiableList(cardsByNaturalSeason.get(season));
+    }
+
+    /** Natuerliche Season-Anzahl (ohne virtuelle PolyChrome-Ausweitung). */
+    public int getNaturalSeasonCount(Season season) {
+        return cardsByNaturalSeason.get(season).size();
+    }
+
+    /**
+     * Bestehende API: liefert die VIRTUELLE Season-Sicht (Yaku-Erkennung),
+     * identisch zu {@link #getVirtualCardsBySeason(Season)}.
+     */
     public List<Card> getCardsBySeason(Season season) {
-        return Collections.unmodifiableList(cardsBySeason.get(season));
+        return getVirtualCardsBySeason(season);
+    }
+
+    /**
+     * Bestehende API: liefert die VIRTUELLE Season-Anzahl (Yaku-Erkennung),
+     * identisch zu {@link #getVirtualSeasonCount(Season)}.
+     */
+    public int getSeasonCount(Season season) {
+        return getVirtualSeasonCount(season);
     }
 
     public int getRankCount(Rank rank) {
         return cardsByRank.get(rank).size();
-    }
-
-    public int getSeasonCount(Season season) {
-        return cardsBySeason.get(season).size();
     }
 
     public boolean containsCardId(CardID cardID) {
