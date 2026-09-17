@@ -3,9 +3,9 @@ package com.lychcs.koikoi.run;
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
-import com.lychcs.koikoi.model.yokai.Oni;
-import com.lychcs.koikoi.model.yokai.Yokai;
-import com.lychcs.koikoi.model.yokai.YokaiStage;
+import com.lychcs.koikoi.model.shikigami.Oni;
+import com.lychcs.koikoi.model.shikigami.Shikigami;
+import com.lychcs.koikoi.model.shikigami.ShikigamiStage;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,8 +19,23 @@ public class RunSession {
     public static final int BASE_DISCARDS = 3;
     public static final int MAX_ACTIVE_OMAMORIS = 3;
 
+    /** Kämpfe, die in einem Ort absolviert werden. */
+    public static final int ENCOUNTERS_PER_LOCATION = 3;
+
+    /** Standard-Haendler, solange es nur einen Shop gibt. */
+    public static final String DEFAULT_SHOP_ID = "tengu_shop";
+
+    /** Season des aktuellen Ortes. Wird ausschliesslich ueber die Tiled-Map gesetzt. */
     private GameSeason currentSeason = GameSeason.SPRING;
-    private int seasonEncounterStage = 1;
+
+    /** Id des aktuellen Ortes (aus den Map-Properties). */
+    private String currentLocationId = "";
+
+    /** Lokaler Encounter-Fortschritt des aktuellen Ortes. */
+    private int locationEncounterStage = 1;
+
+    /** Persistente Shopzustaende je Haendler-Id. */
+    private final Map<String, ShopState> shopStates = new LinkedHashMap<>();
 
     /** Alle im aktuellen Run gekauften Omamori. */
     private final List<Omamori> ownedOmamoris = new ArrayList<>();
@@ -31,8 +46,8 @@ public class RunSession {
     private int mon = 10000;
     private int voidDust = 5000;
 
-    private final List<Yokai> yokaiBag = new ArrayList<>();
-    private int maxYokaiBag = 5;
+    private final List<Shikigami> shikigamiBag = new ArrayList<>();
+    private int maxShikigamiBag = 5;
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
@@ -47,7 +62,7 @@ public class RunSession {
     public RunSession() {
         playerDeck = new Deck();
         playerDeck.initializeDeck();
-        yokaiBag.add(new Oni(YokaiStage.LEVEL_1));
+        shikigamiBag.add(new Oni(ShikigamiStage.LEVEL_1));
     }
 
     // ---------------------------------------------------------------------
@@ -100,25 +115,64 @@ public class RunSession {
     }
 
     // ---------------------------------------------------------------------
-    // Seasons (bestehendes Verhalten unveraendert)
+    // Locations und Seasons
     // ---------------------------------------------------------------------
 
-    public void advanceEncounterStage() {
-        seasonEncounterStage++;
-        if (seasonEncounterStage > 3) {
-            seasonEncounterStage = 1;
-            advanceSeason();
+    /**
+     * Betritt einen Ort. Die Season wird ausschliesslich durch den geladenen Ort
+     * (Tiled-Map) bestimmt. Ein Ortswechsel setzt den lokalen Encounter-Fortschritt
+     * auf 1 zurueck, derselbe Ort behaelt seinen Fortschritt.
+     */
+    public void enterLocation(String locationId, GameSeason season) {
+        if (locationId == null) {
+            throw new IllegalArgumentException("locationId darf nicht null sein");
         }
+        if (season == null) {
+            throw new IllegalArgumentException("season darf nicht null sein");
+        }
+
+        if (!locationId.equals(currentLocationId)) {
+            locationEncounterStage = 1;
+        }
+
+        currentLocationId = locationId;
+        currentSeason = season;
     }
 
-    private void advanceSeason() {
-        currentSeason = switch (currentSeason) {
-            case SPRING -> GameSeason.SUMMER;
-            case SUMMER -> GameSeason.AUTUMN;
-            case AUTUMN -> GameSeason.WINTER;
-            case WINTER -> GameSeason.FINAL;
-            case FINAL -> GameSeason.FINAL;
-        };
+    public String getCurrentLocationId() {
+        return currentLocationId;
+    }
+
+    public int getLocationEncounterStage() {
+        return locationEncounterStage;
+    }
+
+    /**
+     * Erhoeht ausschliesslich den lokalen Encounter-Fortschritt.
+     * Die Season wird hier niemals veraendert.
+     */
+    public void advanceEncounterStage() {
+        locationEncounterStage++;
+    }
+
+    // ---------------------------------------------------------------------
+    // Shop
+    // ---------------------------------------------------------------------
+
+    /**
+     * Liefert den persistenten Zustand des Shops. Die Angebote werden beim ersten
+     * Aufruf erzeugt und bleiben danach fuer diese RunSession unveraendert.
+     * Ein neuer {@code ShopScreen} setzt den Zustand nicht zurueck.
+     */
+    public ShopState getOrCreateShopState(String shopId) {
+        String key = (shopId == null || shopId.trim().isEmpty()) ? DEFAULT_SHOP_ID : shopId;
+
+        ShopState state = shopStates.get(key);
+        if (state == null) {
+            state = ShopState.create(key, ownedOmamoris);
+            shopStates.put(key, state);
+        }
+        return state;
     }
 
     // ---------------------------------------------------------------------
@@ -205,12 +259,12 @@ public class RunSession {
         return yakuProgression;
     }
 
-    public List<Yokai> getYokaiBag() {
-        return yokaiBag;
+    public List<Shikigami> getShikigamiBag() {
+        return shikigamiBag;
     }
 
-    public int getMaxYokaiBag() {
-        return maxYokaiBag;
+    public int getMaxShikigamiBag() {
+        return maxShikigamiBag;
     }
 
     public Deck getPlayerDeck() {
@@ -268,13 +322,5 @@ public class RunSession {
 
     public GameSeason getCurrentSeason() {
         return currentSeason;
-    }
-
-    public void setCurrentSeason(GameSeason season) {
-        currentSeason = season;
-    }
-
-    public int getSeasonEncounterStage() {
-        return seasonEncounterStage;
     }
 }

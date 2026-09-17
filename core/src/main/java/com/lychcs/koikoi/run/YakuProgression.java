@@ -30,14 +30,14 @@ public class YakuProgression {
         xp.put(type, currentXp);
     }
 
-    // Berechnet die modifizierten Basis-Chips basierend auf dem Level (+10 Chips & +1 Mult pro Level)
-    public long getUpgradedChips(YakuType type) {
+    // Berechnet die modifizierten Basis-Chips basierend auf dem Level (+15 Chips & +2 Mult pro Level)
+    public double getUpgradedChips(YakuType type) {
         int lvl = getLevel(type);
-        return type.getBaseChips() + (long) (lvl - 1) * 15L;
+        return type.getBaseChips() + (lvl - 1) * 15.0;
     }
 
-    public long getUpgradedMult(YakuType type) {
+    public double getUpgradedMult(YakuType type) {
         int lvl = getLevel(type);
-        return type.getBaseMult() + (long) (lvl - 1) * 2L;
+        return type.getBaseMult() + (lvl - 1) * 2.0;
     }
 }

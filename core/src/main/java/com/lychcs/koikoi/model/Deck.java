@@ -6,11 +6,9 @@ import java.util.List;
 
 public class Deck {
     private final List<Card> cards = new ArrayList<>();
-    private int testSealIndex = 0; // Zähler für die Rotation
 
     public void initializeDeck() {
         cards.clear();
-        testSealIndex = 0;
 
         // === SPRING ===
         addCard(CardID.SPRING_HIKARI_CHERRY_BLOSSOM_STORM, Season.SPRING, Rank.HIKARI, "Cherry Blossom Storm", 1);

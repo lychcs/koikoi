@@ -6,12 +6,15 @@ import com.lychcs.koikoi.scoring.ScoreContext;
 
 public class ToriiGate implements Omamori {
 
+    /** Multiplikator, wenn die Bedingung erfuellt ist. */
+    private static final double MUNDANE_PURITY_MULT = 1.5;
+
     @Override
     public String getName() { return "Torii Gate"; }
 
     @Override
     public String getDescription() {
-        return "Grants x1.5 Mult if played hand contains no Beast and no Yami cards.";
+        return "Grants x" + MUNDANE_PURITY_MULT + " Mult if the played hand contains no Beast card.";
     }
 
     @Override
@@ -19,13 +22,11 @@ public class ToriiGate implements Omamori {
 
     @Override
     public boolean evaluate(ScoreContext context, ScoreAccumulator acc) {
-        int beasts = context.hand().getRankCount(Rank.BEAST);
-        int hikari = context.hand().getRankCount(Rank.HIKARI);
-        int yami = context.hand().getRankCount(Rank.YAMI);
+        // Bedingung: Es wurde keine einzige Karte mit dem Rang BEAST gespielt.
+        boolean containsBeast = context.hand().getRankCount(Rank.BEAST) > 0;
 
-        // Prüft, ob Karten gespielt wurden UND keine starken Ränge dabei sind
-        if (context.hand().getTotalCardCount() > 0 && beasts == 0 && yami == 0) {
-            acc.multiplyMult("Mundane Purity", 1.5);
+        if (!containsBeast) {
+            acc.multiplyMult("Mundane Purity", MUNDANE_PURITY_MULT);
             return true;
         }
         return false;

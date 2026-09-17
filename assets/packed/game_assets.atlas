@@ -4,142 +4,170 @@ size: 4096, 1024
 format: RGBA8888
 filter: Nearest, Nearest
 repeat: none
+AUTUMN_BACKCARD
+  rotate: false
+  xy: 2, 388
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
 AUTUMN_BEAST_BOAR
   rotate: false
-  xy: 544, 578
+  xy: 2, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_BEAST_DEER
   rotate: false
-  xy: 544, 192
+  xy: 220, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_HIKARI_RED_MOON
   rotate: false
-  xy: 2, 2
-  size: 540, 960
-  orig: 540, 960
+  xy: 220, 2
+  size: 216, 384
+  orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_PETAL
   rotate: false
-  xy: 762, 578
+  xy: 438, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 AUTUMN_RIBBON
   rotate: false
-  xy: 762, 192
+  xy: 438, 2
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SPRING_BACKCARD
+  rotate: false
+  xy: 656, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_BEAST_CRANE
   rotate: false
-  xy: 980, 578
+  xy: 656, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_BEAST_KOI
   rotate: false
-  xy: 980, 192
+  xy: 874, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_HIKARI_CHERRY_BLOSSOM_STORM
   rotate: false
-  xy: 1198, 578
+  xy: 874, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_PETAL
   rotate: false
-  xy: 1198, 192
+  xy: 1092, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SPRING_RIBBON
   rotate: false
-  xy: 1416, 578
+  xy: 1092, 2
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+SUMMER_BACKCARD
+  rotate: false
+  xy: 1310, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SUMMER_BEAST_MOUNTAIN_MONKEY
   rotate: false
-  xy: 1416, 192
+  xy: 1310, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SUMMER_BEAST_SERPENT
   rotate: false
-  xy: 1634, 578
+  xy: 1528, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SUMMER_HIKARI_GLAZING_SUN
   rotate: false
-  xy: 1634, 192
+  xy: 1528, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SUMMER_PETAL
   rotate: false
-  xy: 1852, 578
+  xy: 1746, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 SUMMER_RIBBON
   rotate: false
-  xy: 1852, 192
+  xy: 1746, 2
+  size: 216, 384
+  orig: 216, 384
+  offset: 0, 0
+  index: -1
+WINTER_BACKCARD
+  rotate: false
+  xy: 1964, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 WINTER_BEAST_ARCTIC_FOX
   rotate: false
-  xy: 2070, 578
+  xy: 1964, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 WINTER_BEAST_WHITE_OWL
   rotate: false
-  xy: 2070, 192
+  xy: 2182, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 WINTER_HIKARI_POLAR_LIGHT
   rotate: false
-  xy: 2288, 578
+  xy: 2182, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 WINTER_PETAL
   rotate: false
-  xy: 2288, 192
+  xy: 2400, 388
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
 WINTER_RIBBON
   rotate: false
-  xy: 2506, 578
+  xy: 2400, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
@@ -316,21 +344,21 @@ size: 1024, 512
 format: RGBA8888
 filter: Nearest, Nearest
 repeat: none
-YOKAI_DAI_ONI
+SHIKIGAMI_DAI_ONI
   rotate: false
   xy: 2, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
-YOKAI_KO_ONI
+SHIKIGAMI_KO_ONI
   rotate: false
   xy: 220, 2
   size: 216, 384
   orig: 216, 384
   offset: 0, 0
   index: -1
-YOKAI_ONI
+SHIKIGAMI_ONI
   rotate: false
   xy: 438, 2
   size: 216, 384

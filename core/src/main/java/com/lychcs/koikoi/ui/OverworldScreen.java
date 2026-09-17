@@ -15,6 +15,7 @@ import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.maps.MapLayer;
 import com.badlogic.gdx.maps.MapObject;
+import com.badlogic.gdx.maps.MapProperties;
 import com.badlogic.gdx.maps.objects.RectangleMapObject;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
@@ -37,13 +38,25 @@ import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.entities.Player;
 import com.lychcs.koikoi.graphics.CorruptionEngine;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 public class OverworldScreen extends ScreenAdapter {
+
+    /** Tiled-Map des aktuell geladenen Ortes. */
+    private static final String LOCATION_MAP_PATH = "map/testmap.tmx";
+
+    /** Map-Property mit der stabilen Orts-Id. */
+    private static final String MAP_PROPERTY_LOCATION_ID = "locationId";
+
+    /** Map-Property mit der Season des Ortes. */
+    private static final String MAP_PROPERTY_SEASON = "season";
 
     private final RunSession runSession;
     private TiledMap map;
@@ -105,7 +118,10 @@ public class OverworldScreen extends ScreenAdapter {
         world = new World(new Vector2(0, 0), true);
         debugRenderer = new Box2DDebugRenderer();
 
-        map = new TmxMapLoader().load("map/testmap.tmx");
+        map = new TmxMapLoader().load(LOCATION_MAP_PATH);
+
+        // Ort und Season werden unmittelbar nach dem Laden aus den Map-Properties gelesen.
+        applyLocationMetadata(LOCATION_MAP_PATH);
 
         int mapWidthTiles = map.getProperties().get("width", Integer.class);
         int mapHeightTiles = map.getProperties().get("height", Integer.class);
@@ -203,6 +219,50 @@ public class OverworldScreen extends ScreenAdapter {
         }
 
         corruptionEngine = new CorruptionEngine();
+    }
+
+    /**
+     * Liest Orts-Id und Season aus den Properties der geladenen Tiled-Map und meldet
+     * den Ort an die {@link RunSession}. Fehlende oder ungueltige Werte werden mit
+     * verstaendlicher Meldung protokolliert und durch sichere Fallbacks ersetzt
+     * (Map-Pfad als Orts-Id, bestehende Season als Season).
+     */
+    private void applyLocationMetadata(String fallbackLocationId) {
+        MapProperties properties = map.getProperties();
+
+        String rawLocationId = properties.get(MAP_PROPERTY_LOCATION_ID, String.class);
+        String locationId = rawLocationId == null ? "" : rawLocationId.trim();
+        if (locationId.isEmpty()) {
+            locationId = fallbackLocationId;
+        }
+
+        String rawSeason = properties.get(MAP_PROPERTY_SEASON, String.class);
+        GameSeason mapSeason = null;
+
+        if (rawSeason == null || rawSeason.trim().isEmpty()) {
+            Gdx.app.error(
+                "OverworldScreen",
+                "Season-Property '" + MAP_PROPERTY_SEASON + "' fehlt in Map " + fallbackLocationId
+                    + ". Fallback: " + runSession.getCurrentSeason()
+            );
+        } else {
+            try {
+                mapSeason = GameSeason.valueOf(rawSeason.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                Gdx.app.error(
+                    "OverworldScreen",
+                    "Ungueltige Season '" + rawSeason + "' in Map " + fallbackLocationId
+                        + ". Erlaubte Werte: " + Arrays.toString(GameSeason.values())
+                        + ". Fallback: " + runSession.getCurrentSeason()
+                );
+            }
+        }
+
+        if (mapSeason == null) {
+            mapSeason = runSession.getCurrentSeason();
+        }
+
+        runSession.enterLocation(locationId, mapSeason);
     }
 
     private void createCollisionBoxes() {

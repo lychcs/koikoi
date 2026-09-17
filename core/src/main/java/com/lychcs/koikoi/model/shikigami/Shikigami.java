@@ -1,14 +1,14 @@
-package com.lychcs.koikoi.model.yokai;
+package com.lychcs.koikoi.model.shikigami;
 
 import com.lychcs.koikoi.scoring.ScoreAccumulator;
 import com.lychcs.koikoi.scoring.ScoreContext;
 
-public abstract class Yokai {
+public abstract class Shikigami {
 
     private final String id;
     private final String baseName;
     private final String atlasRegionName;
-    private YokaiStage stage;
+    private ShikigamiStage stage;
     private boolean exhausted;
 
     private int level = 1;
@@ -16,7 +16,7 @@ public abstract class Yokai {
 
     public static final int MAX_LEVEL = 3;
 
-    public Yokai(String id, String baseName, String atlasRegionName, YokaiStage initialStage) {
+    public Shikigami(String id, String baseName, String atlasRegionName, ShikigamiStage initialStage) {
         this.id = id;
         this.baseName = baseName;
         this.atlasRegionName = atlasRegionName;
@@ -32,8 +32,8 @@ public abstract class Yokai {
         };
     }
 
-    public Yokai(String id, String baseName, String atlasRegionName) {
-        this(id, baseName, atlasRegionName, YokaiStage.LEVEL_1);
+    public Shikigami(String id, String baseName, String atlasRegionName) {
+        this(id, baseName, atlasRegionName, ShikigamiStage.LEVEL_1);
     }
 
     public abstract String getDescription();
@@ -41,7 +41,7 @@ public abstract class Yokai {
 
     /**
      * Fügt Erfahrungspunkte hinzu.
-     * Erreicht die Leiste das Maximum, steigt der Yokai sofort ein Level auf
+     * Erreicht die Leiste das Maximum, steigt der Shikigami sofort ein Level auf
      * und entwickelt sich wie in Pokémon zur nächsten Stufe weiter.
      */
     public void addXp(int amount) {
@@ -66,9 +66,9 @@ public abstract class Yokai {
     }
 
     public void evolve() {
-        if (stage == YokaiStage.EGG) stage = YokaiStage.LEVEL_1;
-        else if (stage == YokaiStage.LEVEL_1) stage = YokaiStage.LEVEL_2;
-        else if (stage == YokaiStage.LEVEL_2) stage = YokaiStage.LEVEL_3;
+        if (stage == ShikigamiStage.EGG) stage = ShikigamiStage.LEVEL_1;
+        else if (stage == ShikigamiStage.LEVEL_1) stage = ShikigamiStage.LEVEL_2;
+        else if (stage == ShikigamiStage.LEVEL_2) stage = ShikigamiStage.LEVEL_3;
     }
 
     /**
@@ -87,7 +87,7 @@ public abstract class Yokai {
     public String getId() { return id; }
     public String getName() { return baseName; } // Wird von Subklassen wie Oni überschrieben
     public String getAtlasRegionName() { return atlasRegionName; }
-    public YokaiStage getStage() { return stage; }
+    public ShikigamiStage getStage() { return stage; }
     public int getLevel() { return level; }
     public int getCurrentXp() { return currentXp; }
     public int getXp() { return currentXp; }

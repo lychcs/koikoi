@@ -27,7 +27,7 @@ import com.lychcs.koikoi.model.hanko.Hanko;
 import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
-import com.lychcs.koikoi.model.yokai.Yokai;
+import com.lychcs.koikoi.model.shikigami.Shikigami;
 import com.lychcs.koikoi.run.RunSession;
 
 import java.util.EnumMap;
@@ -96,7 +96,7 @@ public class InventoryOverlay extends Group {
         Table header = new Table();
         TextButton deckTab = new TextButton("Deck", buttonStyle);
         TextButton omamoriTab = new TextButton("Omamori", buttonStyle);
-        TextButton yokaiTab = new TextButton("Yokai", buttonStyle);
+        TextButton shikigamiTab = new TextButton("Shikigami", buttonStyle);
         hankoTab = new TextButton("Hankos", buttonStyle);
         TextButton closeButton = new TextButton("X", buttonStyle);
 
@@ -105,7 +105,7 @@ public class InventoryOverlay extends Group {
 
         deckTab.addListener(tabListener(this::showDeckTab));
         omamoriTab.addListener(tabListener(this::showOmamoriTab));
-        yokaiTab.addListener(tabListener(this::showYokaiTab));
+        shikigamiTab.addListener(tabListener(this::showShikigamiTab));
         hankoTab.addListener(tabListener(this::showHankoTab));
         closeButton.addListener(new ClickListener() {
             @Override
@@ -116,7 +116,7 @@ public class InventoryOverlay extends Group {
 
         header.add(deckTab).width(115f).height(45f).padRight(8f);
         header.add(omamoriTab).width(115f).height(45f).padRight(8f);
-        header.add(yokaiTab).width(115f).height(45f).padRight(8f);
+        header.add(shikigamiTab).width(115f).height(45f).padRight(8f);
         header.add(hankoTab).width(135f).height(45f).padRight(20f);
         header.add(currencyLabel).expandX().left();
         header.add(closeButton).width(45f).height(45f).right();
@@ -657,29 +657,29 @@ public class InventoryOverlay extends Group {
     }
 
     // ---------------------------------------------------------------------
-    // Yokai-Ansicht (bestehendes Verhalten)
+    // Shikigami-Ansicht (bestehendes Verhalten)
     // ---------------------------------------------------------------------
 
-    private void showYokaiTab() {
+    private void showShikigamiTab() {
         contentArea.clearChildren();
 
-        for (Yokai yokai : runSession.getYokaiBag()) {
-            TextureRegion region = atlas.findRegion(yokai.getAtlasRegionName());
+        for (Shikigami shikigami : runSession.getShikigamiBag()) {
+            TextureRegion region = atlas.findRegion(shikigami.getAtlasRegionName());
             if (region == null) {
                 continue;
             }
 
-            JuicyYokaiActor actor = new JuicyYokaiActor(
-                yokai,
+            JuicyShikigamiActor actor = new JuicyShikigamiActor(
+                shikigami,
                 region,
                 false,
                 skin,
-                new JuicyYokaiActor.YokaiListener() {
+                new JuicyShikigamiActor.ShikigamiListener() {
                     @Override
-                    public void onTap(JuicyYokaiActor actor) {}
+                    public void onTap(JuicyShikigamiActor actor) {}
 
                     @Override
-                    public void onDrop(JuicyYokaiActor actor, Vector2 position) {}
+                    public void onDrop(JuicyShikigamiActor actor, Vector2 position) {}
                 }
             );
 
@@ -688,9 +688,9 @@ public class InventoryOverlay extends Group {
 
             Table info = new Table();
             info.left();
-            info.add(new Label(yokai.getName(), skin)).left().row();
+            info.add(new Label(shikigami.getName(), skin)).left().row();
             Label xp = new Label(
-                "XP: " + yokai.getCurrentXp() + " / " + yokai.getXpToNextLevel(),
+                "XP: " + shikigami.getCurrentXp() + " / " + shikigami.getXpToNextLevel(),
                 skin
             );
             xp.setFontScale(0.8f);

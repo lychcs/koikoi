@@ -8,5 +8,5 @@ public enum HankoEffect {
     VOID_SEAL,        // Chance auf Void Dust
     STONE_SEAL,       // Nicht discardbar, +50 Chips
     POLYCHROME_SEAL,  // Zaehlt als alle Jahreszeiten
-    BLOOD_SEAL        // +50 Chips und +10 Mult
+    BLOOD_SEAL        // +50 Chips und +10 Mult (BloodSeal.CHIP_BONUS / MULT_BONUS)
 }

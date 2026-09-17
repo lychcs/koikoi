@@ -4,6 +4,12 @@ import com.lychcs.koikoi.model.Card;
 
 public class BloodSeal implements Hanko {
 
+    /** Chips-Bonus beim Werten. */
+    public static final long CHIP_BONUS = 50L;
+
+    /** Mult-Bonus beim Werten. */
+    public static final long MULT_BONUS = 10L;
+
     @Override
     public String getName() {
         return "Blood Seal";
@@ -11,7 +17,8 @@ public class BloodSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +50 Chips and +10 Mult when scored.";
+        // Einziger Effekt: +Chips und +Mult. Keine Kartenzerstoerung, keine Verbannung.
+        return "Grants +" + CHIP_BONUS + " Chips and +" + MULT_BONUS + " Mult when scored.";
     }
 
     @Override

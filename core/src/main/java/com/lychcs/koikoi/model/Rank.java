@@ -4,15 +4,14 @@ public enum Rank {
     PETAL(1),
     RIBBON(5),
     BEAST(10),
-    HIKARI(20),
-    YAMI(20);
+    HIKARI(20);
 
-    private final int baseValue;
+    private final double baseValue;
 
-    Rank(int baseValue) {
+    Rank(double baseValue) {
         this.baseValue = baseValue;
     }
-    public int getBaseValue() {
+    public double getBaseValue() {
         return baseValue;
     }
 }

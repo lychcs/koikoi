@@ -15,7 +15,6 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
-import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
@@ -37,9 +36,7 @@ import com.lychcs.koikoi.model.CardID;
 import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.*;
-import com.lychcs.koikoi.model.yokai.Oni;
-import com.lychcs.koikoi.model.yokai.Yokai;
-import com.lychcs.koikoi.run.GameSeason;
+import com.lychcs.koikoi.model.shikigami.*;
 import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.scoring.*;
 
@@ -54,6 +51,12 @@ public class GameScreen extends ScreenAdapter {
         WAITING_FOR_INPUT,
         SCORING_ANIMATION,
         ROUND_END
+    }
+
+    private enum HandSortMode {
+        NONE,
+        SEASON,
+        RANK
     }
 
     private static final float WORLD_WIDTH = 1280f;
@@ -75,23 +78,23 @@ public class GameScreen extends ScreenAdapter {
 
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
-    private static final long INITIAL_TARGET_SCORE = 200L;
+    private static final double INITIAL_TARGET_SCORE = 200.0;
 
     private final List<Card> playerHand = new ArrayList<>();
     private final List<Card> selectedCards = new ArrayList<>();
     private final List<Omamori> activeOmamoris = new ArrayList<>();
     private final List<Card> drawPile = new ArrayList<>();
 
-    private Yokai activeAltarYokai = null;
+    private Shikigami activeAltarShikigami = null;
     private GameState currentState = GameState.WAITING_FOR_INPUT;
 
-    private long currentTargetScore = INITIAL_TARGET_SCORE;
-    private long currentRoundScore = 0L;
+    private double currentTargetScore = INITIAL_TARGET_SCORE;
+    private double currentRoundScore = 0.0;
     private int maxDiscards = INITIAL_MAX_DISCARDS;
     private int discardsRemaining = maxDiscards;
     private int maxHands = INITIAL_MAX_HANDS;
     private int handsRemaining = maxHands;
-
+    private HandSortMode currentHandSortMode = HandSortMode.NONE;
     private Table infoPopup;
     private final Stage stage;
     private Skin skin;
@@ -106,8 +109,8 @@ public class GameScreen extends ScreenAdapter {
     private Table hankoTable;
     private Table omamoriTable;
     private Table altarTable;
-    private Table yokaiBagTable;
-    private final Set<Yokai> usedYokaiInBattle = new HashSet<>();
+    private Table ShikigamiBagTable;
+    private final Set<Shikigami> usedShikigamiInBattle = new HashSet<>();
     private Group handGroup;
 
     private TextButton playButton;
@@ -158,7 +161,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void startEncounter() {
-        currentRoundScore = 0L;
+        currentRoundScore = 0.0;
         discardsRemaining = runSession.getBaseDiscards();
         handsRemaining = runSession.getBaseHands();
 
@@ -166,10 +169,10 @@ public class GameScreen extends ScreenAdapter {
         activeOmamoris.addAll(runSession.getActiveOmamoris());
         renderOmamoris();
 
-        activeAltarYokai = null;
-        renderYokaiUI();
+        activeAltarShikigami = null;
+        renderShikigamiUI();
 
-        if (scoreProgressLabel != null) scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
+        if (scoreProgressLabel != null) scoreProgressLabel.setText("Score: " + ScoreFormat.format(currentRoundScore) + " / " + ScoreFormat.format(currentTargetScore));
         if (discardLabel != null) discardLabel.setText("Discards: " + discardsRemaining);
         if (handsLabel != null) handsLabel.setText("Hands: " + handsRemaining);
 
@@ -183,8 +186,43 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void drawCardsToHand(int targetSize) {
-        while (playerHand.size() < targetSize && !drawPile.isEmpty()) {
+        while (
+            playerHand.size() < targetSize &&
+                !drawPile.isEmpty()
+        ) {
             playerHand.add(drawPile.remove(0));
+        }
+
+        applyCurrentHandSort();
+    }
+
+    private void applyCurrentHandSort() {
+        switch (currentHandSortMode) {
+            case SEASON:
+                playerHand.sort(
+                    Comparator
+                        .comparing(Card::season)
+                        .thenComparing(Card::rank)
+                        .thenComparing(Card::id)
+                        .thenComparing(Card::name)
+                );
+                break;
+
+            case RANK:
+                playerHand.sort(
+                    Comparator
+                        .comparing(
+                            Card::rank,
+                            Comparator.reverseOrder()
+                        )
+                        .thenComparing(Card::season)
+                        .thenComparing(Card::id)
+                        .thenComparing(Card::name)
+                );
+                break;
+
+            case NONE:
+                break;
         }
     }
 
@@ -193,7 +231,7 @@ public class GameScreen extends ScreenAdapter {
         discardButton.getColor().a = 1f;
 
         dealCardsToUI();
-        renderYokaiUI();
+        renderShikigamiUI();
         updateLivePreview();
         currentState = GameState.WAITING_FOR_INPUT;
     }
@@ -239,25 +277,56 @@ public class GameScreen extends ScreenAdapter {
         });
 
         sortSeasonButton.addListener(new ClickListener() {
-            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
-                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return true;
-                playerHand.sort(Comparator.comparing(Card::season).thenComparing(Card::rank));
+            @Override
+            public boolean touchDown(
+                InputEvent event,
+                float x,
+                float y,
+                int pointer,
+                int button
+            ) {
+                if (
+                    currentState != GameState.WAITING_FOR_INPUT ||
+                        playerHand.isEmpty()
+                ) {
+                    return true;
+                }
+
+                currentHandSortMode = HandSortMode.SEASON;
+                applyCurrentHandSort();
                 dealCardsToUI();
                 updateLivePreview();
-                return true;
-            }
-        });
-        sortRankButton.addListener(new ClickListener() {
-            @Override public boolean touchDown(InputEvent e, float x, float y, int pointer, int button) {
-                if (currentState != GameState.WAITING_FOR_INPUT || playerHand.isEmpty()) return true;
-                playerHand.sort(Comparator.comparing(Card::rank, Comparator.reverseOrder()).thenComparing(Card::season));
-                dealCardsToUI();
-                updateLivePreview();
+
                 return true;
             }
         });
 
-        scoreProgressLabel = new Label("0 / " + currentTargetScore, skin);
+        sortRankButton.addListener(new ClickListener() {
+            @Override
+            public boolean touchDown(
+                InputEvent event,
+                float x,
+                float y,
+                int pointer,
+                int button
+            ) {
+                if (
+                    currentState != GameState.WAITING_FOR_INPUT ||
+                        playerHand.isEmpty()
+                ) {
+                    return true;
+                }
+
+                currentHandSortMode = HandSortMode.RANK;
+                applyCurrentHandSort();
+                dealCardsToUI();
+                updateLivePreview();
+
+                return true;
+            }
+        });
+
+        scoreProgressLabel = new Label(ScoreFormat.format(0.0) + " / " + ScoreFormat.format(currentTargetScore), skin);
         chipsLabel = new Label("0", skin);
         multLabel = new Label("0", skin);
         discardLabel = new Label("Discards: " + discardsRemaining, skin);
@@ -314,9 +383,9 @@ public class GameScreen extends ScreenAdapter {
         altarStack.add(altarFlames);
         altarStack.add(altarTable);
 
-        yokaiBagTable = new Table();
-        yokaiBagTable.setBackground(panelBackground);
-        yokaiBagTable.left().pad(15);
+        ShikigamiBagTable = new Table();
+        ShikigamiBagTable.setBackground(panelBackground);
+        ShikigamiBagTable.left().pad(15);
 
         hankoTable = new Table();
         hankoTable.setBackground(panelBackground);
@@ -325,7 +394,7 @@ public class GameScreen extends ScreenAdapter {
 
         topRow.add(omamoriTable).height(120).expandX().fillX().padRight(15);
         topRow.add(altarStack).width(150).height(120).padRight(15);
-        topRow.add(yokaiBagTable).height(120).expandX().fillX().padRight(15);
+        topRow.add(ShikigamiBagTable).height(120).expandX().fillX().padRight(15);
         topRow.add(hankoTable).width(150).height(120);
 
         Table masterTable = new Table();
@@ -466,7 +535,7 @@ public class GameScreen extends ScreenAdapter {
         List<Card> playedCards = new ArrayList<>(selectedCards);
 
         List<Card> evaluatedCards = playedCards;
-        if (activeAltarYokai instanceof Oni oni) {
+        if (activeAltarShikigami instanceof Oni oni) {
             evaluatedCards = oni.mutateHand(playedCards, runSession.getCurrentSeason());
         }
 
@@ -476,9 +545,9 @@ public class GameScreen extends ScreenAdapter {
             playerHand.removeAll(selectedCards);
             selectedCards.clear();
 
-            if (activeAltarYokai != null) {
-                activeAltarYokai.setExhausted(true);
-                activeAltarYokai = null;
+            if (activeAltarShikigami != null) {
+                activeAltarShikigami.setExhausted(true);
+                activeAltarShikigami = null;
             }
 
             checkRoundEndCondition();
@@ -491,19 +560,11 @@ public class GameScreen extends ScreenAdapter {
         unplayed.removeAll(selectedCards);
 
         // ScoreContext mit übergebener YakuProgression
-        ScoreContext context = new ScoreContext(hand, unplayed, bestYaku, activeOmamoris, activeAltarYokai, runSession.getYakuProgression());
+        ScoreContext context = new ScoreContext(hand, unplayed, bestYaku, activeOmamoris, activeAltarShikigami, runSession.getYakuProgression());
         CalculationBreakdown breakdown = ScoreCalculator.calculate(context);
 
         playerHand.removeAll(selectedCards);
         selectedCards.clear();
-
-        for (Card playedCard : playedCards) {
-            if (playedCard.effect() == HankoEffect.BLOOD_SEAL) {
-                if (com.badlogic.gdx.math.MathUtils.random(1, 4) == 1) {
-                    // ???
-                }
-            }
-        }
 
         dealCardsToUI();
         updateLivePreview();
@@ -527,7 +588,7 @@ public class GameScreen extends ScreenAdapter {
 
     private void updateLivePreview() {
         List<Card> previewHand = selectedCards;
-        if (activeAltarYokai instanceof Oni oni) {
+        if (activeAltarShikigami instanceof Oni oni) {
             previewHand = oni.mutateHand(selectedCards, runSession.getCurrentSeason());
         }
 
@@ -537,13 +598,13 @@ public class GameScreen extends ScreenAdapter {
         unplayed.removeAll(selectedCards);
 
         // Preview-Kontext mit übergebener YakuProgression für exakte Level-Werte
-        ScoreContext previewCtx = ScoreContext.preview(hand, unplayed, bestYaku, activeAltarYokai, runSession.getYakuProgression());
+        ScoreContext previewCtx = ScoreContext.preview(hand, unplayed, bestYaku, activeAltarShikigami, runSession.getYakuProgression());
 
-        chipsLabel.setText(String.valueOf(previewCtx.getYakuBaseChips()));
-        multLabel.setText(String.valueOf(previewCtx.getYakuBaseMult()));
+        chipsLabel.setText(ScoreFormat.format(previewCtx.getYakuBaseChips()));
+        multLabel.setText(ScoreFormat.format(previewCtx.getYakuBaseMult()));
 
         if (selectedCards.isEmpty()) yakuNameLabel.setText("");
-        else if (bestYaku != null) yakuNameLabel.setText(bestYaku.type().getDisplayName());
+        else if (bestYaku != null) yakuNameLabel.setText(bestYaku.getDisplayName());
         else yakuNameLabel.setText("");
 
         boolean canDiscard = discardsRemaining > 0 && !getDiscardableSelectedCards().isEmpty();
@@ -571,32 +632,35 @@ public class GameScreen extends ScreenAdapter {
     private void checkRoundEndCondition() {
         if (currentRoundScore >= currentTargetScore) {
             currentState = GameState.ROUND_END;
-            yakuNameLabel.setText("VICTORY!");
 
             int totalXpReward = 50;
-            if (!usedYokaiInBattle.isEmpty()) {
-                int xpPerYokai = totalXpReward / usedYokaiInBattle.size();
-                for (Yokai y : usedYokaiInBattle) {
-                    y.addXp(xpPerYokai);
+            if (!usedShikigamiInBattle.isEmpty()) {
+                int xpPerShikigami = totalXpReward / usedShikigamiInBattle.size();
+                for (Shikigami y : usedShikigamiInBattle) {
+                    y.addXp(xpPerShikigami);
                 }
             }
 
             int voidDustEarned = 10 + (handsRemaining * 5) + (discardsRemaining * 2);
             runSession.addVoidDust(voidDustEarned);
-            runSession.addMon((int) Math.min(Integer.MAX_VALUE, currentRoundScore / 100L));
 
-            GameSeason defeatedSeason = runSession.getCurrentSeason();
-            int completedStage = runSession.getSeasonEncounterStage();
+            // Mon bleibt eine Ganzzahl-Waehrung: die Abrundung passiert ausschliesslich
+            // an dieser Systemgrenze, nie innerhalb der Scoreberechnung.
+            int earnedMon = (int) Math.min((double) Integer.MAX_VALUE, Math.floor(currentRoundScore / 100.0));
+            runSession.addMon(earnedMon);
 
+            int completedStage = runSession.getLocationEncounterStage();
             runSession.advanceEncounterStage();
 
-            if (completedStage == 3) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new CutsceneScreen(runSession, defeatedSeason));
-            } else if (defeatedSeason == GameSeason.FINAL) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new CutsceneScreen(runSession, GameSeason.FINAL));
+            if (completedStage == RunSession.ENCOUNTERS_PER_LOCATION) {
+                yakuNameLabel.setText("Dieser Ort wurde gereinigt.");
             } else {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
+                yakuNameLabel.setText("VICTORY!");
             }
+
+            // Siegreicher Kampf: kein Zwischenscreen mehr, sondern direkte und weiterhin
+            // sichere, verzoegerte Rueckkehr in die Overworld.
+            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
 
         } else if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
@@ -647,6 +711,7 @@ public class GameScreen extends ScreenAdapter {
                         // Karte exakt unter dem Finger bleibt. Hier wird nur die Reihenfolge
                         // der Hand anhand der aktuellen Zieh-Position neu bestimmt.
                         List<Card> newOrder = new ArrayList<>(playerHand);
+                        currentHandSortMode = HandSortMode.NONE;
                         newOrder.sort((c1, c2) -> {
                             JuicyCardActor a1 = findActorForCard(c1);
                             JuicyCardActor a2 = findActorForCard(c2);
@@ -721,31 +786,31 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    private void renderYokaiUI() {
+    private void renderShikigamiUI() {
         altarTable.clearChildren();
-        yokaiBagTable.clearChildren();
+        ShikigamiBagTable.clearChildren();
 
-        if (activeAltarYokai != null) {
-            TextureRegion yokaiRegion = atlas.findRegion(activeAltarYokai.getAtlasRegionName());
-            if (yokaiRegion != null) {
-                JuicyYokaiActor actor = new JuicyYokaiActor(activeAltarYokai, yokaiRegion, true, skin, new JuicyYokaiActor.YokaiListener() {
-                    @Override public void onTap(JuicyYokaiActor a) {
-                        activeAltarYokai = null;
-                        renderYokaiUI();
+        if (activeAltarShikigami != null) {
+            TextureRegion ShikigamiRegion = atlas.findRegion(activeAltarShikigami.getAtlasRegionName());
+            if (ShikigamiRegion != null) {
+                JuicyShikigamiActor actor = new JuicyShikigamiActor(activeAltarShikigami, ShikigamiRegion, true, skin, new JuicyShikigamiActor.ShikigamiListener() {
+                    @Override public void onTap(JuicyShikigamiActor a) {
+                        activeAltarShikigami = null;
+                        renderShikigamiUI();
                         updateLivePreview();
                     }
-                    @Override public void onDrop(JuicyYokaiActor a, Vector2 stagePos) {
-                        Vector2 bagPos = yokaiBagTable.localToStageCoordinates(new Vector2(0, 0));
+                    @Override public void onDrop(JuicyShikigamiActor a, Vector2 stagePos) {
+                        Vector2 bagPos = ShikigamiBagTable.localToStageCoordinates(new Vector2(0, 0));
                         if (stagePos.x >= bagPos.x) {
-                            activeAltarYokai = null;
-                            renderYokaiUI();
+                            activeAltarShikigami = null;
+                            renderShikigamiUI();
                             updateLivePreview();
                         }
                     }
                 });
                 altarTable.add(actor).width(108).height(192);
             } else {
-                TextButton fallback = new TextButton(activeAltarYokai.getName() + "\n(In Altar)", skin);
+                TextButton fallback = new TextButton(activeAltarShikigami.getName() + "\n(In Altar)", skin);
                 altarTable.add(fallback).width(108).height(192);
             }
         } else {
@@ -754,57 +819,57 @@ public class GameScreen extends ScreenAdapter {
             altarTable.add(emptyLabel).width(108).height(192);
         }
 
-        if (runSession.getYokaiBag() != null) {
-            for (Yokai yokai : runSession.getYokaiBag()) {
-                if (yokai == activeAltarYokai) continue;
+        if (runSession.getShikigamiBag() != null) {
+            for (Shikigami shikigami : runSession.getShikigamiBag()) {
+                if (shikigami == activeAltarShikigami) continue;
 
-                TextureRegion yokaiRegion = atlas.findRegion(yokai.getAtlasRegionName());
-                if (yokaiRegion != null) {
-                    JuicyYokaiActor actor = new JuicyYokaiActor(yokai, yokaiRegion, false, skin, new JuicyYokaiActor.YokaiListener() {
-                        @Override public void onTap(JuicyYokaiActor a) {
-                            if (!yokai.isExhausted() && activeAltarYokai == null) {
-                                activeAltarYokai = yokai;
-                                usedYokaiInBattle.add(activeAltarYokai);
-                                renderYokaiUI();
+                TextureRegion ShikigamiRegion = atlas.findRegion(shikigami.getAtlasRegionName());
+                if (ShikigamiRegion != null) {
+                    JuicyShikigamiActor actor = new JuicyShikigamiActor(shikigami, ShikigamiRegion, false, skin, new JuicyShikigamiActor.ShikigamiListener() {
+                        @Override public void onTap(JuicyShikigamiActor a) {
+                            if (!shikigami.isExhausted() && activeAltarShikigami == null) {
+                                activeAltarShikigami = shikigami;
+                                usedShikigamiInBattle.add(activeAltarShikigami);
+                                renderShikigamiUI();
                                 updateLivePreview();
                             }
                         }
-                        @Override public void onDrop(JuicyYokaiActor a, Vector2 stagePos) {
+                        @Override public void onDrop(JuicyShikigamiActor a, Vector2 stagePos) {
                             Vector2 altarPos = altarTable.localToStageCoordinates(new Vector2(0, 0));
                             boolean droppedOnAltar = stagePos.x < altarPos.x + altarTable.getWidth();
 
-                            if (droppedOnAltar && !yokai.isExhausted() && activeAltarYokai == null) {
-                                activeAltarYokai = yokai;
-                                usedYokaiInBattle.add(activeAltarYokai);
+                            if (droppedOnAltar && !shikigami.isExhausted() && activeAltarShikigami == null) {
+                                activeAltarShikigami = shikigami;
+                                usedShikigamiInBattle.add(activeAltarShikigami);
                             }
 
-                            List<JuicyYokaiActor> actors = new ArrayList<>();
-                            for (Actor child : yokaiBagTable.getChildren()) {
-                                if (child instanceof JuicyYokaiActor) actors.add((JuicyYokaiActor) child);
+                            List<JuicyShikigamiActor> actors = new ArrayList<>();
+                            for (Actor child : ShikigamiBagTable.getChildren()) {
+                                if (child instanceof JuicyShikigamiActor) actors.add((JuicyShikigamiActor) child);
                             }
                             actors.sort(Comparator.comparing(act -> act.localToStageCoordinates(new Vector2(0, 0)).x));
 
-                            List<Yokai> oldBag = new ArrayList<>(runSession.getYokaiBag());
-                            runSession.getYokaiBag().clear();
-                            if (activeAltarYokai != null) runSession.getYokaiBag().add(activeAltarYokai);
+                            List<Shikigami> oldBag = new ArrayList<>(runSession.getShikigamiBag());
+                            runSession.getShikigamiBag().clear();
+                            if (activeAltarShikigami != null) runSession.getShikigamiBag().add(activeAltarShikigami);
 
-                            for (JuicyYokaiActor act : actors) {
-                                if (!runSession.getYokaiBag().contains(act.yokai)) runSession.getYokaiBag().add(act.yokai);
+                            for (JuicyShikigamiActor act : actors) {
+                                if (!runSession.getShikigamiBag().contains(act.shikigami)) runSession.getShikigamiBag().add(act.shikigami);
                             }
-                            for (Yokai i : oldBag) {
-                                if (!runSession.getYokaiBag().contains(i)) runSession.getYokaiBag().add(i);
+                            for (Shikigami i : oldBag) {
+                                if (!runSession.getShikigamiBag().contains(i)) runSession.getShikigamiBag().add(i);
                             }
 
-                            renderYokaiUI();
+                            renderShikigamiUI();
                             updateLivePreview();
                         }
                     });
-                    yokaiBagTable.add(actor).width(108).height(192).pad(4);
+                    ShikigamiBagTable.add(actor).width(108).height(192).pad(4);
                 } else {
-                    String text = yokai.getName() + (yokai.isExhausted() ? "\n(Rastet)" : "");
-                    TextButton yokaiBtn = new TextButton(text, skin);
-                    if (yokai.isExhausted()) yokaiBtn.getColor().a = 0.5f;
-                    yokaiBagTable.add(yokaiBtn).width(108).height(192).pad(4);
+                    String text = shikigami.getName() + (shikigami.isExhausted() ? "\n(Rastet)" : "");
+                    TextButton ShikigamiBtn = new TextButton(text, skin);
+                    if (shikigami.isExhausted()) ShikigamiBtn.getColor().a = 0.5f;
+                    ShikigamiBagTable.add(ShikigamiBtn).width(108).height(192).pad(4);
                 }
             }
         }
@@ -878,16 +943,16 @@ public class GameScreen extends ScreenAdapter {
 
     private void playScoringSequence(CalculationBreakdown breakdown, YakuResult bestYaku) {
         var sequence = Actions.sequence();
-        final long[] currentChips = { breakdown.yakuChips() };
-        final long[] currentMult = { breakdown.yakuBaseMult() };
+        final double[] currentChips = { breakdown.yakuChips() };
+        final double[] currentMult = { breakdown.yakuBaseMult() };
 
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
-            chipsLabel.setText(String.valueOf(currentChips[0]));
-            multLabel.setText(String.valueOf(currentMult[0]));
+            chipsLabel.setText(ScoreFormat.format(currentChips[0]));
+            multLabel.setText(ScoreFormat.format(currentMult[0]));
 
-            if (activeAltarYokai != null && altarFlames != null) {
+            if (activeAltarShikigami != null && altarFlames != null) {
                 // Injiziert Essenz mittig ins Gitter
                 corruptionEngine.injectDisturbance(0.5f, 0.5f, 0.15f);
 
@@ -903,15 +968,15 @@ public class GameScreen extends ScreenAdapter {
         sequence.addAction(Actions.delay(0.2f));
 
         for (ScoringEvent event : breakdown.events()) {
-            if (event.addedChips() == 0L && event.addedMult() == 0L && event.xMult() == 1.0) continue;
+            if (event.addedChips() == 0.0 && event.addedMult() == 0.0 && event.xMult() == 1.0) continue;
 
             sequence.addAction(Actions.run(() -> {
-                if (event.addedChips() > 0L) currentChips[0] += event.addedChips();
-                if (event.addedMult() > 0L) currentMult[0] += event.addedMult();
-                if (event.xMult() > 1.0) currentMult[0] = Math.round(currentMult[0] * event.xMult());
+                if (event.addedChips() > 0.0) currentChips[0] += event.addedChips();
+                if (event.addedMult() > 0.0) currentMult[0] += event.addedMult();
+                if (event.xMult() > 1.0) currentMult[0] *= event.xMult();
 
-                chipsLabel.setText(String.valueOf(currentChips[0]));
-                multLabel.setText(String.valueOf(currentMult[0]));
+                chipsLabel.setText(ScoreFormat.format(currentChips[0]));
+                multLabel.setText(ScoreFormat.format(currentMult[0]));
 
                 com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.15f);
                 com.lychcs.koikoi.graphics.JuiceManager.hitstop(0.02f);
@@ -922,7 +987,7 @@ public class GameScreen extends ScreenAdapter {
         sequence.addAction(Actions.delay(0.4f));
 
         sequence.addAction(Actions.run(() -> {
-                currentRoundScore += breakdown.finalPayout();
+                currentRoundScore += breakdown.finalScore();
 
                 // Yaku XP vergeben!
                 if (bestYaku != null) {
@@ -934,13 +999,13 @@ public class GameScreen extends ScreenAdapter {
                     if (event.addedVoidDust() > 0) runSession.addVoidDust(event.addedVoidDust());
                 }
 
-                scoreProgressLabel.setText("Score: " + currentRoundScore + " / " + currentTargetScore);
+                scoreProgressLabel.setText("Score: " + ScoreFormat.format(currentRoundScore) + " / " + ScoreFormat.format(currentTargetScore));
                 chipsLabel.setText("0");
                 multLabel.setText("0");
 
-                if (activeAltarYokai != null) {
-                    activeAltarYokai.setExhausted(true);
-                    activeAltarYokai = null;
+                if (activeAltarShikigami != null) {
+                    activeAltarShikigami.setExhausted(true);
+                    activeAltarShikigami = null;
                 }
                 if (altarFlames != null) {
                     altarFlames.extinguish();

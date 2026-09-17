@@ -5,7 +5,6 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -21,7 +20,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
-import com.lychcs.koikoi.model.yokai.Yokai;
+import com.lychcs.koikoi.model.shikigami.Shikigami;
 import com.lychcs.koikoi.run.RunSession;
 
 import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
@@ -109,14 +108,14 @@ public class ShrineScreen extends ScreenAdapter {
         title.setColor(Color.valueOf("D1C4E9"));
         shrineBox.add(title).padBottom(20).row();
 
-        long exhaustedCount = runSession.getYokaiBag().stream()
-            .filter(Yokai::isExhausted)
+        long exhaustedCount = runSession.getShikigamiBag().stream()
+            .filter(Shikigami::isExhausted)
             .count();
 
         boolean canPurify = (exhaustedCount > 0) && (runSession.getVoidDust() >= PURIFY_COST);
 
         String purifyText = (exhaustedCount == 0)
-            ? "Alle Yokai sind ausgeruht"
+            ? "Alle Shikigami sind ausgeruht"
             : "Geister wecken (" + PURIFY_COST + " VOID DUST)";
 
         TextButton purifyButton = new TextButton(purifyText, indieButtonStyle);
@@ -128,8 +127,8 @@ public class ShrineScreen extends ScreenAdapter {
                 if (exhaustedCount > 0 && runSession.getVoidDust() >= PURIFY_COST) {
                     runSession.addVoidDust(-PURIFY_COST);
 
-                    for (Yokai yokai : runSession.getYokaiBag()) {
-                        yokai.setExhausted(false);
+                    for (Shikigami shikigami : runSession.getShikigamiBag()) {
+                        shikigami.setExhausted(false);
                     }
 
                     playPurifyAnimation((int) exhaustedCount);
@@ -140,10 +139,10 @@ public class ShrineScreen extends ScreenAdapter {
         shrineBox.add(purifyButton).width(360).height(65).padBottom(25).row();
 
         // Übersicht der Begleiter im Beutel
-        Table yokaiListTable = new Table();
-        for (Yokai y : runSession.getYokaiBag()) {
+        Table shikigamiListTable = new Table();
+        for (Shikigami y : runSession.getShikigamiBag()) {
             String status = y.isExhausted() ? " [Rastet]" : " [Bereit]";
-            String xpInfo = (y.getLevel() >= Yokai.MAX_LEVEL)
+            String xpInfo = (y.getLevel() >= Shikigami.MAX_LEVEL)
                 ? "MAX"
                 : (y.getCurrentXp() + "/" + y.getXpToNextLevel() + " XP");
 
@@ -152,10 +151,10 @@ public class ShrineScreen extends ScreenAdapter {
             if (y.isExhausted()) yLabel.setColor(Color.GRAY);
             else yLabel.setColor(Color.WHITE);
 
-            yokaiListTable.add(yLabel).padBottom(6).row();
+            shikigamiListTable.add(yLabel).padBottom(6).row();
         }
 
-        shrineBox.add(yokaiListTable).padBottom(15).row();
+        shrineBox.add(shikigamiListTable).padBottom(15).row();
 
         root.add(shrineBox).expandY().center().padBottom(30).row();
 
@@ -182,7 +181,7 @@ public class ShrineScreen extends ScreenAdapter {
         purifyOverlay.setBackground(purpleFlameOverlayBackground);
 
         Label purifyText = new Label("~ RITUS DER REINIGUNG ~\n\nHeilige Raeucherstaebchen wecken deine Geister.\n["
-            + restoredCount + " Yokai] sind wieder einsatzbereit!", skin);
+            + restoredCount + " Shikigami] sind wieder einsatzbereit!", skin);
         purifyText.setColor(Color.valueOf("E1BEE7"));
         purifyText.setFontScale(1.3f);
         purifyText.setAlignment(Align.center);

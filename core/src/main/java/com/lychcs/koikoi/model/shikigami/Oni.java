@@ -1,4 +1,4 @@
-package com.lychcs.koikoi.model.yokai;
+package com.lychcs.koikoi.model.shikigami;
 
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.Rank;
@@ -9,14 +9,14 @@ import com.lychcs.koikoi.scoring.ScoreContext;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Oni extends Yokai {
+public class Oni extends Shikigami {
 
-    public Oni(YokaiStage initialStage) {
-        super("oni", "Ko-Oni", "YOKAI_KO_ONI", initialStage);
+    public Oni(ShikigamiStage initialStage) {
+        super("oni", "Ko-Oni", "SHIKIGAMI_KO_ONI", initialStage);
     }
 
     public Oni() {
-        this(YokaiStage.LEVEL_1);
+        this(ShikigamiStage.LEVEL_1);
     }
 
     @Override
@@ -73,7 +73,7 @@ public class Oni extends Yokai {
                 if (originalHand.size() == 5) {
                     // Höchste Karte nach Basis-Wert ermitteln
                     Card highest = originalHand.stream()
-                        .max((a, b) -> Integer.compare(a.rank().getBaseValue(), b.rank().getBaseValue()))
+                        .max((a, b) -> Double.compare(a.rank().getBaseValue(), b.rank().getBaseValue()))
                         .orElse(null);
 
                     for (Card c : originalHand) {
@@ -95,7 +95,7 @@ public class Oni extends Yokai {
 
     @Override
     public boolean activate(ScoreContext context, ScoreAccumulator acc) {
-        if (getStage() == YokaiStage.LEVEL_3 && context.hand().getTotalCardCount() == 5) {
+        if (getStage() == ShikigamiStage.LEVEL_3 && context.hand().getTotalCardCount() == 5) {
             acc.multiplyMult(getName() + " (Blutpakt)", 1.5);
             return true;
         }
@@ -105,10 +105,10 @@ public class Oni extends Yokai {
     @Override
     public String getAtlasRegionName() {
         return switch (getStage()) {
-            case LEVEL_1 -> "YOKAI_KO_ONI";
-            case LEVEL_2 -> "YOKAI_ONI";
-            case LEVEL_3 -> "YOKAI_DAI_ONI";
-            default -> "YOKAI_KO_ONI";
+            case LEVEL_1 -> "SHIKIGAMI_KO_ONI";
+            case LEVEL_2 -> "SHIKIGAMI_ONI";
+            case LEVEL_3 -> "SHIKIGAMI_DAI_ONI";
+            default -> "SHIKIGAMI_KO_ONI";
         };
     }
 }

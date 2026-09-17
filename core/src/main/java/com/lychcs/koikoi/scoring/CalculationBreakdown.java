@@ -6,13 +6,14 @@ import java.util.Objects;
 /**
  * Immutable report detailing each calculation step.
  * Designed to drive UI animations and provide breakdown data for tooltips.
+ * Alle Scorewerte sind Dezimalwerte (double) ohne Zwischenrundung.
  */
 public record CalculationBreakdown(
-    long yakuChips,
-    long yakuBaseMult,
-    long totalChips,
-    long totalMult,
-    long finalPayout,
+    double yakuChips,
+    double yakuBaseMult,
+    double totalChips,
+    double totalMult,
+    double finalScore,
     List<ScoringEvent> events
 ) {
     public CalculationBreakdown {
@@ -20,8 +21,8 @@ public record CalculationBreakdown(
         events = List.copyOf(events);
     }
 
-    public boolean isJackpot(long threshold) {
-        return finalPayout >= threshold;
+    public boolean isJackpot(double threshold) {
+        return finalScore >= threshold;
     }
 
     public boolean hasModifiers() {

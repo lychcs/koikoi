@@ -9,26 +9,26 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.utils.Scaling;
-import com.lychcs.koikoi.model.yokai.Yokai;
+import com.lychcs.koikoi.model.shikigami.Shikigami;
 
-public class JuicyYokaiActor extends JuicyDraggableActor {
+public class JuicyShikigamiActor extends JuicyDraggableActor {
 
-    public interface YokaiListener {
-        void onTap(JuicyYokaiActor actor);
-        void onDrop(JuicyYokaiActor actor, Vector2 stagePos);
+    public interface ShikigamiListener {
+        void onTap(JuicyShikigamiActor actor);
+        void onDrop(JuicyShikigamiActor actor, Vector2 stagePos);
     }
 
-    public final Yokai yokai;
+    public final Shikigami shikigami;
     public final boolean isAltar;
-    private final YokaiListener listener;
+    private final ShikigamiListener listener;
 
-    public JuicyYokaiActor(Yokai yokai, TextureRegion tex, boolean isAltar, Skin skin, YokaiListener listener) {
+    public JuicyShikigamiActor(Shikigami shikigami, TextureRegion tex, boolean isAltar, Skin skin, ShikigamiListener listener) {
         super(108f, 192f, tex);
-        this.yokai = yokai;
+        this.shikigami = shikigami;
         this.isAltar = isAltar;
         this.listener = listener;
 
-        // Shadow-Offset für Yokai leicht anpassen
+        // Shadow-Offset für Shikigami leicht anpassen
         if (shadowImg != null) {
             shadowImg.setPosition(-6f, -8f);
         }
@@ -40,7 +40,7 @@ public class JuicyYokaiActor extends JuicyDraggableActor {
         mainImg.setScaling(Scaling.fit);
         stack.add(mainImg);
 
-        if (yokai.isExhausted()) {
+        if (shikigami.isExhausted()) {
             mainImg.setColor(0.35f, 0.35f, 0.35f, 0.6f);
             Label exLabel = new Label("Rastet", skin);
             exLabel.setFontScale(0.75f);
@@ -48,7 +48,7 @@ public class JuicyYokaiActor extends JuicyDraggableActor {
             t.center().add(exLabel);
             stack.add(t);
         } else {
-            Label stageLabel = new Label(yokai.getName(), skin);
+            Label stageLabel = new Label(shikigami.getName(), skin);
             stageLabel.setFontScale(0.8f);
             Table labelTable = new Table();
             labelTable.bottom().padBottom(4);

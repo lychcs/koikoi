@@ -17,17 +17,17 @@ public class JohariMirror implements Omamori {
 
     @Override
     public boolean evaluate(ScoreContext context, ScoreAccumulator acc) {
-        long baseChips = context.getYakuBaseChips();
-        long baseMult = context.getYakuBaseMult();
+        double baseChips = context.getYakuBaseChips();
+        double baseMult = context.getYakuBaseMult();
 
         // Der Spiegel des Enma richtet über die Basiswerte und kehrt sie um
-        if (baseChips > 0 || baseMult > 0) {
+        if (baseChips > 0.0 || baseMult > 0.0) {
 
             // Chips werden zu Mult (halbiert, um Balance zu wahren)
-            long karmaMult = baseChips / 2L;
+            double karmaMult = baseChips / 2.0;
 
             // Mult wird zu Chips (verzehnfacht, damit es sich wuchtig anfühlt)
-            long karmaChips = baseMult * 10L;
+            double karmaChips = baseMult * 10.0;
 
             acc.addChips("Karma Reflected (Chips)", karmaChips);
             acc.addMult("Karma Reflected (Mult)", karmaMult);

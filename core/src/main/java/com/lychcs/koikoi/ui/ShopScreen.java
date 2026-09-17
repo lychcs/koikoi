@@ -27,6 +27,7 @@ import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.omamori.OmamoriPool;
 import com.lychcs.koikoi.run.RunSession;
+import com.lychcs.koikoi.run.ShopState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,14 +36,11 @@ import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
 
 public class ShopScreen extends ScreenAdapter {
 
-    private static final int REFRESH_COST = 10;
-    private static final int OMAMORI_OFFER_COUNT = 2;
-    private static final int HANKO_OFFER_COUNT = 3;
-
     private record PurchaseButton(TextButton button, int price) {}
 
     private final Stage stage;
     private final RunSession runSession;
+    private final ShopState shopState;
     private final List<PurchaseButton> purchaseButtons = new ArrayList<>();
 
     private Skin skin;
@@ -54,7 +52,6 @@ public class ShopScreen extends ScreenAdapter {
     private TextButton.TextButtonStyle indieButtonStyle;
 
     private Label monLabel;
-    private TextButton refreshButton;
 
     public ShopScreen(RunSession runSession) {
         if (runSession == null) {
@@ -62,6 +59,10 @@ public class ShopScreen extends ScreenAdapter {
         }
 
         this.runSession = runSession;
+        // Persistenter Shopzustand: Die Angebote werden hier einmalig erzeugt und
+        // bleiben beim Verlassen und erneuten Betreten dieses Shops unveraendert.
+        this.shopState = runSession.getOrCreateShopState(RunSession.DEFAULT_SHOP_ID);
+
         stage = new Stage(new FitViewport(1280, 720));
 
         initAssets();
@@ -111,21 +112,19 @@ public class ShopScreen extends ScreenAdapter {
         omamoriTitle.setFontScale(1.1f);
         omamoriColumn.add(omamoriTitle).padBottom(10f).row();
 
-        List<Omamori> omamoriOffers = OmamoriPool.getRandomDistinctOmamoris(
-            OMAMORI_OFFER_COUNT,
-            runSession.getOwnedOmamoris()
-        );
+        List<Omamori> omamoriOffers = shopState.getOmamoriOffers();
 
-        for (Omamori omamori : omamoriOffers) {
-            omamoriColumn.add(createOmamoriCard(omamori))
-                .width(430f)
-                .height(205f)
-                .padBottom(12f)
-                .row();
-        }
+        for (int slot = 0; slot < ShopState.OMAMORI_OFFER_COUNT; slot++) {
+            Table offerCard;
+            if (slot >= omamoriOffers.size()) {
+                offerCard = createPlaceholderCard("Alle verfuegbaren Omamori wurden gesammelt.");
+            } else if (shopState.isOmamoriSold(slot)) {
+                offerCard = createSoldCard("GEKAUFT - IM LAGER");
+            } else {
+                offerCard = createOmamoriCard(omamoriOffers.get(slot), slot);
+            }
 
-        for (int i = omamoriOffers.size(); i < OMAMORI_OFFER_COUNT; i++) {
-            omamoriColumn.add(createPlaceholderCard("Alle verfuegbaren Omamori wurden gesammelt."))
+            omamoriColumn.add(offerCard)
                 .width(430f)
                 .height(205f)
                 .padBottom(12f)
@@ -138,8 +137,19 @@ public class ShopScreen extends ScreenAdapter {
         hankoTitle.setFontScale(1.1f);
         hankoColumn.add(hankoTitle).padBottom(10f).row();
 
-        for (HankoEffect effect : HankoCatalog.drawDistinctOffers(HANKO_OFFER_COUNT)) {
-            hankoColumn.add(createHankoCard(effect))
+        List<HankoEffect> hankoOffers = shopState.getHankoOffers();
+
+        for (int slot = 0; slot < ShopState.HANKO_OFFER_COUNT; slot++) {
+            Table offerCard;
+            if (slot >= hankoOffers.size()) {
+                offerCard = createPlaceholderCard("Keine weiteren Hankos verfuegbar.");
+            } else if (shopState.isHankoSold(slot)) {
+                offerCard = createSoldCard("GEKAUFT - IM HANKO-VORRAT");
+            } else {
+                offerCard = createHankoCard(hankoOffers.get(slot), slot);
+            }
+
+            hankoColumn.add(offerCard)
                 .width(430f)
                 .height(132f)
                 .padBottom(12f)
@@ -151,20 +161,6 @@ public class ShopScreen extends ScreenAdapter {
         root.add(offers).expand().fill().row();
 
         Table bottomBar = new Table();
-
-        refreshButton = new TextButton("Refresh (-" + REFRESH_COST + ")", indieButtonStyle);
-        refreshButton.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                if (!runSession.spendMon(REFRESH_COST)) {
-                    refreshAffordability();
-                    return;
-                }
-
-                stage.clear();
-                buildShopUi();
-            }
-        });
 
         monLabel = new Label("Mon: " + runSession.getMon(), skin);
         monLabel.setFontScale(1.25f);
@@ -180,17 +176,16 @@ public class ShopScreen extends ScreenAdapter {
             }
         });
 
-        bottomBar.add(refreshButton).width(210f).height(58f);
         bottomBar.add(monLabel).expandX().center();
         bottomBar.add(exitButton).width(210f).height(58f);
 
         root.add(bottomBar).expandX().fillX().padTop(12f);
         stage.addActor(root);
 
-        refreshAffordability();
+        updateAffordability();
     }
 
-    private Table createOmamoriCard(Omamori omamori) {
+    private Table createOmamoriCard(Omamori omamori, int slot) {
         Table card = createBaseCard();
 
         String className = omamori.getClass().getSimpleName();
@@ -219,21 +214,24 @@ public class ShopScreen extends ScreenAdapter {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 if (runSession.ownsOmamori(omamori.getClass())) {
+                    shopState.markOmamoriSold(slot);
                     markSold(card, "BEREITS IM LAGER");
                     return;
                 }
 
                 if (!runSession.spendMon(price)) {
-                    refreshAffordability();
+                    updateAffordability();
                     return;
                 }
 
                 if (!runSession.addOwnedOmamori(omamori)) {
                     runSession.addMon(price);
-                    refreshAffordability();
+                    updateAffordability();
                     return;
                 }
 
+                // Ausverkauft bleibt persistent: der Slot wird nie wieder angeboten.
+                shopState.markOmamoriSold(slot);
                 updateMonDisplay();
                 markSold(card, "GEKAUFT - IM LAGER");
             }
@@ -250,7 +248,7 @@ public class ShopScreen extends ScreenAdapter {
         return card;
     }
 
-    private Table createHankoCard(HankoEffect effect) {
+    private Table createHankoCard(HankoEffect effect, int slot) {
         Table card = createBaseCard();
 
         TextureRegion region = atlas.findRegion("HANKO_" + effect.name());
@@ -271,11 +269,15 @@ public class ShopScreen extends ScreenAdapter {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 if (!runSession.spendMon(price)) {
-                    refreshAffordability();
+                    updateAffordability();
                     return;
                 }
 
+                // Hankos sind stapelbar: jeder Kauf legt ein weiteres Exemplar in den Vorrat.
                 runSession.getPurchasedHankos().add(effect);
+
+                // Ausverkauft bleibt persistent: der Slot wird nie wieder angeboten.
+                shopState.markHankoSold(slot);
                 updateMonDisplay();
                 markSold(card, "GEKAUFT - IM HANKO-VORRAT");
             }
@@ -319,24 +321,35 @@ public class ShopScreen extends ScreenAdapter {
         purchaseButtons.add(new PurchaseButton(button, price));
     }
 
+    /** Karte, die einen bereits ausverkauften Slot dauerhaft anzeigt. */
+    private Table createSoldCard(String message) {
+        Table card = createBaseCard();
+        showSoldMessage(card, message);
+        return card;
+    }
+
     private void markSold(Table card, String message) {
+        showSoldMessage(card, message);
+        updateAffordability();
+    }
+
+    private void showSoldMessage(Table card, String message) {
         card.clearChildren();
         Label sold = new Label(message, skin);
         sold.setWrap(true);
         sold.setAlignment(Align.center);
         sold.setColor(Color.GOLD);
         card.add(sold).width(300f).expand().center();
-        refreshAffordability();
     }
 
     private void updateMonDisplay() {
         if (monLabel != null) {
             monLabel.setText("Mon: " + runSession.getMon());
         }
-        refreshAffordability();
+        updateAffordability();
     }
 
-    private void refreshAffordability() {
+    private void updateAffordability() {
         int mon = runSession.getMon();
 
         for (PurchaseButton purchase : purchaseButtons) {
@@ -344,12 +357,6 @@ public class ShopScreen extends ScreenAdapter {
             boolean disabled = mon < purchase.price();
             button.setDisabled(disabled);
             button.getColor().a = disabled ? 0.45f : 1f;
-        }
-
-        if (refreshButton != null) {
-            boolean disabled = mon < REFRESH_COST;
-            refreshButton.setDisabled(disabled);
-            refreshButton.getColor().a = disabled ? 0.45f : 1f;
         }
     }
 
