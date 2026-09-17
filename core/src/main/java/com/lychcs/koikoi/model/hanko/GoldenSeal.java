@@ -16,8 +16,8 @@ public class GoldenSeal implements Hanko {
 
     @Override
     public boolean canTarget(Card card) {
-        // Stempelt nur Karten, die noch "rein" sind
-        return !card.hasHanko();
+        // Jede Karte darf (erneut) bestempelt werden; ein vorhandener Hanko wird ersetzt.
+        return card != null;
     }
 
     @Override

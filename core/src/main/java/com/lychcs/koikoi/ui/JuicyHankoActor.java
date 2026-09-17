@@ -64,6 +64,8 @@ public class JuicyHankoActor extends JuicyDraggableActor {
         @Override
         public void draw(Batch batch, float parentAlpha) {
             ShaderProgram activeShader = null;
+            // Vorher aktiven Shader merken, damit er danach wiederhergestellt wird.
+            ShaderProgram previousShader = batch.getShader();
 
             switch (effect) {
                 case POLYCHROME_SEAL -> {
@@ -103,7 +105,8 @@ public class JuicyHankoActor extends JuicyDraggableActor {
             super.draw(batch, parentAlpha);
 
             if (activeShader != null) {
-                batch.setShader(null);
+                // Kein blindes setShader(null): exakt der vorher aktive Shader wird wiederhergestellt.
+                batch.setShader(previousShader);
             }
         }
     }

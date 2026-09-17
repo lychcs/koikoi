@@ -52,6 +52,22 @@ public final class HankoCatalog {
         return entry.price();
     }
 
+    /**
+     * Name der Atlas-Region fuer das Abzeichen dieses Hankos.
+     *
+     * @return Regionsname oder {@code null}, wenn der Effekt kein Abzeichen besitzt.
+     */
+    public static String getAtlasRegionName(HankoEffect effect) {
+        if (effect == null || effect == HankoEffect.NONE) {
+            return null;
+        }
+        if (effect == HankoEffect.GOLDEN_SEAL) {
+            // Die Atlas-Region des Golden Seal heisst HANKO_GOLD_SEAL.
+            return "HANKO_GOLD_SEAL";
+        }
+        return "HANKO_" + effect.name();
+    }
+
     public static List<HankoEffect> drawDistinctOffers(int count) {
         if (count <= 0) {
             return List.of();

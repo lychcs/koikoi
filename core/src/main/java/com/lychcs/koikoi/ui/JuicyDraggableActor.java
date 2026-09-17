@@ -22,9 +22,26 @@ public abstract class JuicyDraggableActor extends Group {
 
     // Drag-Handling
     protected boolean isDragging = false;
-    protected float dragOffsetX, dragOffsetY;
+    /**
+     * Abstand zwischen Griffpunkt (Finger) und Actor-Position, ausgedrueckt in
+     * Parent-Koordinaten. Actor-lokale Event-Koordinaten und Stage-Koordinaten
+     * sind KEINE Parent-Koordinaten und duerfen nicht direkt verwendet werden.
+     */
+    private float grabOffsetX, grabOffsetY;
+    /** Parent, in dem der Griffpunkt gemessen wurde (fuer Reparenting waehrend des Drags). */
+    private Group dragParent;
     private float touchDownStageX, touchDownStageY;
     private static final float DRAG_THRESHOLD = 14f;
+
+    // Wiederverwendete Vektoren: keine Allokation pro Drag-Event.
+    private final Vector2 tmpStage = new Vector2();
+    private final Vector2 tmpParent = new Vector2();
+    private final Vector2 lastStagePosition = new Vector2();
+    private boolean lastStagePositionValid = false;
+
+    // Positions-Tracking: erkennt, wenn ein Layout-System (z. B. Table) die Position setzt.
+    private boolean positionTracked = false;
+    private float lastAppliedX, lastAppliedY;
 
     // Konfigurierbare Lerp-Geschwindigkeiten
     protected float posLerpSpeed = 22f;
@@ -54,10 +71,9 @@ public abstract class JuicyDraggableActor extends Group {
                 if (!canInteract()) return false;
 
                 isDragging = false;
-                dragOffsetX = x;
-                dragOffsetY = y;
                 touchDownStageX = event.getStageX();
                 touchDownStageY = event.getStageY();
+                captureGrabOffset(x, y);
 
                 targetScale = 1.05f;
                 targetShadow = 0.3f;
@@ -81,13 +97,42 @@ public abstract class JuicyDraggableActor extends Group {
                     onDragStart(event);
                 }
 
-                // Drag-Position relativ zum Parent berechnen
-                Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
-                Vector2 parentPos = getParent().stageToLocalCoordinates(stagePos);
-                targetX = parentPos.x - dragOffsetX;
-                targetY = parentPos.y - dragOffsetY;
+                Group parent = getParent();
+                if (parent == null) return;
 
-                onDrag(event, x, y, stagePos);
+                // Fingerposition in Stage-Koordinaten ermitteln (Event-Koordinaten sind Actor-lokal).
+                tmpStage.set(x, y);
+                localToStageCoordinates(tmpStage);
+
+                // Stage-Koordinaten in das Koordinatensystem des aktuellen Parents umrechnen.
+                tmpParent.set(tmpStage);
+                parent.stageToLocalCoordinates(tmpParent);
+
+                if (parent != dragParent) {
+                    // Reparenting waehrend des Drags: die zuletzt sichtbare Stage-Position
+                    // im neuen Parent wiederherstellen, damit die Karte nicht springt.
+                    dragParent = parent;
+                    if (lastStagePositionValid) {
+                        tmpParent.set(lastStagePosition);
+                        parent.stageToLocalCoordinates(tmpParent);
+                        setPosition(tmpParent.x, tmpParent.y);
+                        tmpParent.set(tmpStage);
+                        parent.stageToLocalCoordinates(tmpParent);
+                    }
+                    grabOffsetX = tmpParent.x - getX();
+                    grabOffsetY = tmpParent.y - getY();
+                }
+
+                targetX = tmpParent.x - grabOffsetX;
+                targetY = tmpParent.y - grabOffsetY;
+
+                // Sichtbare Position des Actors fuer ein moegliches Reparenting merken.
+                lastStagePosition.set(0f, 0f);
+                localToStageCoordinates(lastStagePosition);
+                lastStagePositionValid = true;
+
+                // tmpStage enthaelt weiterhin die Stage-Position des Fingers.
+                onDrag(event, x, y, tmpStage);
             }
 
             @Override
@@ -98,9 +143,11 @@ public abstract class JuicyDraggableActor extends Group {
                 if (!canInteract()) return;
 
                 if (isDragging) {
+                    // Snap-back-Ziele setzen erst nach dem Loslassen (isDragging == false).
                     isDragging = false;
-                    Vector2 stagePos = localToStageCoordinates(new Vector2(x, y));
-                    onDrop(event, x, y, stagePos);
+                    tmpStage.set(x, y);
+                    localToStageCoordinates(tmpStage);
+                    onDrop(event, x, y, tmpStage);
                 } else {
                     onTap(event, x, y);
                 }
@@ -108,9 +155,48 @@ public abstract class JuicyDraggableActor extends Group {
         });
     }
 
+    /**
+     * Merkt sich den Griffpunkt (Finger) relativ zur Actor-Position im
+     * Koordinatensystem des aktuellen Parents.
+     */
+    private void captureGrabOffset(float localX, float localY) {
+        Group parent = getParent();
+        dragParent = parent;
+        lastStagePositionValid = false;
+
+        if (parent == null) {
+            grabOffsetX = localX;
+            grabOffsetY = localY;
+            return;
+        }
+
+        tmpStage.set(localX, localY);
+        localToStageCoordinates(tmpStage);
+        tmpParent.set(tmpStage);
+        parent.stageToLocalCoordinates(tmpParent);
+
+        grabOffsetX = tmpParent.x - getX();
+        grabOffsetY = tmpParent.y - getY();
+
+        lastStagePosition.set(0f, 0f);
+        localToStageCoordinates(lastStagePosition);
+        lastStagePositionValid = true;
+    }
+
     @Override
     public void act(float delta) {
         super.act(delta);
+
+        // Wurde die Position von aussen gesetzt (z. B. durch ein Table-Layout), wird sie
+        // als neues Ziel uebernommen, damit die Lerp-Physik das Layout nicht ueberschreibt.
+        // Der erste Frame registriert nur die Startposition, damit ein bereits gesetztes
+        // Ziel (z. B. der Kartenbogen der Hand) erhalten bleibt.
+        if (!isDragging && positionTracked && (getX() != lastAppliedX || getY() != lastAppliedY)) {
+            targetX = getX();
+            targetY = getY();
+        }
+        positionTracked = true;
+
         setX(MathUtils.lerp(getX(), targetX, posLerpSpeed * delta));
         setY(MathUtils.lerp(getY(), targetY, posLerpSpeed * delta));
         setRotation(MathUtils.lerp(getRotation(), targetRot, rotLerpSpeed * delta));
@@ -122,6 +208,10 @@ public abstract class JuicyDraggableActor extends Group {
             currentShadow = MathUtils.lerp(currentShadow, targetShadow, shadowLerpSpeed * delta);
             shadowImg.setColor(0f, 0f, 0f, currentShadow);
         }
+
+        // Merken, welche Position die Physik selbst gesetzt hat.
+        lastAppliedX = getX();
+        lastAppliedY = getY();
     }
 
     public void punch() {

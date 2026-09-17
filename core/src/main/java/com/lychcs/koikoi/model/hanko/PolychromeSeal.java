@@ -16,7 +16,8 @@ public class PolychromeSeal implements Hanko {
 
     @Override
     public boolean canTarget(Card card) {
-        return !card.hasHanko();
+        // Jede Karte darf (erneut) bestempelt werden; ein vorhandener Hanko wird ersetzt.
+        return card != null;
     }
 
     @Override

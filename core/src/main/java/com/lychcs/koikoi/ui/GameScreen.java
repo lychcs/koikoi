@@ -34,6 +34,7 @@ import com.lychcs.koikoi.graphics.FontManager;
 import com.lychcs.koikoi.graphics.HankoShaderManager;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
+import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.*;
 import com.lychcs.koikoi.model.yokai.Oni;
@@ -65,6 +66,13 @@ public class GameScreen extends ScreenAdapter {
 
     private static final float CARD_SELECT_OFFSET_Y = 25f;
 
+    // Bis zu drei aktive Omamori: jeder Slot hat eine eigene Zellgroesse, Ausrichtung und Padding.
+    private static final float[] OMAMORI_SLOT_CELL_WIDTHS = {80f, 84f, 80f};
+    private static final float[] OMAMORI_SLOT_CELL_HEIGHTS = {100f, 104f, 100f};
+    private static final float[] OMAMORI_SLOT_CELL_PADS = {2f, 4f, 2f};
+    private static final float OMAMORI_ICON_WIDTH = 72f;
+    private static final float OMAMORI_ICON_HEIGHT = 96f;
+
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
     private static final long INITIAL_TARGET_SCORE = 200L;
@@ -89,6 +97,8 @@ public class GameScreen extends ScreenAdapter {
     private Skin skin;
     private TextureAtlas atlas;
     private final Map<String, TextureRegionDrawable> cardTextures = new HashMap<>();
+    /** Cache fuer die Hanko-Abzeichen auf den Kampfkarten (fehlende Regionen inklusive). */
+    private final Map<HankoEffect, TextureRegion> hankoBadgeRegions = new EnumMap<>(HankoEffect.class);
     private final RunSession runSession;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
@@ -412,6 +422,29 @@ public class GameScreen extends ScreenAdapter {
         return cardTextures.get(fileName);
     }
 
+    /**
+     * Liefert die Atlas-Region fuer das Hanko-Abzeichen einer Kampfkarte.
+     * Fehlt die Region, wird der vollstaendige erwartete Regionsname geloggt und
+     * {@code null} zurueckgegeben (keine NullPointerException).
+     */
+    private TextureRegion getHankoBadgeRegion(Card card) {
+        if (card == null || !card.hasHanko()) return null;
+
+        HankoEffect effect = card.effect();
+        if (hankoBadgeRegions.containsKey(effect)) {
+            return hankoBadgeRegions.get(effect);
+        }
+
+        String regionName = HankoCatalog.getAtlasRegionName(effect);
+        TextureRegion region = regionName == null ? null : atlas.findRegion(regionName);
+        if (region == null) {
+            Gdx.app.error("GameScreen", "Hanko-Atlas-Region fehlt: " + regionName + " (Hanko " + effect + ")");
+        }
+        // Auch null cachen, damit der Fehler nur einmal geloggt wird.
+        hankoBadgeRegions.put(effect, region);
+        return region;
+    }
+
     private void loadIndieAssets() {
         background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
         Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
@@ -589,7 +622,7 @@ public class GameScreen extends ScreenAdapter {
         for (Card card : playerHand) {
             TextureRegionDrawable cardImage = getCardImage(card);
             if (cardImage != null) {
-                JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage.getRegion(), skin.getRegion("white"), new JuicyCardActor.CardListener() {
+                JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage.getRegion(), getHankoBadgeRegion(card), skin.getRegion("white"), new JuicyCardActor.CardListener() {
                     @Override
                     public void onTap(JuicyCardActor actor) {
                         if (currentState != GameState.WAITING_FOR_INPUT) return;
@@ -609,10 +642,10 @@ public class GameScreen extends ScreenAdapter {
                     public void onDrag(JuicyCardActor actor, Vector2 stagePos) {
                         if (currentState != GameState.WAITING_FOR_INPUT) return;
 
-                        Vector2 parentPos = handGroup.stageToLocalCoordinates(stagePos);
-                        actor.targetX = parentPos.x - (actor.getWidth() / 2f);
-                        actor.targetY = parentPos.y - (actor.getHeight() / 2f);
-
+                        // Die Position der gezogenen Karte setzt JuicyDraggableActor selbst:
+                        // der Griffpunkt-Offset wird in Parent-Koordinaten gefuehrt, damit die
+                        // Karte exakt unter dem Finger bleibt. Hier wird nur die Reihenfolge
+                        // der Hand anhand der aktuellen Zieh-Position neu bestimmt.
                         List<Card> newOrder = new ArrayList<>(playerHand);
                         newOrder.sort((c1, c2) -> {
                             JuicyCardActor a1 = findActorForCard(c1);
@@ -780,47 +813,67 @@ public class GameScreen extends ScreenAdapter {
     private void renderOmamoris() {
         omamoriTable.clearChildren();
 
-        for (Omamori omamori : activeOmamoris) {
-            String className = omamori.getClass().getSimpleName();
-            String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
-            String regionName = "OMAMORI_" + snakeCaseName;
+        // Drei feste Slots in exakt der Reihenfolge aus RunSession (wichtig fuer Yata Mirror).
+        Table slotRow = new Table();
+        slotRow.left();
 
-            TextureRegion region = atlas.findRegion(regionName);
-            if (region != null) {
-                JuicyOmamoriActor omamoriActor = new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
-                    @Override
-                    public void onTap(JuicyOmamoriActor actor) {
-                        infoPopup.clearChildren();
-                        infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
-                        infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
-                        infoPopup.pack();
+        for (int slot = 0; slot < OMAMORI_SLOT_CELL_WIDTHS.length; slot++) {
+            Table slotBox = new Table();
+            slotBox.setBackground(panelBackground);
 
-                        Vector2 pos = actor.localToStageCoordinates(new Vector2(0, 0));
-                        infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
-                        infoPopup.setVisible(true);
-                    }
-
-                    @Override
-                    public void onDrop(JuicyOmamoriActor actor, Vector2 stagePos) {
-                        List<JuicyOmamoriActor> actors = new ArrayList<>();
-                        for (Actor a : omamoriTable.getChildren()) {
-                            if (a instanceof JuicyOmamoriActor) actors.add((JuicyOmamoriActor) a);
-                        }
-                        actors.sort(Comparator.comparing(a -> a.localToStageCoordinates(new Vector2(0, 0)).x));
-
-                        activeOmamoris.clear();
-                        for (JuicyOmamoriActor a : actors) activeOmamoris.add(a.omamori);
-
-                        renderOmamoris();
-                    }
-                });
-
-                omamoriTable.add(omamoriActor).width(72).height(96).pad(5);
+            if (slot < activeOmamoris.size()) {
+                slotBox.add(createOmamoriSlotContent(activeOmamoris.get(slot)))
+                    .size(OMAMORI_ICON_WIDTH, OMAMORI_ICON_HEIGHT);
             } else {
-                TextButton fallback = new TextButton(omamori.getName(), skin);
-                omamoriTable.add(fallback).width(72).height(96).pad(5);
+                Label emptySlot = new Label("Slot " + (slot + 1) + "\nLeer", skin);
+                emptySlot.setFontScale(0.7f);
+                emptySlot.setAlignment(Align.center);
+                emptySlot.setColor(Color.GRAY);
+                slotBox.add(emptySlot).expand().center();
             }
+
+            slotRow.add(slotBox)
+                .width(OMAMORI_SLOT_CELL_WIDTHS[slot])
+                .height(OMAMORI_SLOT_CELL_HEIGHTS[slot])
+                .pad(OMAMORI_SLOT_CELL_PADS[slot])
+                .top();
         }
+
+        // Zentrierte Ausrichtung wie bisher, damit der Inhalt im Panel bleibt.
+        omamoriTable.add(slotRow).expand().fill();
+    }
+
+    private Actor createOmamoriSlotContent(Omamori omamori) {
+        String className = omamori.getClass().getSimpleName();
+        String snakeCaseName = className.replaceAll("([a-z])([A-Z]+)", "$1_$2").toUpperCase();
+        String regionName = "OMAMORI_" + snakeCaseName;
+
+        TextureRegion region = atlas.findRegion(regionName);
+        if (region == null) {
+            Gdx.app.error("GameScreen", "Omamori-Atlas-Region fehlt: " + regionName);
+            return new TextButton(omamori.getName(), skin);
+        }
+
+        return new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
+            @Override
+            public void onTap(JuicyOmamoriActor actor) {
+                infoPopup.clearChildren();
+                infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
+                infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
+                infoPopup.pack();
+
+                Vector2 pos = actor.localToStageCoordinates(new Vector2(0, 0));
+                infoPopup.setPosition(pos.x, pos.y - infoPopup.getHeight() - 10);
+                infoPopup.setVisible(true);
+            }
+
+            @Override
+            public void onDrop(JuicyOmamoriActor actor, Vector2 stagePos) {
+                // Die Slot-Reihenfolge kommt ausschliesslich aus RunSession und wird nicht
+                // umsortiert; der Neuaufbau setzt die Omamori wieder in ihre Slots.
+                renderOmamoris();
+            }
+        });
     }
 
     private void playScoringSequence(CalculationBreakdown breakdown, YakuResult bestYaku) {

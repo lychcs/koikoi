@@ -22,7 +22,13 @@ public final class ScoreCalculator {
         ScoreAccumulator acc = new ScoreAccumulator(startingChips, startingMult);
         acc.addChips("Base " + yakuName, 0L);
 
-        // 2. Card Effects (Hankos / Seals)
+        // 2. Basis-Chips der tatsaechlich ausgespielten und gewerteten Karten.
+        //    Autoritative Wertquelle ist Rank.getBaseValue().
+        for (var card : context.hand().getAllCards()) {
+            acc.addChips(card.name() + " (Base)", card.rank().getBaseValue());
+        }
+
+        // 3. Card Effects (Hankos / Seals)
         for (var card : context.hand().getAllCards()) {
             switch (card.effect()) {
                 case WHITE_SEAL -> {
@@ -63,17 +69,17 @@ public final class ScoreCalculator {
             }
         }
 
-        // 3. Yokai Evaluierung (falls einer im Altar liegt und einsatzbereit ist)
+        // 4. Yokai Evaluierung (falls einer im Altar liegt und einsatzbereit ist)
         if (context.activeAltarYokai() != null && !context.activeAltarYokai().isExhausted()) {
             context.activeAltarYokai().activate(context, acc);
         }
 
-        // 4. Omamori Evaluierung
+        // 5. Omamori Evaluierung
         for (var omamori : context.omamoris()) {
             omamori.evaluate(context, acc);
         }
 
-        // 5. Final Payout
+        // 6. Final Payout
         long handPayout = acc.getChips() * acc.getMult();
         long finalPayout = handPayout;
 

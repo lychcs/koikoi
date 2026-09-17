@@ -1,5 +1,6 @@
 package com.lychcs.koikoi.ui;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -47,6 +48,8 @@ public class InventoryOverlay extends Group {
 
     private boolean open;
     private HankoEffect selectedHankoToApply;
+    /** Schutz gegen doppelte Input-Events: es darf immer nur ein Bestaetigungsdialog offen sein. */
+    private boolean hankoDialogOpen;
 
     public InventoryOverlay(
         RunSession runSession,
@@ -200,8 +203,9 @@ public class InventoryOverlay extends Group {
 
         if (selectedHankoToApply != null) {
             Label hint = new Label(
-                "Waehle eine unversiegelte Karte fuer "
-                    + HankoCatalog.getName(selectedHankoToApply) + ".",
+                "Waehle eine Karte fuer "
+                    + HankoCatalog.getName(selectedHankoToApply)
+                    + ".\nEin bereits vorhandener Stempel wird ersetzt.",
                 skin
             );
             hint.setColor(Color.GOLD);
@@ -246,7 +250,7 @@ public class InventoryOverlay extends Group {
                 button.setBackground(panelBackground);
             }
 
-            TextureRegion region = atlas.findRegion("HANKO_" + effect.name());
+            TextureRegion region = findHankoRegion(effect);
             if (region != null) {
                 button.add(new Image(region)).size(28f).padRight(6f);
             }
@@ -308,7 +312,7 @@ public class InventoryOverlay extends Group {
         }
 
         if (card.hasHanko()) {
-            TextureRegion hankoRegion = atlas.findRegion("HANKO_" + card.effect().name());
+            TextureRegion hankoRegion = findHankoRegion(card.effect());
             if (hankoRegion != null) {
                 Table badgeContainer = new Table();
                 badgeContainer.top().right();
@@ -326,11 +330,18 @@ public class InventoryOverlay extends Group {
         }
         cardBox.add(name).width(82f).row();
 
-        if (selectedHanko != null && !canApply) {
-            Label sealed = new Label("Versiegelt", skin);
-            sealed.setFontScale(0.55f);
-            sealed.setColor(Color.GRAY);
-            cardBox.add(sealed);
+        if (selectedHanko != null) {
+            if (!canApply) {
+                Label blocked = new Label("Nicht moeglich", skin);
+                blocked.setFontScale(0.55f);
+                blocked.setColor(Color.GRAY);
+                cardBox.add(blocked);
+            } else if (card.hasHanko()) {
+                Label replace = new Label("Wird ersetzt", skin);
+                replace.setFontScale(0.55f);
+                replace.setColor(Color.GOLD);
+                cardBox.add(replace);
+            }
         }
 
         cardBox.addListener(new ClickListener() {
@@ -353,6 +364,12 @@ public class InventoryOverlay extends Group {
     }
 
     private void requestHankoConfirmation(Card targetCard, HankoEffect effect) {
+        // Doppelklicks bzw. doppelte Input-Events duerfen keinen zweiten Dialog
+        // (und damit keinen zweiten Verbrauch) ausloesen.
+        if (hankoDialogOpen) {
+            return;
+        }
+
         Hanko hanko = HankoCatalog.create(effect);
         if (!hanko.canTarget(targetCard)
             || !runSession.getPurchasedHankos().contains(effect)
@@ -360,20 +377,29 @@ public class InventoryOverlay extends Group {
             return;
         }
 
+        hankoDialogOpen = true;
+
         Dialog dialog = new Dialog("Hanko anwenden", skin) {
             @Override
             protected void result(Object object) {
+                hankoDialogOpen = false;
                 if (Boolean.TRUE.equals(object)) {
                     applyHankoToCard(targetCard, effect);
                 }
             }
         };
 
-        Label text = new Label(
-            HankoCatalog.getName(effect) + " auf\n" + targetCard.name()
-                + " anwenden?\n\n" + HankoCatalog.getDescription(effect),
-            skin
-        );
+        StringBuilder message = new StringBuilder();
+        message.append(HankoCatalog.getName(effect))
+            .append(" auf\n")
+            .append(targetCard.name())
+            .append(" anwenden?\n\n");
+        if (targetCard.hasHanko()) {
+            message.append("Der vorhandene Stempel wird ersetzt.\n\n");
+        }
+        message.append(HankoCatalog.getDescription(effect));
+
+        Label text = new Label(message.toString(), skin);
         text.setAlignment(Align.center);
         text.setWrap(true);
 
@@ -392,6 +418,9 @@ public class InventoryOverlay extends Group {
             return;
         }
 
+        // Ein zweiter Apply-Vorgang auf dieselbe Karteninstanz kann nicht gelingen:
+        // evolveCard() findet die bereits ersetzte Instanz nicht mehr und der Hanko
+        // wird in diesem Fall auch nicht verbraucht.
         Card modifiedCard = hanko.applyEffect(targetCard);
         if (runSession.getPlayerDeck().evolveCard(targetCard, modifiedCard)) {
             // remove(Object) entfernt genau ein Exemplar dieses stapelbaren Hankos.
@@ -401,6 +430,19 @@ public class InventoryOverlay extends Group {
         selectedHankoToApply = null;
         updateHankoTabBadge();
         showDeckTab();
+    }
+
+    /**
+     * Liefert die Atlas-Region des Hanko-Abzeichens. Fehlende Regionen werden mit
+     * vollstaendigem Namen geloggt statt eine NullPointerException auszuloesen.
+     */
+    private TextureRegion findHankoRegion(HankoEffect effect) {
+        String regionName = HankoCatalog.getAtlasRegionName(effect);
+        TextureRegion region = regionName == null ? null : atlas.findRegion(regionName);
+        if (region == null) {
+            Gdx.app.error("InventoryOverlay", "Hanko-Atlas-Region fehlt: " + regionName + " (Hanko " + effect + ")");
+        }
+        return region;
     }
 
     private void showHankoTab() {
@@ -428,7 +470,7 @@ public class InventoryOverlay extends Group {
             item.setBackground(panelBackground);
             item.pad(15f);
 
-            TextureRegion region = atlas.findRegion("HANKO_" + effect.name());
+            TextureRegion region = findHankoRegion(effect);
             if (region != null) {
                 item.add(new Image(region)).size(48f).padRight(20f);
             }

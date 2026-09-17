@@ -2,12 +2,17 @@ package com.lychcs.koikoi.ui;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.utils.Scaling;
 import com.lychcs.koikoi.model.Card;
 
 public class JuicyCardActor extends JuicyDraggableActor {
+
+    /** Kantenlaenge des Hanko-Abzeichens auf der Karte. */
+    private static final float HANKO_BADGE_SIZE = 26f;
 
     public interface CardListener {
         void onTap(JuicyCardActor actor);
@@ -19,7 +24,14 @@ public class JuicyCardActor extends JuicyDraggableActor {
     private final CardListener listener;
     protected float baseX, baseY, baseRot;
 
-    public JuicyCardActor(Card card, TextureRegion cardTex, TextureRegion shadowTex, CardListener listener) {
+    /**
+     * @param cardTex      Atlas-Region des Kartenbildes.
+     * @param hankoBadgeTex Atlas-Region des Hanko-Abzeichens oder {@code null},
+     *                      wenn die Karte keinen Stempel traegt.
+     * @param shadowTex    Region fuer den Schatten.
+     * @param listener     Callback fuer Tap/Drag/Drop.
+     */
+    public JuicyCardActor(Card card, TextureRegion cardTex, TextureRegion hankoBadgeTex, TextureRegion shadowTex, CardListener listener) {
         super(72f, 128f, shadowTex);
         this.card = card;
         this.listener = listener;
@@ -36,13 +48,22 @@ public class JuicyCardActor extends JuicyDraggableActor {
         mainImg.setScaling(com.badlogic.gdx.utils.Scaling.fit);
         stack.add(mainImg);
 
-        // Falls Hanko vorhanden, HankoActor auf der Karte platzieren
-        if (card.hasHanko()) {
-            // Hinweis: Falls du den HankoActor hier direkt nutzen möchtest,
-            // kann die Textur übergeben oder geladen werden.
-        }
-
         addActor(stack);
+
+        // Hanko-Abzeichen oberhalb des Kartenbildes. Als Kind des Actors bewegt,
+        // skaliert, rotiert und fadet es automatisch mit der Karte mit.
+        if (card.hasHanko() && hankoBadgeTex != null) {
+            Image badge = new Image(hankoBadgeTex);
+            badge.setScaling(Scaling.fit);
+            badge.setSize(HANKO_BADGE_SIZE, HANKO_BADGE_SIZE);
+            badge.setPosition(
+                (getWidth() - HANKO_BADGE_SIZE) / 2f,
+                getHeight() - HANKO_BADGE_SIZE / 2f
+            );
+            // Das Abzeichen darf keine Eingabe auf die Karte blockieren.
+            badge.setTouchable(Touchable.disabled);
+            addActor(badge);
+        }
     }
 
     public void updateArc(float bx, float by, float brot, boolean isSelected) {
