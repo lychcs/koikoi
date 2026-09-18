@@ -14,7 +14,7 @@ public class WhiteSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +" + (long) CHIP_BONUS + " Base Chips when this card is played.";
+        return "Grants +" + (long) CHIP_BONUS + " Chips when scored.";
     }
 
     @Override

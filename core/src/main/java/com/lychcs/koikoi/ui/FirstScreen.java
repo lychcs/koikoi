@@ -15,6 +15,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.graphics.GameAssets;
 import com.lychcs.koikoi.run.RunSession;
 
 import static com.lychcs.koikoi.graphics.FontManager.COLOR_TEXT_MAIN;
@@ -25,15 +26,19 @@ public class FirstScreen extends ScreenAdapter {
     private static final float WORLD_HEIGHT = 720f;
 
     private final KoiKoiGame game;
+    private final GameAssets assets;
     private final Stage stage;
 
     private Texture background;
     private Texture logoTexture;
     private Skin skin;
-    private Texture buttonTex;
 
-    public FirstScreen(KoiKoiGame game) {
+    /** Schutz gegen Mehrfach-Dispose durch den Screen-Manager. */
+    private boolean disposed;
+
+    public FirstScreen(KoiKoiGame game, GameAssets assets) {
         this.game = game;
+        this.assets = assets;
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
 
         initAssets();
@@ -41,19 +46,19 @@ public class FirstScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
-        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_STARTING_SCREEN.png"));
-        logoTexture = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_LOGO.png"));
+        // Screen-lokale Texturen: nur das Hauptmenue verwendet sie.
+        background = new Texture(Gdx.files.internal(GameAssets.STARTING_SCREEN_BACKGROUND));
+        logoTexture = new Texture(Gdx.files.internal(GameAssets.LOGO_TEXTURE));
         logoTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        // Geliehene, global verwaltete Skin (wird hier nicht disposet).
+        skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
-
-        buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
     }
 
     private void buildUI() {
-        NinePatch buttonPatch = new NinePatch(buttonTex, 15, 15, 15, 15);
-        NinePatchDrawable buttonDrawable = new NinePatchDrawable(buttonPatch);
+        // NeunPatch auf der gemeinsamen Button-Textur: keine eigene GPU-Ressource.
+        NinePatchDrawable buttonDrawable = assets.newButtonDrawable();
 
         TextButton.TextButtonStyle buttonStyle = new TextButton.TextButtonStyle();
         buttonStyle.up = buttonDrawable;
@@ -70,7 +75,7 @@ public class FirstScreen extends ScreenAdapter {
                 RunSession currentRun = new RunSession();
 
                 // 2. Direkt auf die Overworld-Map springen!
-                game.changeScreen(new OverworldScreen(currentRun));
+                game.changeScreen(new OverworldScreen(currentRun, assets));
             }
         });
 
@@ -108,10 +113,16 @@ public class FirstScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
+        // Screen-lokale Ressourcen genau einmal freigeben.
+        // Skin, Button-Textur und Assets bleiben Eigentum von KoiKoiGame/GameAssets
+        // und werden hier bewusst NICHT disposet.
         stage.dispose();
         background.dispose();
         logoTexture.dispose();
-        skin.dispose();
-        buttonTex.dispose();
     }
 }

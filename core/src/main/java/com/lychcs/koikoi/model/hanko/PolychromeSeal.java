@@ -11,7 +11,7 @@ public class PolychromeSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "This card is treated as ALL FOUR seasons simultaneously when calculating Yaku (Flushes/Harvest).";
+        return "Counts as all four seasons when detecting Yaku (Gathering, Monochrome and True Season).";
     }
 
     @Override

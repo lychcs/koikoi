@@ -3,23 +3,21 @@ package com.lychcs.koikoi.ui;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.NinePatch;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.graphics.GameAssets;
 import com.lychcs.koikoi.model.shikigami.Shikigami;
 import com.lychcs.koikoi.run.RunSession;
 
@@ -33,54 +31,66 @@ public class ShrineScreen extends ScreenAdapter {
 
     private final Stage stage;
     private final RunSession runSession;
+    /** Geliehene, global verwaltete Assets (Eigentum: GameAssets). */
+    private final GameAssets assets;
     private Skin skin;
     private TextureAtlas atlas;
+    /** Screen-lokaler, saisonabhaengiger Hintergrund. */
     private Texture background;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
-    private Texture purpleOverlayTex;
-    private TextureRegionDrawable purpleFlameOverlayBackground;
+    /** Overlay der Reinigungs-Animation: Drawable der gemeinsamen Skin (keine eigene Textur). */
+    private Drawable purpleFlameOverlayBackground;
 
     private Label voidDustLabel;
 
-    public ShrineScreen(RunSession runSession) {
+    /** Schutz gegen Mehrfach-Dispose durch den Screen-Manager. */
+    private boolean disposed;
+
+    public ShrineScreen(RunSession runSession, GameAssets assets) {
+        if (assets == null) {
+            throw new IllegalArgumentException("assets must not be null");
+        }
+
         this.runSession = runSession;
+        this.assets = assets;
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
 
         initAssets();
         buildShrineUi();
+    }
 
+    @Override
+    public void show() {
+        // Der InputProcessor wird erst beim Anzeigen gesetzt: ein waehrend eines
+        // ausstehenden Screen-Wechsels sofort wieder verworfener Screen darf nie
+        // auf eine disposed Stage zeigen.
         Gdx.input.setInputProcessor(stage);
     }
 
     private void initAssets() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        // Geliehene, global verwaltete Assets: kein Laden und kein Dispose hier.
+        skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
-        atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
-        for (Texture tex : atlas.getTextures()) {
-            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        }
+        atlas = assets.getAtlas(GameAssets.GAME_ATLAS);
 
+        // Screen-lokal: der Hintergrund haengt von der Jahreszeit ab.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHRINE")));
 
-        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
+        // NinePatch-Drawables verweisen nur auf die gemeinsamen Texturen.
+        panelBackground = assets.newPanelDrawable();
 
-        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
-        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
+        indieButtonStyle.up = assets.newButtonDrawable();
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = FontManager.getFont();
         indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
 
-        Pixmap purplePixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        purplePixmap.setColor(new Color(0.10f, 0.0f, 0.16f, 0.92f));
-        purplePixmap.fill();
-        purpleOverlayTex = new Texture(purplePixmap);
-        purpleFlameOverlayBackground = new TextureRegionDrawable(new TextureRegion(purpleOverlayTex));
-        purplePixmap.dispose();
+        // Das purple Overlay kommt aus dem White-Drawable der gemeinsamen Skin:
+        // keine 1x1-Pixmap und damit keine zusaetzliche GPU-Ressource pro Screen.
+        purpleFlameOverlayBackground = skin.newDrawable("white", new Color(0.10f, 0.0f, 0.16f, 0.92f));
     }
 
     private void buildShrineUi() {
@@ -103,7 +113,7 @@ public class ShrineScreen extends ScreenAdapter {
         shrineBox.setBackground(panelBackground);
         shrineBox.pad(35);
 
-        Label title = new Label("Schrein der Rast", skin);
+        Label title = new Label("Shrine of Rest", skin);
         title.setFontScale(1.5f);
         title.setColor(Color.valueOf("D1C4E9"));
         shrineBox.add(title).padBottom(20).row();
@@ -115,8 +125,8 @@ public class ShrineScreen extends ScreenAdapter {
         boolean canPurify = (exhaustedCount > 0) && (runSession.getVoidDust() >= PURIFY_COST);
 
         String purifyText = (exhaustedCount == 0)
-            ? "Alle Shikigami sind ausgeruht"
-            : "Geister wecken (" + PURIFY_COST + " VOID DUST)";
+            ? "All Shikigami are ready"
+            : "Purify Spirits (" + PURIFY_COST + " VOID DUST)";
 
         TextButton purifyButton = new TextButton(purifyText, indieButtonStyle);
         if (!canPurify) purifyButton.getColor().a = 0.5f;
@@ -141,7 +151,7 @@ public class ShrineScreen extends ScreenAdapter {
         // Übersicht der Begleiter im Beutel
         Table shikigamiListTable = new Table();
         for (Shikigami y : runSession.getShikigamiBag()) {
-            String status = y.isExhausted() ? " [Rastet]" : " [Bereit]";
+            String status = y.isExhausted() ? " [Exhausted]" : " [Ready]";
             String xpInfo = (y.getLevel() >= Shikigami.MAX_LEVEL)
                 ? "MAX"
                 : (y.getCurrentXp() + "/" + y.getXpToNextLevel() + " XP");
@@ -158,11 +168,11 @@ public class ShrineScreen extends ScreenAdapter {
 
         root.add(shrineBox).expandY().center().padBottom(30).row();
 
-        TextButton backButton = new TextButton("Zurueck zur Erkundung", indieButtonStyle);
+        TextButton backButton = new TextButton("Back to Exploration", indieButtonStyle);
         backButton.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
+                ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession, assets));
             }
         });
         root.add(backButton).width(300).height(60).bottom();
@@ -180,8 +190,8 @@ public class ShrineScreen extends ScreenAdapter {
         purifyOverlay.setFillParent(true);
         purifyOverlay.setBackground(purpleFlameOverlayBackground);
 
-        Label purifyText = new Label("~ RITUS DER REINIGUNG ~\n\nHeilige Raeucherstaebchen wecken deine Geister.\n["
-            + restoredCount + " Shikigami] sind wieder einsatzbereit!", skin);
+        Label purifyText = new Label("- RITE OF PURIFICATION -\n\nSacred incense awakens your spirits.\n["
+            + restoredCount + " Shikigami] are ready for battle again!", skin);
         purifyText.setColor(Color.valueOf("E1BEE7"));
         purifyText.setFontScale(1.3f);
         purifyText.setAlignment(Align.center);
@@ -219,10 +229,16 @@ public class ShrineScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
+        // Nur screen-eigene Ressourcen freigeben.
         stage.dispose();
         if (background != null) background.dispose();
-        if (atlas != null) atlas.dispose();
-        if (skin != null) skin.dispose();
-        if (purpleOverlayTex != null) purpleOverlayTex.dispose();
+        // Skin, Atlas, Panel-/Button-Textur und das Overlay-Drawable sind
+        // geliehen (Eigentum: GameAssets/Skin) und werden hier bewusst NICHT
+        // disposet.
     }
 }

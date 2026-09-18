@@ -31,7 +31,7 @@ public final class HankoCatalog {
     public static Hanko create(HankoEffect effect) {
         Entry entry = ENTRIES.get(effect);
         if (entry == null) {
-            throw new IllegalArgumentException("Kein kaufbares Hanko fuer Effekt: " + effect);
+            throw new IllegalArgumentException("No purchasable Hanko for effect: " + effect);
         }
         return entry.factory().get();
     }
@@ -47,7 +47,7 @@ public final class HankoCatalog {
     public static int getPrice(HankoEffect effect) {
         Entry entry = ENTRIES.get(effect);
         if (entry == null) {
-            throw new IllegalArgumentException("Kein Shop-Preis fuer Effekt: " + effect);
+            throw new IllegalArgumentException("No shop price for effect: " + effect);
         }
         return entry.price();
     }

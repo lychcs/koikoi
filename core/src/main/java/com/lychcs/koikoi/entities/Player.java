@@ -1,6 +1,5 @@
 package com.lychcs.koikoi.entities;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -8,10 +7,18 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
 
+/**
+ * Spielerfigur der Overworld.
+ *
+ * <p>Der Physik-Koerper gehoert zur Box2D-Welt des Screens und wird mit dieser
+ * freigegeben. Das Sprite-Sheet wird <b>nicht</b> von dieser Klasse besessen:
+ * es wird von {@link com.lychcs.koikoi.graphics.GameAssets} verwaltet und hier
+ * nur als geliehene Textur ausgewertet. Diese Klasse besitzt daher keine
+ * GPU-Ressource, die sie freigeben muesste.</p>
+ */
 public class Player {
 
     public Body body;
-    private Texture sheet;
 
     // Animationen und Frame-Arrays für die 4 Richtungen
     private Animation<TextureRegion> walkDown, walkUp, walkLeft, walkRight;
@@ -20,9 +27,19 @@ public class Player {
     private float stateTime = 0f;
     private String currentDirection = "down";
 
+    /** Wiederverwendete Rueckgabe von {@link #getRenderPosition()} (keine Allokation pro Frame). */
+    private final Vector2 renderPosition = new Vector2();
+
     public final float SPEED = 120f;
 
-    public Player(World world, float startX, float startY) {
+    /**
+     * @param sheet vom Aufrufer geliehenes Sprite-Sheet (Eigentum: GameAssets)
+     */
+    public Player(World world, float startX, float startY, Texture sheet) {
+        if (sheet == null) {
+            throw new IllegalArgumentException("sheet must not be null");
+        }
+
         // 1. Box2D Physik-Körper (Dynamischer Körper für den Spieler)
         BodyDef bdef = new BodyDef();
         bdef.type = BodyDef.BodyType.DynamicBody;
@@ -39,9 +56,7 @@ public class Player {
         body.createFixture(fdef);
         shape.dispose();
 
-        // 2. Das horizontale Sprite-Sheet laden und aufteilen (16 Frames gesamt: je 4 pro Richtung)
-        sheet = new Texture(Gdx.files.internal("entities/player.png"));
-
+        // 2. Das horizontale Sprite-Sheet aufteilen (16 Frames gesamt: je 4 pro Richtung)
         int totalFrames = 16;
         int frameWidth = sheet.getWidth() / totalFrames;
         int frameHeight = sheet.getHeight();
@@ -107,12 +122,14 @@ public class Player {
         batch.draw(currentFrame, body.getPosition().x - 32f, body.getPosition().y - 12f);
     }
 
+    /**
+     * Position, an der das Sprite gezeichnet wird (Y-Sorting im OverworldScreen).
+     *
+     * <p>Die Rueckgabe ist eine wiederverwendete Instanz: sie bleibt nur bis zum
+     * naechsten Aufruf gueltig und darf nicht zwischengespeichert werden.</p>
+     */
     public Vector2 getRenderPosition() {
         // Exakter Offset passend zum batch.draw() für das Y-Sorting im OverworldScreen
-        return new Vector2(body.getPosition().x - 32f, body.getPosition().y - 12f);
-    }
-
-    public void dispose() {
-        if (sheet != null) sheet.dispose();
+        return renderPosition.set(body.getPosition().x - 32f, body.getPosition().y - 12f);
     }
 }

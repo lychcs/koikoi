@@ -19,6 +19,9 @@ public class HankoActor extends Image {
     @Override
     public void draw(Batch batch, float parentAlpha) {
         ShaderProgram activeShader = null;
+        // Vorher aktiven Shader merken, damit er nach dem Zeichnen exakt
+        // wiederhergestellt wird (kein blindes setShader(null)).
+        ShaderProgram previousShader = batch.getShader();
 
         switch (effect) {
             case POLYCHROME_SEAL -> {
@@ -52,7 +55,7 @@ public class HankoActor extends Image {
         super.draw(batch, parentAlpha);
 
         if (activeShader != null) {
-            batch.setShader(null);
+            batch.setShader(previousShader);
         }
     }
 }

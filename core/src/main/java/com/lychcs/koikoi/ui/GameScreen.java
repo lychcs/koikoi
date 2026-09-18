@@ -1,6 +1,7 @@
 package com.lychcs.koikoi.ui;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -10,10 +11,12 @@ import com.badlogic.gdx.graphics.g2d.*;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.math.Interpolation;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
@@ -31,15 +34,27 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.CorruptionEngine;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.graphics.GameAssets;
 import com.lychcs.koikoi.graphics.HankoShaderManager;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.CardID;
+import com.lychcs.koikoi.model.DeckTemplates;
+import com.lychcs.koikoi.model.Season;
 import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.*;
 import com.lychcs.koikoi.model.shikigami.*;
+import com.lychcs.koikoi.model.shikigami.ability.CardTransformation;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiAbility;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiAbilityContext;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiAbilityResult;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiActivationTiming;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiSelectionMode;
+import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.HandSorting;
 import com.lychcs.koikoi.run.RunSession;
+import com.lychcs.koikoi.run.ShikigamiReward;
+import com.lychcs.koikoi.run.YokaiEncounter;
 import com.lychcs.koikoi.scoring.*;
 
 import java.util.*;
@@ -135,7 +150,7 @@ public class GameScreen extends ScreenAdapter {
     private static final float SCORE_CARD_MIN_SPACING = 58f;
     /** Abstand zwischen Kartenoberkante und Beitragstext. */
     private static final float SCORE_CONTRIBUTION_GAP = 6f;
-    /** Abstand zwischen Kartenunterkante und Hinweis "Kein Yaku-Beitrag". */
+    /** Abstand zwischen Kartenunterkante und Hinweis "No Yaku contribution". */
     private static final float SCORE_NOTE_GAP = 20f;
     /** Zeit, bis die Physik das Reparenting als neue Position uebernommen hat. */
     private static final float SCORE_STAGE_SETTLE_TIME = 0.08f;
@@ -158,7 +173,76 @@ public class GameScreen extends ScreenAdapter {
 
     private static final int INITIAL_MAX_DISCARDS = 3;
     private static final int INITIAL_MAX_HANDS = 4;
-    private static final double INITIAL_TARGET_SCORE = 200.0;
+
+    // ---------------------------------------------------------------------
+    // Faehigkeitsdialog (Altar-Aktivierung): Groessen in Stage-Einheiten.
+    // Die Stage ist ein FitViewport(1280x720); damit bleibt das Modal bei
+    // 1280x720 und 1920x1080 vollstaendig sichtbar und bedienbar.
+    // ---------------------------------------------------------------------
+    /** Breite des Dialogpanels (Inhalt bleibt innerhalb der Stage). */
+    private static final float ABILITY_PANEL_WIDTH = 620f;
+    /** Sicherer Abstand des Panels zum Viewport-Rand. */
+    private static final float ABILITY_PANEL_MARGIN = 12f;
+    /** Sichtbare Hoehe der Zielgalerie (Level 3) vor dem Scrollen. */
+    private static final float ABILITY_GALLERY_HEIGHT = 296f;
+    /** Zellbreite eines Zielmotivs in der Galerie. */
+    private static final float ABILITY_GALLERY_ENTRY_WIDTH = 112f;
+    /** Zielmotive je Galeriezeile. */
+    private static final int ABILITY_GALLERY_COLUMNS = 5;
+    /** Abdunklung des Hintergrunds (Drawable der gemeinsamen Skin, keine neue Textur). */
+    private static final float ABILITY_DIM_ALPHA = 0.72f;
+
+    // Ablaufzeiten der kurzen Transformationsanimation (nach erfolgreichem Commit).
+    private static final float ABILITY_SOURCE_PULSE_SCALE = 1.18f;
+    private static final float ABILITY_SOURCE_PULSE_TIME = 0.16f;
+    private static final float ABILITY_TRANSFORM_TIME = 0.22f;
+    private static final float ABILITY_REPLACEMENT_START_SCALE = 0.7f;
+    /** Dauer des Altar-/Kitsune-Pulses, bis die Eingabe wieder frei ist. */
+    private static final float ABILITY_ALTAR_PULSE_TIME = 0.45f;
+
+    /** Hervorhebung der gewaehlten Quellkarte. */
+    private static final Color ABILITY_SELECTED_TINT = new Color(1f, 0.93f, 0.62f, 1f);
+    /** Sichtbar gedaempfte, nicht auswaehlbare Zielmotive (gleiche CardID wie die Quelle). */
+    private static final Color ABILITY_DIMMED_TINT = new Color(1f, 1f, 1f, 0.38f);
+
+    /**
+     * Zustandsautomat der Faehigkeitsaktivierung. Jeder Zustand ausser
+     * {@link #IDLE} sperrt die normale Hand-, Sortier-, Omamori- und
+     * Shikigami-Bedienung; der Screen rendert und animiert dabei weiter.
+     *
+     * <p>{@link #RESOLVED} und {@link #CANCELLED} sind die dokumentierten
+     * Endzustaende eines Vorgangs (Commit bzw. Abbruch) und gehen unmittelbar in
+     * {@link #IDLE} ueber, sobald die kurze Animation beziehungsweise das
+     * Aufraeumen abgeschlossen ist.</p>
+     */
+    private enum AbilityActivationState {
+        /** Keine Aktivierung: normale Bedienung. */
+        IDLE,
+        /** Bestaetigung/Fehlermeldung sichtbar, noch kein Commit. */
+        PENDING_CONFIRMATION,
+        /** Der Spieler waehlt die Quellkarte aus der Hand. */
+        SELECTING_SOURCE_CARD,
+        /** Der Spieler waehlt das Zielmotiv (Level 3). */
+        SELECTING_TARGET_CARD,
+        /** Ergebnis wird angewendet und animiert: Eingabe bleibt gesperrt. */
+        RESOLVING,
+        /** Faehigkeit erfolgreich angewendet. */
+        RESOLVED,
+        /** Vorgang abgebrochen: nichts wurde veraendert. */
+        CANCELLED
+    }
+
+    /**
+     * Kurze Anzeigedauer der Victory-/Belohnungsmeldung vor der Rueckkehr in die
+     * Overworld (dasselbe sichere Muster wie im Niederlage-Zweig).
+     */
+    private static final float VICTORY_RETURN_DELAY = 0.9f;
+
+    /** Maximale Breite des Shikigami-Infopanels, damit lange Faehigkeitstexte umbrechen. */
+    private static final float INFO_POPUP_MAX_WIDTH = 330f;
+
+    /** Sicherer Abstand des Infopanels zum Viewport-Rand. */
+    private static final float INFO_POPUP_MARGIN = 6f;
 
     private final List<Card> playerHand = new ArrayList<>();
     private final List<Card> selectedCards = new ArrayList<>();
@@ -169,8 +253,55 @@ public class GameScreen extends ScreenAdapter {
     private GameState currentState = GameState.WAITING_FOR_INPUT;
     /** true, solange die Wertungssequenz laeuft (verhindert Doppelstarts). */
     private boolean scoringSequenceRunning = false;
+    /** true, sobald Sieg oder Niederlage committet wurden (Duplikatschutz). */
+    private boolean encounterResolved = false;
+    /** true, wenn das Shikigami-Infopanel per Klick fixiert wurde. */
+    private boolean infoPinned = false;
+    /** Shikigami, dessen Info aktuell im Panel steht (null = keins). */
+    private Shikigami infoPopupOwner = null;
+    /** Wiederverwendeter Vektor fuer die Panelpositionierung (keine Allokation pro Event). */
+    private final Vector2 infoAnchorPosition = new Vector2();
 
-    private double currentTargetScore = INITIAL_TARGET_SCORE;
+    // ---------------------------------------------------------------------
+    // Pending-Faehigkeitsaktivierung (Altar-Drop als Transaktion)
+    // ---------------------------------------------------------------------
+    /** Aktueller Zustand des Aktivierungsvorgangs. */
+    private AbilityActivationState activationState = AbilityActivationState.IDLE;
+    /** Vorgemerkter Begleiter: noch NICHT im Altar und noch nicht erschoepft. */
+    private Shikigami pendingActivationShikigami;
+    /** Deklarative Faehigkeit des vorgemerkten Begleiters (aus getAbility()). */
+    private ShikigamiAbility pendingActivationAbility;
+    /** Exakte Referenz der gewaehlten Quellkarte (Identitaetsvergleich, kein equals). */
+    private Card pendingSourceCard;
+    /** Handindex der Quellkarte zum Auswahlzeitpunkt (nur fuer die Anzeige). */
+    private int pendingSourceIndex = -1;
+    /** Gewaehltes Zielmotiv (Level 3). */
+    private Card pendingTargetTemplate;
+    /** Modal (Abdunklung + Panel) der Aktivierung. */
+    private Table abilityOverlay;
+    /** Panelinhalt des aktuellen Schritts. */
+    private Table abilityPanel;
+    /** Zielgalerie (Level 3) fuer den Scrollzustand. */
+    private ScrollPane abilityTargetScroll;
+    /** Zielmotiv-Kacheln der Galerie (Auswahlmarkierung ohne Namensvergleich). */
+    private final List<Table> abilityTargetTiles = new ArrayList<>();
+    /** Quellkarten-Kacheln des aktuellen Auswahlschritts. */
+    private final List<Table> abilitySourceTiles = new ArrayList<>();
+    /** Aktuell markierte Zielkachel. */
+    private Table abilitySelectedTargetTile;
+    /** Aktuell markierte Quellkachel. */
+    private Table abilitySelectedSourceTile;
+    /** Infozeile des aktuellen Schritts (gewaehlte Quelle/Ziel). */
+    private Label abilityStepInfoLabel;
+    /** Weiter-/Apply-Button des aktuellen Schritts (Alpha je nach Auswahl). */
+    private TextButton abilityForwardButton;
+    /** Pulsierende Handkarten waehrend der Quellauswahl. */
+    private final List<Actor> abilityHighlightedCards = new ArrayList<>();
+    /** Begleiter, deren Faehigkeit in diesem Kampf bereits angewendet wurde (Identitaet). */
+    private final Set<Shikigami> abilityResolvedShikigami =
+        Collections.newSetFromMap(new IdentityHashMap<>());
+
+    private double currentTargetScore;
     private double currentRoundScore = 0.0;
     private int maxDiscards = INITIAL_MAX_DISCARDS;
     private int discardsRemaining = maxDiscards;
@@ -185,6 +316,8 @@ public class GameScreen extends ScreenAdapter {
     /** Cache fuer die Hanko-Abzeichen auf den Kampfkarten (fehlende Regionen inklusive). */
     private final Map<HankoEffect, TextureRegion> hankoBadgeRegions = new EnumMap<>(HankoEffect.class);
     private final RunSession runSession;
+    /** Begegnung dieses Kampfes (stabile Definition aus dem Encounter-Katalog). */
+    private final YokaiEncounter encounter;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
     private AltarFlameActor altarFlames;
@@ -205,7 +338,10 @@ public class GameScreen extends ScreenAdapter {
 
     private TextButton playButton;
     private TextButton discardButton;
+    /** Screen-lokaler Kampfhintergrund. */
     private Texture background;
+    /** Geliehene, global verwaltete Assets (Eigentum: GameAssets). */
+    private GameAssets assets;
 
     private Label scoreProgressLabel;
     private Label chipsLabel;
@@ -223,13 +359,38 @@ public class GameScreen extends ScreenAdapter {
 
     private CorruptionEngine corruptionEngine;
 
-    public GameScreen(RunSession runSession) {
+    /** Schutz gegen Mehrfach-Dispose durch den Screen-Manager. */
+    private boolean disposed;
+
+    public GameScreen(RunSession runSession, GameAssets assets, YokaiEncounter encounter) {
+        if (assets == null) {
+            throw new IllegalArgumentException("assets must not be null");
+        }
+        if (encounter == null) {
+            throw new IllegalArgumentException("encounter must not be null");
+        }
+
         this.runSession = runSession;
+        this.assets = assets;
+        this.encounter = encounter;
         this.stage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
 
-        this.atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
-        for (Texture tex : atlas.getTextures()) {
-            tex.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        // Zielscore stammt aus der Begegnungsdefinition (Wert unveraendert zum bisherigen
+        // festen Kampfziel) und steht vor dem Aufbau der UI fest.
+        this.currentTargetScore = encounter.getTargetScore();
+
+        // Geliehener, global geladener Atlas: kein Laden, kein Dispose, keine Filterarbeit.
+        this.atlas = assets.getAtlas(GameAssets.GAME_ATLAS);
+
+        // Wilde Form nur aufloesen/pruefen, wenn sie aus dem Atlas stammt; animierte
+        // Aseprite-Formen laedt die Overworld-Entity ueber GameAssets. Fehlt sogar die
+        // Fallback-Region, ist der Atlas fuer diese Spezies unbrauchbar.
+        if (!encounter.getSpecies().hasWildSheet()
+            && encounter.getSpecies().resolveWildRegion(atlas) == null) {
+            Gdx.app.error("GameScreen", "Missing wild form region '"
+                + encounter.getSpecies().getWildAtlasRegionName() + "' and fallback region '"
+                + encounter.getSpecies().getFirstPurifiedAtlasRegionName() + "' in "
+                + GameAssets.GAME_ATLAS + " (species " + encounter.getSpeciesId() + ").");
         }
 
         screenBatch = new SpriteBatch();
@@ -240,7 +401,7 @@ public class GameScreen extends ScreenAdapter {
 
         if (!edgeShader.isCompiled()) {
             throw new GdxRuntimeException(
-                "edge_detection Shader konnte nicht kompiliert werden:\n"
+                "edge_detection shader could not be compiled:\n"
                     + edgeShader.getLog()
             );
         }
@@ -255,6 +416,11 @@ public class GameScreen extends ScreenAdapter {
         // Reste einer vorherigen Wertung entfernen (Buehne und Beitragsanzeigen).
         clearScoreStage();
         clearOmamoriContributions();
+        // Einen offenen Faehigkeitsvorgang eines vorherigen Kampfes restlos
+        // entfernen: kein liegenbleibendes Modal, kein halb gesetzter Zustand.
+        activationState = AbilityActivationState.IDLE;
+        closeAbilityModal();
+        clearPendingActivation();
         // Ein neuer Kampf startet ohne Sortiermodus.
         currentHandSortMode = HandSorting.Mode.NONE;
         discardsRemaining = runSession.getBaseDiscards();
@@ -315,8 +481,19 @@ public class GameScreen extends ScreenAdapter {
     public void resize(int width, int height) {
         stage.getViewport().update(width, height, true);
 
-        if (fbo != null) fbo.dispose();
+        // Kein neuer FBO ohne echte Groessenaenderung und nie mit Groesse 0.
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        if (fbo != null && fbo.getWidth() == width && fbo.getHeight() == height) {
+            return;
+        }
+
+        if (fbo != null) {
+            fbo.dispose();
+        }
         fbo = new FrameBuffer(Pixmap.Format.RGBA8888, width, height, false);
+        // Frische Region pro FBO: der Y-Flip wird dadurch nie mehrfach angewendet.
         fboRegion = new TextureRegion(fbo.getColorBufferTexture());
         fboRegion.flip(false, true);
 
@@ -326,7 +503,8 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void initUiElements() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        // Geliehene, globale Skin: kein Dispose in diesem Screen.
+        skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         loadIndieAssets();
@@ -361,7 +539,7 @@ public class GameScreen extends ScreenAdapter {
                 int button
             ) {
                 if (
-                    currentState != GameState.WAITING_FOR_INPUT ||
+                    !isHandInteractionAllowed() ||
                         playerHand.isEmpty()
                 ) {
                     return true;
@@ -386,7 +564,7 @@ public class GameScreen extends ScreenAdapter {
                 int button
             ) {
                 if (
-                    currentState != GameState.WAITING_FOR_INPUT ||
+                    !isHandInteractionAllowed() ||
                         playerHand.isEmpty()
                 ) {
                     return true;
@@ -407,6 +585,10 @@ public class GameScreen extends ScreenAdapter {
         discardLabel = new Label("Discards: " + discardsRemaining, skin);
         handsLabel = new Label("Hands: " + handsRemaining, skin);
         yakuNameLabel = new Label("", skin);
+        // Sieg- und Belohnungsmeldungen sind zweizeilig: Wrap plus feste Breite verhindern,
+        // dass der Text aus dem Panel laeuft.
+        yakuNameLabel.setWrap(true);
+        yakuNameLabel.setAlignment(Align.center);
 
         scoreProgressLabel.setFontScale(1.2f);
         chipsLabel.setFontScale(1.5f);
@@ -423,7 +605,7 @@ public class GameScreen extends ScreenAdapter {
 
         Table yakuBox = new Table();
         yakuBox.setBackground(panelBackground);
-        yakuBox.add(yakuNameLabel).padBottom(10).padTop(15).row();
+        yakuBox.add(yakuNameLabel).width(240f).padBottom(10).padTop(15).row();
         Table multTable = new Table();
         multTable.add(chipsLabel).padRight(10);
         multTable.add(new Label(" X ", skin));
@@ -465,7 +647,7 @@ public class GameScreen extends ScreenAdapter {
         hankoTable = new Table();
         hankoTable.setBackground(panelBackground);
         hankoTable.pad(15);
-        hankoTable.add(new Label("Hankos", skin));
+        hankoTable.add(new Label("Hanko", skin));
 
         topRow.add(omamoriTable).height(120).expandX().fillX().padRight(15);
         topRow.add(altarStack).width(150).height(120).padRight(15);
@@ -513,6 +695,26 @@ public class GameScreen extends ScreenAdapter {
         infoPopup.setBackground(panelBackground);
         infoPopup.setVisible(false);
         stage.addActor(infoPopup);
+
+        // ESC bricht einen laufenden Faehigkeitsvorgang ab. Es gibt genau ein
+        // Eingabesystem (diese Stage); der Listener ergaenzt nur diese eine Taste
+        // und greift ausschliesslich bei aktivem Vorgang ein.
+        stage.addListener(new InputListener() {
+            @Override
+            public boolean keyDown(InputEvent event, int keycode) {
+                if (keycode != Input.Keys.ESCAPE || !isAbilityFlowActive()) {
+                    return false;
+                }
+                if (activationState == AbilityActivationState.PENDING_CONFIRMATION
+                    && pendingActivationShikigami == null) {
+                    // Reines Hinweisfenster (Ablehnung/leere Hand/bereits verwendet).
+                    dismissAbilityMessage();
+                } else {
+                    cancelAbilityActivation();
+                }
+                return true;
+            }
+        });
 
         corruptionEngine = new CorruptionEngine();
     }
@@ -593,7 +795,7 @@ public class GameScreen extends ScreenAdapter {
         String regionName = HankoCatalog.getAtlasRegionName(effect);
         TextureRegion region = regionName == null ? null : atlas.findRegion(regionName);
         if (region == null) {
-            Gdx.app.error("GameScreen", "Hanko-Atlas-Region fehlt: " + regionName + " (Hanko " + effect + ")");
+            Gdx.app.error("GameScreen", "Hanko atlas region missing: " + regionName + " (Hanko " + effect + ")");
         }
         // Auch null cachen, damit der Fehler nur einmal geloggt wird.
         hankoBadgeRegions.put(effect, region);
@@ -601,19 +803,22 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void loadIndieAssets() {
-        background = new Texture(Gdx.files.internal("backgrounds/BACKGROUND_PLAYING_BOARD.jpg"));
-        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
-        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        // Screen-lokaler Kampfhintergrund.
+        background = new Texture(Gdx.files.internal(GameAssets.PLAYING_BOARD_BACKGROUND));
+
+        // NinePatch-Drawables verweisen nur auf die gemeinsamen Texturen und
+        // besitzen selbst keine GPU-Ressource.
+        panelBackground = assets.newPanelDrawable();
+
         indieButtonStyle = new TextButton.TextButtonStyle();
-        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
+        indieButtonStyle.up = assets.newButtonDrawable();
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = FontManager.getFont();
         indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
     }
 
     public void onPlayHandSubmitted() {
-        if (currentState != GameState.WAITING_FOR_INPUT || scoringSequenceRunning
+        if (!isHandInteractionAllowed()
             || selectedCards.isEmpty() || handsRemaining <= 0) return;
 
         handsRemaining--;
@@ -799,8 +1004,8 @@ public class GameScreen extends ScreenAdapter {
 
             JuicyCardActor actor = takeCardActorForScoreStage(visible);
             if (actor == null) {
-                Gdx.app.error("GameScreen", "Kein sichtbarer Karten-Actor fuer '" + original.name()
-                    + "': Wertung laeuft weiter, Animation fuer diese Karte entfaellt.");
+                Gdx.app.error("GameScreen", "No visible card actor for '" + original.name()
+                    + "': scoring continues, the animation for this card is skipped.");
                 continue;
             }
 
@@ -812,7 +1017,7 @@ public class GameScreen extends ScreenAdapter {
             } else {
                 // Karten ausserhalb des Yakus bleiben sichtbar, aber abgedunkelt.
                 actor.setColor(SCORE_UNMATCHED_TINT);
-                note = new Label("Kein Yaku-Beitrag", skin);
+                note = new Label("No Yaku contribution", skin);
                 note.setAlignment(Align.center);
                 note.setFontScale(0.62f);
                 note.setColor(SCORE_IDLE_TEXT_COLOR);
@@ -993,7 +1198,7 @@ public class GameScreen extends ScreenAdapter {
         for (Omamori omamori : activeOmamoris) {
             JuicyOmamoriActor actor = findOmamoriActor(omamori);
             if (actor == null) {
-                Gdx.app.error("GameScreen", "Kein Omamori-Actor fuer die Beitragsanzeige: " + omamori.getName());
+                Gdx.app.error("GameScreen", "No Omamori actor for the contribution display: " + omamori.getName());
                 continue;
             }
 
@@ -1021,7 +1226,7 @@ public class GameScreen extends ScreenAdapter {
 
         Label label = omamoriContributions.get(event.omamori());
         if (label == null) {
-            Gdx.app.error("GameScreen", "Keine Beitragsanzeige fuer Omamori-Event '" + event.sourceName() + "'.");
+            Gdx.app.error("GameScreen", "No contribution display for Omamori event '" + event.sourceName() + "'.");
             return;
         }
 
@@ -1037,13 +1242,13 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    /** Aktive Omamori ohne Effekt dezent als "Kein Effekt" kennzeichnen (ohne Pause). */
+    /** Aktive Omamori ohne Effekt dezent als "No effect" kennzeichnen (ohne Pause). */
     private void markOmamoriWithoutEffect() {
         for (Map.Entry<Omamori, Label> entry : omamoriContributions.entrySet()) {
             Label label = entry.getValue();
             if (label.getText().length() == 0) {
                 label.setColor(SCORE_IDLE_TEXT_COLOR);
-                label.setText("Kein Effekt");
+                label.setText("No effect");
                 JuicyOmamoriActor actor = findOmamoriActor(entry.getKey());
                 if (actor != null) {
                     positionOmamoriContribution(actor, label);
@@ -1124,7 +1329,7 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void onDiscardClicked() {
-        if (currentState != GameState.WAITING_FOR_INPUT || discardsRemaining <= 0) return;
+        if (!isHandInteractionAllowed() || discardsRemaining <= 0) return;
         List<Card> cardsToDiscard = getDiscardableSelectedCards();
         if (cardsToDiscard.isEmpty()) return;
 
@@ -1161,32 +1366,76 @@ public class GameScreen extends ScreenAdapter {
             int completedStage = runSession.getLocationEncounterStage();
             runSession.advanceEncounterStage();
 
-            if (completedStage == RunSession.ENCOUNTERS_PER_LOCATION) {
-                yakuNameLabel.setText("Dieser Ort wurde gereinigt.");
-            } else {
-                yakuNameLabel.setText("VICTORY!");
+            // Begegnung genau einmal abschliessen und die Rekrutierungsbelohnung genau
+            // einmal vergeben. Der Guard deckt doppelte Victory-Callbacks ab; zusaetzlich
+            // schuetzt RunSession.grantShikigamiReward gegen Duplikate derselben Spezies.
+            String rewardLine = null;
+            if (!encounterResolved) {
+                encounterResolved = true;
+                runSession.markEncounterDefeated(encounter.getId());
+                rewardLine = rewardMessage(runSession.grantShikigamiReward(encounter));
             }
 
-            // Siegreicher Kampf: kein Zwischenscreen mehr, sondern direkte und weiterhin
-            // sichere, verzoegerte Rueckkehr in die Overworld.
-            ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
+            String headline = (completedStage == RunSession.ENCOUNTERS_PER_LOCATION)
+                ? "This location has been purified."
+                : "VICTORY!";
+            yakuNameLabel.setText(rewardLine == null ? headline : headline + "\n" + rewardLine);
+
+            // Siegreicher Kampf: kein Zwischenscreen, sondern sichere, verzoegerte Rueckkehr
+            // in die Overworld. Die kurze Pause macht Sieg und Belohnung lesbar; danach wird
+            // dieser Screen vom Screen-Manager genau einmal freigegeben.
+            stage.addAction(Actions.sequence(
+                Actions.delay(VICTORY_RETURN_DELAY),
+                Actions.run(() -> ((KoiKoiGame) Gdx.app.getApplicationListener())
+                    .changeScreen(new OverworldScreen(runSession, assets)))
+            ));
 
         } else if (handsRemaining <= 0) {
             currentState = GameState.ROUND_END;
-            yakuNameLabel.setText("NIEDERLAGE...");
+            // Niederlage: kein Encounter-Abschluss, keine Rekrutierung, keine Belohnung.
+            encounterResolved = true;
+            yakuNameLabel.setText("DEFEAT...");
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
 
             stage.addAction(Actions.sequence(
                 Actions.delay(1.5f),
                 Actions.run(() -> {
-                    ((KoiKoiGame) Gdx.app.getApplicationListener()).changeScreen(new OverworldScreen(runSession));
+                    ((KoiKoiGame) Gdx.app.getApplicationListener())
+                        .changeScreen(new OverworldScreen(runSession, assets));
                 })
             ));
         } else {
             drawCardsToHand(MAX_HAND_SIZE);
             resetUiForNextTurn();
         }
+    }
+
+    /**
+     * Kurze englische Ergebniszeile der Rekrutierung.
+     *
+     * <p>Sie zeigt auch den Ersatzpfad: bereits besessene Spezies (Beutel oder Reserve)
+     * erzeugen bewusst kein Duplikat - der Encounter gilt trotzdem als abgeschlossen und
+     * der Spieler bekommt eine klare Meldung statt einer stillen Nichtvergabe.</p>
+     */
+    private String rewardMessage(ShikigamiReward reward) {
+        if (reward == null) {
+            return null;
+        }
+
+        String speciesName = encounter.getSpecies().getDisplayName();
+        if (reward.outcome() == ShikigamiReward.Outcome.ALREADY_RECRUITED) {
+            return speciesName + " already recruited.";
+        }
+        if (reward.outcome() == ShikigamiReward.Outcome.REWARD_UNAVAILABLE) {
+            return speciesName + " reward is not implemented yet.";
+        }
+
+        Shikigami gained = reward.shikigami();
+        if (reward.outcome() == ShikigamiReward.Outcome.ADDED_TO_RESERVE) {
+            return gained.getName() + " sent to reserve (bag full).";
+        }
+        return gained.getName() + " joined your bag.";
     }
 
     private void dealCardsToUI() {
@@ -1235,7 +1484,12 @@ public class GameScreen extends ScreenAdapter {
         JuicyCardActor juicyCard = new JuicyCardActor(card, cardImage.getRegion(), getHankoBadgeRegion(card), skin.getRegion("white"), new JuicyCardActor.CardListener() {
             @Override
             public void onTap(JuicyCardActor actor) {
-                if (currentState != GameState.WAITING_FOR_INPUT) return;
+                // Waehrend der Quellauswahl waehlt ein Klick genau diese Karteninstanz.
+                if (activationState == AbilityActivationState.SELECTING_SOURCE_CARD) {
+                    selectSourceCardForAbility(actor, actor.card);
+                    return;
+                }
+                if (!isHandInteractionAllowed()) return;
 
                 if (selectedCards.contains(card)) {
                     selectedCards.remove(card);
@@ -1250,7 +1504,7 @@ public class GameScreen extends ScreenAdapter {
 
             @Override
             public void onDrag(JuicyCardActor actor, Vector2 stagePos) {
-                if (currentState != GameState.WAITING_FOR_INPUT) return;
+                if (!isHandInteractionAllowed()) return;
 
                 // Manuelles Verschieben bleibt jederzeit moeglich - auch nach der
                 // Wahl eines Sortiermodus. Die Reihenfolge der Hand folgt der
@@ -1274,7 +1528,7 @@ public class GameScreen extends ScreenAdapter {
 
             @Override
             public void onDrop(JuicyCardActor actor, Vector2 stagePos) {
-                if (currentState != GameState.WAITING_FOR_INPUT) return;
+                if (!isHandInteractionAllowed()) return;
 
                 // Die manuell gewaehlte Position bleibt bestehen: kein erneutes
                 // Sortieren der bereits vorhandenen Karten.
@@ -1347,19 +1601,23 @@ public class GameScreen extends ScreenAdapter {
         ShikigamiBagTable.clearChildren();
 
         if (activeAltarShikigami != null) {
-            TextureRegion ShikigamiRegion = atlas.findRegion(activeAltarShikigami.getAtlasRegionName());
+            final Shikigami altarShikigami = activeAltarShikigami;
+            TextureRegion ShikigamiRegion = atlas.findRegion(altarShikigami.getAtlasRegionName());
             if (ShikigamiRegion != null) {
-                JuicyShikigamiActor actor = new JuicyShikigamiActor(activeAltarShikigami, ShikigamiRegion, true, skin, new JuicyShikigamiActor.ShikigamiListener() {
+                JuicyShikigamiActor actor = new JuicyShikigamiActor(altarShikigami, ShikigamiRegion, true, skin, new JuicyShikigamiActor.ShikigamiListener() {
                     @Override public void onTap(JuicyShikigamiActor a) {
                         // Waehrend der Wertung bleibt der Altar unveraendert.
-                        if (currentState != GameState.WAITING_FOR_INPUT) return;
+                        if (!isHandInteractionAllowed()) return;
+
+                        // Klick ist der zugaengliche Fallback fuer das Infopanel.
+                        toggleShikigamiInfo(altarShikigami, a);
 
                         activeAltarShikigami = null;
                         renderShikigamiUI();
                         updateLivePreview();
                     }
                     @Override public void onDrop(JuicyShikigamiActor a, Vector2 stagePos) {
-                        if (currentState != GameState.WAITING_FOR_INPUT) return;
+                        if (!isHandInteractionAllowed()) return;
 
                         Vector2 bagPos = ShikigamiBagTable.localToStageCoordinates(new Vector2(0, 0));
                         if (stagePos.x >= bagPos.x) {
@@ -1369,13 +1627,19 @@ public class GameScreen extends ScreenAdapter {
                         }
                     }
                 });
+                addShikigamiHoverInfo(actor, altarShikigami);
                 altarTable.add(actor).width(108).height(192);
             } else {
-                TextButton fallback = new TextButton(activeAltarShikigami.getName() + "\n(In Altar)", skin);
+                Gdx.app.error("GameScreen", "Shikigami atlas region missing: "
+                    + altarShikigami.getAtlasRegionName() + " in " + GameAssets.GAME_ATLAS
+                    + " (using text fallback).");
+                TextButton fallback = new TextButton(altarShikigami.getName() + "\n(In Altar)", skin);
+                addShikigamiHoverInfo(fallback, altarShikigami);
+                addShikigamiClickInfo(fallback, altarShikigami);
                 altarTable.add(fallback).width(108).height(192);
             }
         } else {
-            Label emptyLabel = new Label("Altar\n(Leer)", skin);
+            Label emptyLabel = new Label("Altar\n(Empty)", skin);
             emptyLabel.setAlignment(Align.center);
             altarTable.add(emptyLabel).width(108).height(192);
         }
@@ -1388,57 +1652,1083 @@ public class GameScreen extends ScreenAdapter {
                 if (ShikigamiRegion != null) {
                     JuicyShikigamiActor actor = new JuicyShikigamiActor(shikigami, ShikigamiRegion, false, skin, new JuicyShikigamiActor.ShikigamiListener() {
                         @Override public void onTap(JuicyShikigamiActor a) {
-                            // Waehrend der Wertung bleibt die Begleiterauswahl gesperrt.
-                            if (currentState != GameState.WAITING_FOR_INPUT) return;
+                            // Waehrend der Wertung bleibt die Begleiterauswahl gesperrt;
+                            // waehrend eines laufenden Faehigkeitsvorgangs ebenfalls.
+                            if (!isHandInteractionAllowed()) return;
+
+                            // Klick ist der zugaengliche Fallback fuer das Infopanel; das
+                            // bestehende Bag-zu-Altar-Verhalten bleibt unveraendert.
+                            toggleShikigamiInfo(shikigami, a);
 
                             if (!shikigami.isExhausted() && activeAltarShikigami == null) {
-                                activeAltarShikigami = shikigami;
-                                usedShikigamiInBattle.add(activeAltarShikigami);
-                                renderShikigamiUI();
-                                updateLivePreview();
+                                placeShikigamiFromBag(shikigami);
                             }
                         }
                         @Override public void onDrop(JuicyShikigamiActor a, Vector2 stagePos) {
-                            if (currentState != GameState.WAITING_FOR_INPUT) return;
+                            if (!isHandInteractionAllowed()) return;
 
                             Vector2 altarPos = altarTable.localToStageCoordinates(new Vector2(0, 0));
                             boolean droppedOnAltar = stagePos.x < altarPos.x + altarTable.getWidth();
 
-                            if (droppedOnAltar && !shikigami.isExhausted() && activeAltarShikigami == null) {
-                                activeAltarShikigami = shikigami;
-                                usedShikigamiInBattle.add(activeAltarShikigami);
+                            if (droppedOnAltar) {
+                                // Altar-Drop als Transaktion: der Begleiter wird nur vorgemerkt.
+                                // In den Altar uebernommen wird er erst nach erfolgreichem
+                                // Ability-Commit; die Bag-Reihenfolge bleibt bis dahin unveraendert.
+                                placeShikigamiFromBag(shikigami);
+                                return;
                             }
 
-                            List<JuicyShikigamiActor> actors = new ArrayList<>();
-                            for (Actor child : ShikigamiBagTable.getChildren()) {
-                                if (child instanceof JuicyShikigamiActor) actors.add((JuicyShikigamiActor) child);
-                            }
-                            actors.sort(Comparator.comparing(act -> act.localToStageCoordinates(new Vector2(0, 0)).x));
-
-                            List<Shikigami> oldBag = new ArrayList<>(runSession.getShikigamiBag());
-                            runSession.getShikigamiBag().clear();
-                            if (activeAltarShikigami != null) runSession.getShikigamiBag().add(activeAltarShikigami);
-
-                            for (JuicyShikigamiActor act : actors) {
-                                if (!runSession.getShikigamiBag().contains(act.shikigami)) runSession.getShikigamiBag().add(act.shikigami);
-                            }
-                            for (Shikigami i : oldBag) {
-                                if (!runSession.getShikigamiBag().contains(i)) runSession.getShikigamiBag().add(i);
-                            }
-
+                            // Ablegen im Beutel: die bestehende Reihenfolge-Regel greift.
+                            syncBagOrderWithAltar();
                             renderShikigamiUI();
                             updateLivePreview();
                         }
                     });
+                    addShikigamiHoverInfo(actor, shikigami);
                     ShikigamiBagTable.add(actor).width(108).height(192).pad(4);
                 } else {
-                    String text = shikigami.getName() + (shikigami.isExhausted() ? "\n(Rastet)" : "");
+                    Gdx.app.error("GameScreen", "Shikigami atlas region missing: "
+                        + shikigami.getAtlasRegionName() + " in " + GameAssets.GAME_ATLAS
+                        + " (using text fallback).");
+                    String text = shikigami.getName() + (shikigami.isExhausted() ? "\n(Exhausted)" : "");
                     TextButton ShikigamiBtn = new TextButton(text, skin);
                     if (shikigami.isExhausted()) ShikigamiBtn.getColor().a = 0.5f;
+                    addShikigamiHoverInfo(ShikigamiBtn, shikigami);
+                    addShikigamiClickInfo(ShikigamiBtn, shikigami);
                     ShikigamiBagTable.add(ShikigamiBtn).width(108).height(192).pad(4);
                 }
             }
         }
+    }
+
+    /**
+     * Maus-Hover zeigt das kompakte Shikigami-Infopanel; der Verlassen-Event schliesst es
+     * wieder, solange es nicht per Klick fixiert wurde. Waehrend der Wertungsanimation
+     * ist das Panel komplett gesperrt.
+     */
+    private void addShikigamiHoverInfo(Actor actor, Shikigami shikigami) {
+        if (actor == null || shikigami == null) {
+            return;
+        }
+        actor.addListener(new InputListener() {
+            @Override
+            public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                // pointer == -1 ist echte Mausbewegung; kein Doppel-Handling pro Beruehrung.
+                if (pointer != -1 || !canShowInfoPopup()) {
+                    return;
+                }
+                showShikigamiInfo(shikigami, actor, false);
+            }
+
+            @Override
+            public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                if (pointer != -1 || infoPinned) {
+                    return;
+                }
+                if (infoPopupOwner == shikigami) {
+                    hideInfoPopup();
+                }
+            }
+        });
+    }
+
+    /** Klick-Fallback fuer Aktoren ohne eigenen Tap-Callback (z. B. Text-Fallbacks). */
+    private void addShikigamiClickInfo(Actor actor, Shikigami shikigami) {
+        if (actor == null || shikigami == null) {
+            return;
+        }
+        actor.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                if (!canShowInfoPopup()) {
+                    return;
+                }
+                toggleShikigamiInfo(shikigami, actor);
+            }
+        });
+    }
+
+    /**
+     * true, solange ein Faehigkeitsvorgang laeuft (Dialog, Kartenauswahl, Commit
+     * oder dessen kurze Animation). Der Screen rendert und animiert dabei weiter;
+     * alle normalen Eingaben (Play Hand, Discard, Sortieren, Karten-/Omamori-/
+     * Shikigami-Drag, Infopanel) sind gesperrt.
+     */
+    private boolean isAbilityFlowActive() {
+        return activationState != AbilityActivationState.IDLE;
+    }
+
+    /**
+     * Einzige Freigaberegel der normalen Kampfbedienung: erwarteter Screen-Zustand,
+     * kein laufendes Scoring und kein offener Faehigkeitsvorgang. Damit gibt es
+     * keine zweite, konkurrierende Wahrheit fuer die Eingabesperre.
+     */
+    private boolean isHandInteractionAllowed() {
+        return currentState == GameState.WAITING_FOR_INPUT
+            && !scoringSequenceRunning
+            && !isAbilityFlowActive();
+    }
+
+    /**
+     * true, solange das Infopanel erlaubt ist (nie waehrend der Wertungsanimation
+     * und nie waehrend eines Faehigkeitsvorgangs).
+     */
+    private boolean canShowInfoPopup() {
+        return isHandInteractionAllowed();
+    }
+
+    /** Klick: fixiert das Panel fuer dieses Shikigami oder schliesst es wieder. */
+    private void toggleShikigamiInfo(Shikigami shikigami, Actor anchor) {
+        if (shikigami == null || anchor == null) {
+            return;
+        }
+        if (infoPinned && infoPopupOwner == shikigami) {
+            hideInfoPopup();
+            return;
+        }
+        showShikigamiInfo(shikigami, anchor, true);
+    }
+
+    /**
+     * Befuellt das vorhandene Infopanel (Panel-Drawable aus GameAssets) mit den Werten
+     * aus {@link ShikigamiInfo} - dieselben Texte wie im Inventar, nur kompakter. Es
+     * entstehen ausschliesslich Labels, keine Texturen; lange Faehigkeitstexte brechen
+     * innerhalb der Panelbreite um.
+     */
+    private void showShikigamiInfo(Shikigami shikigami, Actor anchor, boolean pinned) {
+        if (shikigami == null || anchor == null || infoPopup == null) {
+            return;
+        }
+
+        infoPopup.clearChildren();
+
+        Label title = new Label(ShikigamiInfo.battleTitle(shikigami), skin);
+        title.setFontScale(0.8f);
+        title.setColor(SCORE_SHIKIGAMI_COLOR);
+        infoPopup.add(title).left().pad(6f, 8f, 2f, 8f).row();
+
+        Label summary = new Label(ShikigamiInfo.battleSummary(shikigami), skin);
+        summary.setFontScale(0.68f);
+        summary.setColor(SCORE_IDLE_TEXT_COLOR);
+        infoPopup.add(summary).left().pad(0f, 8f, 2f, 8f).row();
+
+        Label ability = new Label(ShikigamiInfo.abilityLine(shikigami), skin);
+        ability.setWrap(true);
+        ability.setFontScale(0.66f);
+        ability.setColor(Color.WHITE);
+        infoPopup.add(ability).width(INFO_POPUP_MAX_WIDTH).left().pad(0f, 8f, 4f, 8f).row();
+
+        String reason = ShikigamiInfo.unusableReason(shikigami, false);
+        if (reason != null) {
+            Label why = new Label(reason, skin);
+            why.setWrap(true);
+            why.setFontScale(0.64f);
+            why.setColor(SCORE_UNMATCHED_TINT);
+            infoPopup.add(why).width(INFO_POPUP_MAX_WIDTH).left().pad(0f, 8f, 6f, 8f).row();
+        }
+
+        infoPopup.pack();
+        positionInfoPopupAbove(anchor);
+        infoPopup.setVisible(true);
+
+        infoPinned = pinned;
+        infoPopupOwner = shikigami;
+    }
+
+    /**
+     * Positioniert das Infopanel oberhalb seines Actors und haelt es vollstaendig
+     * innerhalb des Viewports.
+     */
+    private void positionInfoPopupAbove(Actor anchor) {
+        infoAnchorPosition.set(0f, 0f);
+        anchor.localToStageCoordinates(infoAnchorPosition);
+
+        float x = infoAnchorPosition.x + (anchor.getWidth() / 2f) - (infoPopup.getWidth() / 2f);
+        float y = infoAnchorPosition.y - infoPopup.getHeight() - INFO_POPUP_MARGIN;
+
+        float maxX = Math.max(INFO_POPUP_MARGIN, WORLD_WIDTH - infoPopup.getWidth() - INFO_POPUP_MARGIN);
+        float maxY = Math.max(INFO_POPUP_MARGIN, WORLD_HEIGHT - infoPopup.getHeight() - INFO_POPUP_MARGIN);
+
+        infoPopup.setPosition(
+            MathUtils.clamp(x, INFO_POPUP_MARGIN, maxX),
+            MathUtils.clamp(y, INFO_POPUP_MARGIN, maxY));
+    }
+
+    /** Schliesst das Infopanel, leert es und gibt eine Fixierung frei. */
+    private void hideInfoPopup() {
+        if (infoPopup != null) {
+            infoPopup.setVisible(false);
+            infoPopup.clearChildren();
+        }
+        infoPinned = false;
+        infoPopupOwner = null;
+    }
+
+    // =====================================================================
+    // Faehigkeitsaktivierung am Altar (Kitsune "Fox Trick" & Co.)
+    //
+    // Der Screen ist hier ausschliesslich fuer UI-Zustand, Auswahl, Aufruf der
+    // Model-Ability und den sicheren Commit zustaendig. Die Regeln selbst
+    // (Timing, Auswahlart, Zufall, Kartentransformation) liegen im Modell
+    // (model.shikigami.ability.*) und werden hier nicht nachgebaut.
+    // =====================================================================
+
+    /**
+     * Ablegen eines Beutel-Begleiters auf dem Altar.
+     *
+     * <p>Begleiter ohne Altar-Faehigkeit (z. B. Oni) wandern wie bisher sofort in
+     * den Altar. Ein Begleiter mit
+     * {@link ShikigamiActivationTiming#ON_ALTAR_PLACED} wird dagegen nur
+     * vorgemerkt: kein Altar-Eintrag, keine Erschoepfung, keine Animation und kein
+     * Bag-Austrag, bevor die Faehigkeit erfolgreich angewendet wurde.</p>
+     */
+    private void placeShikigamiFromBag(Shikigami shikigami) {
+        if (shikigami == null || shikigami.isExhausted() || activeAltarShikigami != null) {
+            return;
+        }
+
+        // Kein instanceof und kein Namensvergleich: die Faehigkeit beschreibt sich selbst.
+        ShikigamiAbility ability = shikigami.getAbility();
+        if (ability == null || ability.getTiming() != ShikigamiActivationTiming.ON_ALTAR_PLACED) {
+            activeAltarShikigami = shikigami;
+            usedShikigamiInBattle.add(shikigami);
+            syncBagOrderWithAltar();
+            renderShikigamiUI();
+            updateLivePreview();
+            return;
+        }
+
+        if (abilityResolvedShikigami.contains(shikigami)) {
+            showAbilityDialogMessage(ability.getAbilityName(),
+                ability.getAbilityName() + " was already used in this battle.");
+            return;
+        }
+
+        beginAbilityActivation(shikigami, ability);
+    }
+
+    /**
+     * Uebernimmt die bestehende Bag-Reihenfolge-Regel: der Altar-Begleiter steht
+     * zuerst, danach folgen die Beutel-Actors in ihrer sichtbaren Reihenfolge und
+     * zuletzt alles, was noch in keinem Actor sichtbar ist.
+     */
+    private void syncBagOrderWithAltar() {
+        List<JuicyShikigamiActor> actors = new ArrayList<>();
+        for (Actor child : ShikigamiBagTable.getChildren()) {
+            if (child instanceof JuicyShikigamiActor) actors.add((JuicyShikigamiActor) child);
+        }
+        actors.sort(Comparator.comparing(act -> act.localToStageCoordinates(new Vector2(0, 0)).x));
+
+        List<Shikigami> oldBag = new ArrayList<>(runSession.getShikigamiBag());
+        runSession.getShikigamiBag().clear();
+        if (activeAltarShikigami != null) runSession.getShikigamiBag().add(activeAltarShikigami);
+
+        for (JuicyShikigamiActor act : actors) {
+            if (!runSession.getShikigamiBag().contains(act.shikigami)) runSession.getShikigamiBag().add(act.shikigami);
+        }
+        for (Shikigami i : oldBag) {
+            if (!runSession.getShikigamiBag().contains(i)) runSession.getShikigamiBag().add(i);
+        }
+    }
+
+    /**
+     * Startet den abbrechbaren Aktivierungsvorgang und oeffnet den zum
+     * {@link ShikigamiSelectionMode} passenden Schritt.
+     */
+    private void beginAbilityActivation(Shikigami shikigami, ShikigamiAbility ability) {
+        if (isAbilityFlowActive()) {
+            return; // Es laeuft bereits genau ein Dialog.
+        }
+
+        pendingActivationShikigami = shikigami;
+        pendingActivationAbility = ability;
+        pendingSourceCard = null;
+        pendingSourceIndex = -1;
+        pendingTargetTemplate = null;
+        hideInfoPopup();
+
+        if (playerHand.isEmpty()) {
+            // Leere Hand: der Vorgang endet sofort ohne jede Aenderung.
+            clearPendingActivation();
+            showAbilityDialogMessage(ability.getAbilityName(),
+                ShikigamiAbilityResult.emptyHand(ability.getAbilityName()).message());
+            return;
+        }
+
+        buildAbilityModal();
+        if (ability.getSelectionMode().requiresHandCard()) {
+            showAbilitySourceStep();
+        } else {
+            showAbilityConfirmationStep();
+        }
+    }
+
+    /** Baut (oder ersetzt) das einzige Modal der Aktivierung. */
+    private void buildAbilityModal() {
+        closeAbilityModal();
+
+        abilityOverlay = new Table();
+        abilityOverlay.setFillParent(true);
+        // Abdunklung ohne neue Textur: White-Drawable der gemeinsamen Skin.
+        abilityOverlay.setBackground(skin.newDrawable("white", new Color(0f, 0f, 0f, ABILITY_DIM_ALPHA)));
+        // Das Overlay liegt ueber der Kampf-UI und blockiert deren Eingaben.
+        abilityOverlay.setTouchable(Touchable.enabled);
+
+        abilityPanel = new Table();
+        abilityPanel.setBackground(panelBackground);
+        abilityPanel.pad(22f);
+
+        abilityOverlay.add(abilityPanel).width(ABILITY_PANEL_WIDTH).pad(ABILITY_PANEL_MARGIN);
+        stage.addActor(abilityOverlay);
+    }
+
+    /** Entfernt das Modal samt Inhalt restlos (keine liegenbleibenden Listener). */
+    private void closeAbilityModal() {
+        if (abilityOverlay != null) {
+            abilityOverlay.clearChildren();
+            abilityOverlay.remove();
+            abilityOverlay = null;
+        }
+        abilityPanel = null;
+        abilityTargetScroll = null;
+        abilityTargetTiles.clear();
+        abilitySelectedTargetTile = null;
+        clearHandHighlights();
+    }
+
+    /** Loescht den Pending-Zustand vollstaendig (ohne den Zustandsautomaten zu setzen). */
+    private void clearPendingActivation() {
+        pendingActivationShikigami = null;
+        pendingActivationAbility = null;
+        pendingSourceCard = null;
+        pendingSourceIndex = -1;
+        pendingTargetTemplate = null;
+    }
+
+    /**
+     * Bestaetigungsschritt: Level 1 (reine Rueckfrage) sowie die Endbestaetigung
+     * nach der Kartenauswahl (Level 2/3).
+     */
+    private void showAbilityConfirmationStep() {
+        if (abilityPanel == null || pendingActivationAbility == null) {
+            return;
+        }
+        activationState = AbilityActivationState.PENDING_CONFIRMATION;
+        abilityPanel.clearChildren();
+
+        addAbilityTitle();
+        addAbilityText(confirmationPromptText());
+
+        Table buttons = new Table();
+        if (pendingActivationAbility.getSelectionMode().requiresTargetCard()) {
+            // Endbestaetigung von Level 3: zurueck zur Zielgalerie moeglich.
+            buttons.add(abilityButton("Back", this::showAbilityTargetStep))
+                .width(140f).height(46f).padRight(10f);
+        }
+        buttons.add(abilityButton("Cancel", this::onAbilityCancelClicked))
+            .width(140f).height(46f).padRight(10f);
+        buttons.add(abilityButton("Apply", this::onAbilityForwardClicked))
+            .width(140f).height(46f);
+        abilityPanel.add(buttons);
+    }
+
+    /**
+     * Schritt 1: Quellkarte aus der aktuellen Hand (Level 2 und 3). Die Kacheln
+     * stehen in der momentanen Handreihenfolge; ein Klick waehlt exakt die
+     * dahinterliegende Karteninstanz (Identitaet, kein Namensvergleich).
+     */
+    private void showAbilitySourceStep() {
+        if (abilityPanel == null || pendingActivationAbility == null) {
+            return;
+        }
+        activationState = AbilityActivationState.SELECTING_SOURCE_CARD;
+        pendingTargetTemplate = null;
+        abilityPanel.clearChildren();
+
+        addAbilityTitle();
+        addAbilityText("Choose a card to transform.");
+
+        Table grid = new Table();
+        abilitySourceTiles.clear();
+        abilitySelectedSourceTile = null;
+        int column = 0;
+        for (int i = 0; i < playerHand.size(); i++) {
+            Card card = playerHand.get(i);
+            Table tile = createAbilityCardTile(card);
+            abilitySourceTiles.add(tile);
+            if (card == pendingSourceCard) {
+                abilitySelectedSourceTile = tile;
+            }
+            grid.add(tile).width(ABILITY_GALLERY_ENTRY_WIDTH).pad(4f);
+            if (++column % ABILITY_GALLERY_COLUMNS == 0) {
+                grid.row();
+            }
+        }
+        if (abilitySelectedSourceTile != null) {
+            abilitySelectedSourceTile.setColor(ABILITY_SELECTED_TINT);
+        }
+        abilityPanel.add(grid).padBottom(12f).row();
+
+        abilityStepInfoLabel = new Label("", skin);
+        abilityStepInfoLabel.setWrap(true);
+        abilityStepInfoLabel.setAlignment(Align.center);
+        abilityStepInfoLabel.setFontScale(0.62f);
+        abilityStepInfoLabel.setColor(SCORE_IDLE_TEXT_COLOR);
+        abilityPanel.add(abilityStepInfoLabel).width(ABILITY_PANEL_WIDTH - 60f).padBottom(12f).row();
+
+        Table buttons = new Table();
+        buttons.add(abilityButton("Cancel", this::onAbilityCancelClicked))
+            .width(140f).height(46f).padRight(10f);
+        abilityForwardButton = abilityButton(
+            pendingActivationAbility.getSelectionMode().requiresTargetCard() ? "Next" : "Apply",
+            this::onAbilityForwardClicked);
+        buttons.add(abilityForwardButton).width(140f).height(46f);
+        abilityPanel.add(buttons);
+
+        refreshAbilityStepInfo();
+        refreshAbilityForwardButton();
+    }
+
+    /** Titelzeile des Modals: der Name kommt aus der Ability, nicht aus einer Klasse. */
+    private void addAbilityTitle() {
+        Label title = new Label(pendingActivationAbility.getAbilityName(), skin);
+        title.setFontScale(1.1f);
+        abilityPanel.add(title).padBottom(8f).row();
+    }
+
+    /** Zentrierter, umbrechender englischer Text des Modals. */
+    private void addAbilityText(String text) {
+        Label label = new Label(text, skin);
+        label.setWrap(true);
+        label.setAlignment(Align.center);
+        abilityPanel.add(label).width(ABILITY_PANEL_WIDTH - 60f).padBottom(12f).row();
+    }
+
+    /** Text des Bestaetigungsschritts (Modelltext oder gewaehltes Kartenpaar). */
+    private String confirmationPromptText() {
+        if (pendingActivationAbility == null) {
+            return "";
+        }
+        if (pendingActivationAbility.getSelectionMode().requiresTargetCard()
+            && pendingSourceCard != null && pendingTargetTemplate != null) {
+            return "'" + pendingSourceCard.name() + "' becomes '"
+                + DeckTemplates.baseNameOf(pendingTargetTemplate) + "'.";
+        }
+        if (pendingActivationAbility.getSelectionMode().requiresHandCard() && pendingSourceCard != null) {
+            return "'" + pendingSourceCard.name()
+                + "' transforms into a random different card.";
+        }
+        return pendingActivationAbility.getPromptText();
+    }
+
+    /** Button in der gemeinsamen Skin-Optik (keine neue Textur, kein neuer Stil). */
+    private TextButton abilityButton(String label, Runnable action) {
+        TextButton button = new TextButton(label, indieButtonStyle);
+        button.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                action.run();
+            }
+        });
+        return button;
+    }
+
+    /**
+     * Schritt 2 (Level 3): Zielmotiv aus dem vollstaendigen Deck waehlen.
+     *
+     * <p>Genau eine Kachel je {@link CardID} ({@link DeckTemplates#distinctByCardId()}):
+     * 20 unterschiedliche Motive, ohne Kopiennummern. Das Motiv der Quellkarte ist
+     * sichtbar gedaempft und nicht auswaehlbar. Ein Klick auf ein zulaessiges Motiv
+     * fuehrt zur Endbestaetigung; damit ist "Apply erst bei gueltiger
+     * Quellen-/Zielauswahl" strukturell garantiert.</p>
+     */
+    private void showAbilityTargetStep() {
+        if (abilityPanel == null || pendingActivationAbility == null || pendingSourceCard == null) {
+            return;
+        }
+        activationState = AbilityActivationState.SELECTING_TARGET_CARD;
+        abilityPanel.clearChildren();
+
+        addAbilityTitle();
+        addAbilityText("Choose its new form.");
+
+        Table gallery = new Table();
+        gallery.top();
+        abilityTargetTiles.clear();
+        abilitySelectedTargetTile = null;
+        int column = 0;
+        for (Card template : DeckTemplates.distinctByCardId()) {
+            boolean selectable = !CardTransformation.isSameCardId(pendingSourceCard, template);
+            Table tile = createAbilityTargetTile(template, selectable);
+            gallery.add(tile).width(ABILITY_GALLERY_ENTRY_WIDTH).pad(4f);
+            if (++column % ABILITY_GALLERY_COLUMNS == 0) {
+                gallery.row();
+            }
+        }
+
+        // Vorhandene ScrollPane der Scene2D-Toolbox: keine neue Textur, keine
+        // zusaetzliche Scrollbar-Grafik.
+        abilityTargetScroll = new ScrollPane(gallery, new ScrollPane.ScrollPaneStyle());
+        abilityTargetScroll.setFadeScrollBars(false);
+        abilityTargetScroll.setScrollingDisabled(true, false);
+        abilityTargetScroll.setOverscroll(false, false);
+        abilityPanel.add(abilityTargetScroll)
+            .width(ABILITY_PANEL_WIDTH - 60f).height(ABILITY_GALLERY_HEIGHT).padBottom(12f).row();
+
+        abilityStepInfoLabel = new Label("", skin);
+        abilityStepInfoLabel.setWrap(true);
+        abilityStepInfoLabel.setAlignment(Align.center);
+        abilityStepInfoLabel.setFontScale(0.62f);
+        abilityStepInfoLabel.setColor(SCORE_IDLE_TEXT_COLOR);
+        abilityPanel.add(abilityStepInfoLabel).width(ABILITY_PANEL_WIDTH - 60f).padBottom(12f).row();
+
+        Table buttons = new Table();
+        buttons.add(abilityButton("Back", this::onAbilityBackClicked))
+            .width(140f).height(46f).padRight(10f);
+        buttons.add(abilityButton("Cancel", this::onAbilityCancelClicked))
+            .width(140f).height(46f);
+        abilityPanel.add(buttons);
+
+        refreshAbilityStepInfo();
+    }
+
+    /** Kachel einer Handkarte (Quellauswahl) inklusive Hanko-Abzeichen. */
+    private Table createAbilityCardTile(Card card) {
+        Table tile = new Table();
+        tile.setBackground(panelBackground);
+
+        TextureRegionDrawable cardImage = getCardImage(card);
+        if (cardImage != null) {
+            tile.add(new Image(cardImage)).size(54f, 96f).padTop(4f).row();
+        } else {
+            Gdx.app.error("GameScreen", "Card atlas region missing for '" + card.name()
+                + "' (CardID " + card.id() + "): using a text placeholder in the ability dialog.");
+            Label placeholder = new Label(card.id().name(), skin);
+            placeholder.setWrap(true);
+            placeholder.setAlignment(Align.center);
+            placeholder.setFontScale(0.5f);
+            tile.add(placeholder).size(54f, 96f).padTop(4f).row();
+        }
+
+        Label name = new Label(card.name(), skin);
+        name.setWrap(true);
+        name.setAlignment(Align.center);
+        name.setFontScale(0.55f);
+        tile.add(name).width(ABILITY_GALLERY_ENTRY_WIDTH - 8f).pad(2f).row();
+
+        TextureRegion badge = getHankoBadgeRegion(card);
+        if (badge != null) {
+            tile.add(new Image(badge)).size(16f).padBottom(4f).row();
+        }
+
+        tile.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                selectSourceCardForAbility(tile, card);
+            }
+        });
+        return tile;
+    }
+
+    /** Kachel eines Zielmotivs (Level 3) mit Season, Rang und Chips-Basiswert. */
+    private Table createAbilityTargetTile(Card template, boolean selectable) {
+        Table tile = new Table();
+        tile.setBackground(panelBackground);
+
+        TextureRegionDrawable cardImage = getCardImage(template);
+        if (cardImage != null) {
+            tile.add(new Image(cardImage)).size(44f, 78f).padTop(3f).row();
+        } else {
+            Gdx.app.error("GameScreen", "Card atlas region missing for '" + template.id().name()
+                + "': using a text placeholder in the target gallery.");
+            Label placeholder = new Label(DeckTemplates.baseNameOf(template), skin);
+            placeholder.setWrap(true);
+            placeholder.setAlignment(Align.center);
+            placeholder.setFontScale(0.5f);
+            tile.add(placeholder).size(44f, 78f).padTop(3f).row();
+        }
+
+        Label name = new Label(DeckTemplates.baseNameOf(template), skin);
+        name.setWrap(true);
+        name.setAlignment(Align.center);
+        name.setFontScale(0.5f);
+        tile.add(name).width(ABILITY_GALLERY_ENTRY_WIDTH - 8f).pad(2f).row();
+
+        Label meta = new Label(template.season() + " | " + template.rank() + " | "
+            + ScoreFormat.format(template.rank().getBaseValue()) + " chips", skin);
+        meta.setFontScale(0.46f);
+        meta.setColor(SCORE_IDLE_TEXT_COLOR);
+        tile.add(meta).padBottom(3f).row();
+
+        if (!selectable) {
+            // Gleiche CardID wie die Quelle: sichtbar, aber nicht auswaehlbar.
+            tile.setColor(ABILITY_DIMMED_TINT);
+            return tile;
+        }
+
+        tile.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                selectTargetTemplateForAbility(tile, template);
+            }
+        });
+        return tile;
+    }
+
+    /**
+     * Quellkartenauswahl: speichert die <b>exakte Referenz</b> der Karteninstanz
+     * und markiert Kachel und Handkarte. Nur im Auswahlschritt und nur fuer
+     * Karten, die wirklich in der aktuellen Hand liegen (Identitaetsvergleich).
+     */
+    private void selectSourceCardForAbility(Actor tile, Card card) {
+        if (activationState != AbilityActivationState.SELECTING_SOURCE_CARD || card == null) {
+            return;
+        }
+        int index = identityIndexOf(playerHand, card);
+        if (index < 0) {
+            return; // Veraltete Auswahl: keine Aenderung, kein Commit.
+        }
+
+        pendingSourceCard = playerHand.get(index);
+        pendingSourceIndex = index;
+
+        for (Table candidate : abilitySourceTiles) {
+            candidate.setColor(Color.WHITE);
+        }
+        if (tile instanceof Table table) {
+            table.setColor(ABILITY_SELECTED_TINT);
+            abilitySelectedSourceTile = table;
+        }
+        markSourceCardInHand(pendingSourceCard);
+        refreshAbilityStepInfo();
+        refreshAbilityForwardButton();
+    }
+
+    /** Zielmotivauswahl (Level 3); das Quellmotiv bleibt gesperrt. */
+    private void selectTargetTemplateForAbility(Table tile, Card template) {
+        if (activationState != AbilityActivationState.SELECTING_TARGET_CARD || template == null) {
+            return;
+        }
+        if (CardTransformation.isSameCardId(pendingSourceCard, template)) {
+            return;
+        }
+
+        pendingTargetTemplate = template;
+        for (Table candidate : abilityTargetTiles) {
+            candidate.setColor(Color.WHITE);
+        }
+        tile.setColor(ABILITY_SELECTED_TINT);
+        abilitySelectedTargetTile = tile;
+        refreshAbilityStepInfo();
+
+        // Quell- und Zielkarte stehen fest: erst jetzt die Endbestaetigung zeigen.
+        showAbilityConfirmationStep();
+    }
+
+    /** Hebt die zur Quelle gehoerende Handkarte hervor (Actor ueber Identitaet). */
+    private void markSourceCardInHand(Card sourceCard) {
+        clearHandHighlights();
+        JuicyCardActor actor = findActorForCardIdentity(sourceCard);
+        if (actor != null) {
+            actor.setColor(ABILITY_SELECTED_TINT);
+            abilityHighlightedCards.add(actor);
+        }
+    }
+
+    /** Gibt alle Handkarten-Hervorhebungen wieder frei. */
+    private void clearHandHighlights() {
+        for (Actor actor : abilityHighlightedCards) {
+            actor.setColor(Color.WHITE);
+        }
+        abilityHighlightedCards.clear();
+    }
+
+    /** Infozeile des aktuellen Schritts (englisch). */
+    private void refreshAbilityStepInfo() {
+        if (abilityStepInfoLabel == null) {
+            return;
+        }
+        if (pendingSourceCard == null) {
+            abilityStepInfoLabel.setText("No card selected yet.");
+            return;
+        }
+        if (pendingActivationAbility != null
+            && pendingActivationAbility.getSelectionMode().requiresTargetCard()) {
+            String target = pendingTargetTemplate == null
+                ? "no new form selected yet"
+                : "'" + DeckTemplates.baseNameOf(pendingTargetTemplate) + "'";
+            abilityStepInfoLabel.setText("Selected: '" + pendingSourceCard.name() + "' -> " + target);
+            return;
+        }
+        abilityStepInfoLabel.setText("Selected: '" + pendingSourceCard.name() + "'");
+    }
+
+    /** Weiter-/Apply-Button bleibt sichtbar gesperrt, solange die Auswahl fehlt. */
+    private void refreshAbilityForwardButton() {
+        if (abilityForwardButton == null) {
+            return;
+        }
+        boolean ready = canApplyAbility();
+        abilityForwardButton.setDisabled(!ready);
+        abilityForwardButton.getColor().a = ready ? 1f : 0.5f;
+    }
+
+    /** true, wenn die Auswahl den Auswahlbedarf der Faehigkeit erfuellt. */
+    private boolean canApplyAbility() {
+        ShikigamiAbility ability = pendingActivationAbility;
+        if (ability == null || pendingActivationShikigami == null) {
+            return false;
+        }
+        ShikigamiSelectionMode mode = ability.getSelectionMode();
+        if (mode.requiresHandCard() && pendingSourceCard == null) {
+            return false;
+        }
+        if (mode.requiresTargetCard() && pendingTargetTemplate == null) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Weiter/Apply: bei Level 3 fuehrt der Quellschritt zunaechst zur Zielgalerie,
+     * sonst wird die Faehigkeit genau einmal ausgewertet.
+     */
+    private void onAbilityForwardClicked() {
+        if (pendingActivationAbility == null) {
+            return;
+        }
+        if (activationState == AbilityActivationState.SELECTING_SOURCE_CARD
+            && pendingActivationAbility.getSelectionMode().requiresTargetCard()) {
+            if (pendingSourceCard == null) {
+                return;
+            }
+            showAbilityTargetStep();
+            return;
+        }
+        if (!canApplyAbility()) {
+            return;
+        }
+        resolveAbilityOnce();
+    }
+
+    /** Back in Galerie/Endbestaetigung: zurueck zu Schritt 1 (ohne jede Mutation). */
+    private void onAbilityBackClicked() {
+        if (activationState == AbilityActivationState.SELECTING_TARGET_CARD
+            || activationState == AbilityActivationState.PENDING_CONFIRMATION) {
+            showAbilitySourceStep();
+        }
+    }
+
+    /** Cancel/ESC: bricht den gesamten Vorgang ab, ohne irgendetwas zu veraendern. */
+    private void onAbilityCancelClicked() {
+        cancelAbilityActivation();
+    }
+
+    /**
+     * Reine Namensabbildung der Kampfsaison auf die Karten-Season des Modells
+     * ({@code GameSeason} und {@code Season} sind getrennte Enums).
+     * {@code GameSeason.FINAL} hat kein Gegenstueck und liefert {@code null};
+     * Fox Trick benoetigt die Saison nicht, sie ist nur Kontextinformation.
+     */
+    private Season currentModelSeason() {
+        GameSeason season = runSession.getCurrentSeason();
+        if (season == null) {
+            return null;
+        }
+        for (Season candidate : Season.values()) {
+            if (candidate.name().equals(season.name())) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Wertet die Faehigkeit <b>genau einmal</b> aus und committet nur ein
+     * {@code APPLIED}-Ergebnis.
+     *
+     * <p>{@link AbilityActivationState#RESOLVING} sperrt Doppelklicks: ein zweiter
+     * Aufruf kehrt sofort zurueck, ebenso ein Aufruf nach dem Commit.</p>
+     */
+    private void resolveAbilityOnce() {
+        if (pendingActivationAbility == null || pendingActivationShikigami == null) {
+            return;
+        }
+        if (activationState == AbilityActivationState.RESOLVING
+            || activationState == AbilityActivationState.RESOLVED) {
+            return;
+        }
+
+        activationState = AbilityActivationState.RESOLVING;
+
+        Shikigami shikigami = pendingActivationShikigami;
+        ShikigamiAbility ability = pendingActivationAbility;
+        String abilityName = ability.getAbilityName();
+
+        ShikigamiAbilityContext context = ShikigamiAbilityContext.forAltarPlaced(
+            playerHand, pendingSourceCard, pendingTargetTemplate, currentModelSeason());
+        ShikigamiAbilityResult result = ability.resolve(context);
+
+        if (!result.isApplied()) {
+            // Ablehnung: keine Mutation, keine Erschoepfung, keine Animation.
+            closeAbilityModal();
+            clearPendingActivation();
+            updateLivePreview();
+            activationState = AbilityActivationState.IDLE;
+            showAbilityDialogMessage(abilityName, result.message());
+            return;
+        }
+
+        Card sourceCard = result.sourceCard();
+        Card replacementCard = result.replacementCard();
+        int index = identityIndexOf(playerHand, sourceCard);
+        if (index < 0 || replacementCard == null) {
+            Gdx.app.error("GameScreen", "Ability commit aborted: the source card reference is no "
+                + "longer part of the hand. No card was changed.");
+            closeAbilityModal();
+            clearPendingActivation();
+            updateLivePreview();
+            activationState = AbilityActivationState.IDLE;
+            showAbilityDialogMessage(abilityName,
+                "The selected card is no longer in your hand. No card was changed.");
+            return;
+        }
+
+        JuicyCardActor sourceActor = findActorForCardIdentity(sourceCard);
+
+        // 1. Atomarer Modellersatz: exakt dieser Listeneintrag, kein removeAll(),
+        //    keine Neusortierung und kein Eingriff in das persistente Deck.
+        playerHand.set(index, replacementCard);
+        // Die Quellkarte verlaesst eine bestehende Auswahl; die Ersatzkarte wird
+        // bewusst NICHT automatisch ausgewaehlt.
+        removeByIdentity(selectedCards, sourceCard);
+
+        // 2. Vorschau sofort mit der neuen Kartenidentitaet (Yaku/Basis/Hanko).
+        updateLivePreview();
+
+        clearHandHighlights();
+        closeAbilityModal();
+
+        // 3. Erst nach der Mutation: kurze Transformationsanimation, danach
+        //    Altar-Uebernahme, Erschoepfung und Aktivierungsanimation.
+        startAbilityTransformation(sourceActor, replacementCard, index, shikigami);
+    }
+
+    /**
+     * Kurze, rein sichtbare Transformationsanimation: die Quellkarte pulsiert,
+     * der Ersatz-Actor erscheint am gleichen Slot und blendet ein. Der
+     * Modellzustand ist zu diesem Zeitpunkt bereits korrekt.
+     */
+    private void startAbilityTransformation(JuicyCardActor sourceActor, Card replacementCard,
+                                            int index, Shikigami shikigami) {
+        if (sourceActor == null) {
+            Gdx.app.error("GameScreen", "No visible card actor for the transformed card '"
+                + replacementCard.name() + "': syncing the hand without the transition animation.");
+            replaceCardActor(null, replacementCard, index);
+            finishAbilityCommit(shikigami);
+            endAbilityActivationFlow();
+            return;
+        }
+
+        sourceActor.setTouchable(Touchable.disabled);
+        pulseActor(sourceActor, ABILITY_SOURCE_PULSE_SCALE);
+        sourceActor.addAction(Actions.sequence(
+            Actions.delay(ABILITY_SOURCE_PULSE_TIME),
+            Actions.run(() -> replaceCardActor(sourceActor, replacementCard, index)),
+            Actions.delay(ABILITY_TRANSFORM_TIME),
+            Actions.run(() -> finishAbilityCommit(shikigami)),
+            Actions.delay(ABILITY_ALTAR_PULSE_TIME),
+            Actions.run(this::endAbilityActivationFlow)));
+    }
+
+    /**
+     * Ersetzt den sichtbaren Actor der Quellkarte durch einen neuen Actor der
+     * Ersatzkarte - am gleichen Handslot, mit Kartenbild, Hanko-Abzeichen und
+     * kurzer Einblendung. Es entsteht nie ein doppelter Actor.
+     */
+    private void replaceCardActor(JuicyCardActor sourceActor, Card replacementCard, int index) {
+        if (sourceActor != null) {
+            sourceActor.clearActions();
+            sourceActor.remove();
+        }
+
+        JuicyCardActor replacementActor = createCardActor(replacementCard);
+        if (replacementActor == null) {
+            Gdx.app.error("GameScreen", "No card actor created for '" + replacementCard.name()
+                + "': the hand model stays correct, only the visual is missing.");
+            updateCardArcTargets();
+            updateLivePreview();
+            return;
+        }
+
+        handGroup.addActor(replacementActor);
+        int count = Math.max(1, playerHand.size());
+        // Ersatzkarte bleibt zunaechst am gleichen visuellen Slot.
+        replacementActor.setPosition(handArcX(index, count), handArcY(index, count));
+        replacementActor.setRotation(handArcRotation(index, count) * 0.5f);
+        // Scale laeuft ueber die Lerp-Physik des Actors (Actions werden dort jeden
+        // Frame ueberschrieben); Alpha ist physikfrei und darf als Fade dienen.
+        replacementActor.targetScale = ABILITY_REPLACEMENT_START_SCALE;
+        replacementActor.setColor(1f, 1f, 1f, 0f);
+        replacementActor.addAction(Actions.sequence(
+            Actions.fadeIn(ABILITY_TRANSFORM_TIME, Interpolation.fade),
+            Actions.run(() -> replacementActor.targetScale = 1f)));
+
+        updateCardArcTargets();
+        updateLivePreview();
+    }
+
+    /**
+     * Uebernimmt den Begleiter nach erfolgreichem Commit in den Altar und
+     * erschöpft ihn genau einmal. Erst hier beginnen Altarflammen und Puls -
+     * also nie bei Abbruch oder Ablehnung.
+     *
+     * <p>Die Erschoepfung haengt am Timing {@code ON_ALTAR_PLACED}: scorebasierte
+     * Begleiter (Oni) werden weiterhin ausschliesslich im bestehenden
+     * Scoring-/Commit-Pfad erschoepft.</p>
+     */
+    private void finishAbilityCommit(Shikigami shikigami) {
+        if (shikigami == null) {
+            endAbilityActivationFlow();
+            return;
+        }
+
+        activeAltarShikigami = shikigami;
+        abilityResolvedShikigami.add(shikigami);
+        usedShikigamiInBattle.add(shikigami);
+        shikigami.setExhausted(true);
+
+        syncBagOrderWithAltar();
+        renderShikigamiUI();
+        updateLivePreview();
+
+        // Aktivierungsanimation/Altarflammen starten erst jetzt.
+        if (altarFlames != null) {
+            altarFlames.ignite();
+        }
+        com.lychcs.koikoi.graphics.JuiceManager.addTrauma(0.35f);
+        JuicyShikigamiActor altarActor = findAltarShikigamiActor(shikigami);
+        if (altarActor != null) {
+            triggerPunchAnimation(altarActor);
+        }
+    }
+
+    /**
+     * Beendet den Vorgang nach der kurzen Animation: dokumentierter Endzustand
+     * {@link AbilityActivationState#RESOLVED}, danach wieder normale Bedienung.
+     */
+    private void endAbilityActivationFlow() {
+        clearPendingActivation();
+        activationState = AbilityActivationState.RESOLVED;
+        activationState = AbilityActivationState.IDLE;
+        updateLivePreview();
+    }
+
+    /**
+     * Abbruch des gesamten Vorgangs (Cancel-Button oder ESC).
+     *
+     * <p>Es wird nichts veraendert: keine Karte, keine Zufallsaufloesung, keine
+     * Erschoepfung, kein Altar-Eintrag, keine Animation und kein Score-/Reward-/
+     * XP-Effekt. Der Begleiter liegt unveraendert in
+     * {@code RunSession.getShikigamiBag()} und wird von den bestehenden
+     * Bag-Actors an seiner vorherigen Position weiter angezeigt; es entsteht keine
+     * neue Instanz und es wird keine kopiert.</p>
+     */
+    private void cancelAbilityActivation() {
+        if (!isAbilityFlowActive()) {
+            return;
+        }
+        if (activationState == AbilityActivationState.RESOLVING
+            || activationState == AbilityActivationState.RESOLVED) {
+            // Der Commit laeuft oder ist abgeschlossen: ein Abbruch wuerde die
+            // angewendete Faehigkeit halb zuruecknehmen. Deshalb kein Eingriff.
+            return;
+        }
+
+        activationState = AbilityActivationState.CANCELLED;
+
+        clearHandHighlights();
+        closeAbilityModal();
+        clearPendingActivation();
+        updateLivePreview();
+
+        activationState = AbilityActivationState.IDLE;
+    }
+
+    /**
+     * Kleines Hinweisfenster mit englischer Meldung (Ablehnung, leere Hand, bereits
+     * verwendet). Es veraendert keinen Spielzustand und laesst sich nur schliessen.
+     */
+    private void showAbilityDialogMessage(String title, String message) {
+        clearPendingActivation();
+        buildAbilityModal();
+        activationState = AbilityActivationState.PENDING_CONFIRMATION;
+
+        Label titleLabel = new Label(title == null || title.isEmpty() ? "Ability" : title, skin);
+        titleLabel.setFontScale(1.05f);
+        abilityPanel.add(titleLabel).padBottom(8f).row();
+
+        Label messageLabel = new Label(message == null ? "" : message, skin);
+        messageLabel.setWrap(true);
+        messageLabel.setAlignment(Align.center);
+        abilityPanel.add(messageLabel).width(ABILITY_PANEL_WIDTH - 60f).padBottom(14f).row();
+
+        Table buttons = new Table();
+        buttons.add(abilityButton("Close", this::dismissAbilityMessage))
+            .width(160f).height(46f);
+        abilityPanel.add(buttons);
+    }
+
+    /** Schliesst das reine Hinweisfenster; es wurde nichts veraendert. */
+    private void dismissAbilityMessage() {
+        if (activationState != AbilityActivationState.PENDING_CONFIRMATION
+            || pendingActivationShikigami != null) {
+            return; // Ein echter Auswahlvorgang wird nicht ueber "Close" beendet.
+        }
+        closeAbilityModal();
+        clearPendingActivation();
+        activationState = AbilityActivationState.IDLE;
+        updateLivePreview();
+    }
+
+    /**
+     * Handindex ueber Referenzvergleich. {@link Card} ist ein Record: {@code equals}
+     * oder {@code indexOf()} koennten bei gleichem Inhalt die falsche physische
+     * Karte treffen.
+     */
+    private static int identityIndexOf(List<Card> cards, Card card) {
+        if (cards == null || card == null) {
+            return -1;
+        }
+        for (int i = 0; i < cards.size(); i++) {
+            if (cards.get(i) == card) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Entfernt genau diese Referenz (kein removeAll, keine gleichartige Karte). */
+    private static boolean removeByIdentity(List<Card> cards, Card card) {
+        int index = identityIndexOf(cards, card);
+        if (index < 0) {
+            return false;
+        }
+        cards.remove(index);
+        return true;
+    }
+
+    /** Karten-Actor ueber Referenzvergleich (nie ueber Namen oder {@code equals}). */
+    private JuicyCardActor findActorForCardIdentity(Card card) {
+        if (card == null) {
+            return null;
+        }
+        for (Actor child : handGroup.getChildren()) {
+            if (child instanceof JuicyCardActor cardActor && cardActor.card == card) {
+                return cardActor;
+            }
+        }
+        return null;
     }
 
     private void renderOmamoris() {
@@ -1456,7 +2746,7 @@ public class GameScreen extends ScreenAdapter {
                 slotBox.add(createOmamoriSlotContent(activeOmamoris.get(slot)))
                     .size(OMAMORI_ICON_WIDTH, OMAMORI_ICON_HEIGHT);
             } else {
-                Label emptySlot = new Label("Slot " + (slot + 1) + "\nLeer", skin);
+                Label emptySlot = new Label("Slot " + (slot + 1) + "\nEmpty", skin);
                 emptySlot.setFontScale(0.7f);
                 emptySlot.setAlignment(Align.center);
                 emptySlot.setColor(Color.GRAY);
@@ -1481,16 +2771,19 @@ public class GameScreen extends ScreenAdapter {
 
         TextureRegion region = atlas.findRegion(regionName);
         if (region == null) {
-            Gdx.app.error("GameScreen", "Omamori-Atlas-Region fehlt: " + regionName);
+            Gdx.app.error("GameScreen", "Omamori atlas region missing: " + regionName);
             return new TextButton(omamori.getName(), skin);
         }
 
         return new JuicyOmamoriActor(omamori, region, new JuicyOmamoriActor.OmamoriListener() {
             @Override
             public void onTap(JuicyOmamoriActor actor) {
-                // Waehrend der Wertung sind Omamori nicht bedienbar.
-                if (currentState != GameState.WAITING_FOR_INPUT) return;
+                // Waehrend der Wertung und waehrend eines Faehigkeitsvorgangs
+                // sind Omamori nicht bedienbar.
+                if (!isHandInteractionAllowed()) return;
 
+                // Ein fixiertes Shikigami-Infopanel wird durch die Omamori-Info abgeloest.
+                hideInfoPopup();
                 infoPopup.clearChildren();
                 infoPopup.add(new Label(omamori.getName(), skin)).padTop(10).padBottom(5).row();
                 infoPopup.add(new Label(omamori.getDescription(), skin)).padBottom(5).row();
@@ -1503,8 +2796,9 @@ public class GameScreen extends ScreenAdapter {
 
             @Override
             public void onDrop(JuicyOmamoriActor actor, Vector2 stagePos) {
-                // Waehrend der Wertung werden Omamori weder verschoben noch neu aufgebaut.
-                if (currentState != GameState.WAITING_FOR_INPUT) return;
+                // Waehrend der Wertung und waehrend eines Faehigkeitsvorgangs
+                // werden Omamori weder verschoben noch neu aufgebaut.
+                if (!isHandInteractionAllowed()) return;
 
                 // Die Slot-Reihenfolge kommt ausschliesslich aus RunSession und wird nicht
                 // umsortiert; der Neuaufbau setzt die Omamori wieder in ihre Slots.
@@ -1534,7 +2828,7 @@ public class GameScreen extends ScreenAdapter {
         sequence.addAction(Actions.run(() -> {
             playButton.getColor().a = 0f;
             discardButton.getColor().a = 0f;
-            infoPopup.setVisible(false);
+            hideInfoPopup();
             yakuNameLabel.setText(bestYaku.getDisplayName());
             updateScoreLabels(currentChips[0], currentMult[0]);
             prepareOmamoriContributions();
@@ -1604,8 +2898,8 @@ public class GameScreen extends ScreenAdapter {
 
             ScoringCardBinding binding = bindingForEvent(event.card());
             if (binding == null) {
-                Gdx.app.error("GameScreen", "Keine Karten-Bindung fuer Score-Event '" + event.sourceName()
-                    + "': Effekt wurde berechnet, Animation uebersprungen.");
+                Gdx.app.error("GameScreen", "No card binding for score event '" + event.sourceName()
+                    + "': the effect was calculated, the animation was skipped.");
                 return;
             }
 
@@ -1635,8 +2929,8 @@ public class GameScreen extends ScreenAdapter {
 
             JuicyShikigamiActor actor = findAltarShikigamiActor(event.shikigami());
             if (actor == null) {
-                Gdx.app.error("GameScreen", "Shikigami-Actor fehlt fuer Score-Event '" + event.sourceName()
-                    + "': Effekt wurde berechnet, Animation uebersprungen.");
+                Gdx.app.error("GameScreen", "No Shikigami actor for score event '" + event.sourceName()
+                    + "': the effect was calculated, the animation was skipped.");
             } else {
                 pulseActor(actor, SHIKIGAMI_PULSE_SCALE);
                 spawnFloatingText(event.sourceName() + "\n" + describeDelta(event), actor, SCORE_SHIKIGAMI_COLOR);
@@ -1658,8 +2952,8 @@ public class GameScreen extends ScreenAdapter {
 
             JuicyOmamoriActor actor = findOmamoriActor(event.omamori());
             if (actor == null) {
-                Gdx.app.error("GameScreen", "Omamori-Actor fehlt fuer Score-Event '" + event.sourceName()
-                    + "': Effekt wurde berechnet, Animation uebersprungen.");
+                Gdx.app.error("GameScreen", "No Omamori actor for score event '" + event.sourceName()
+                    + "': the effect was calculated, the animation was skipped.");
             } else {
                 pulseActor(actor);
             }
@@ -1861,20 +3155,47 @@ public class GameScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
         // Keine temporaeren Actors oder Referenzen aus einer laufenden bzw.
         // abgebrochenen Wertung zuruecklassen (Screen-Wechsel, Exception, Dispose).
         scoringSequenceRunning = false;
+        // Offenen Faehigkeitsdialog restlos entfernen: keine Listener oder Actions
+        // auf einem disposed Screen und kein halb gesetzter Pending-Zustand.
+        activationState = AbilityActivationState.IDLE;
+        closeAbilityModal();
+        clearPendingActivation();
         clearScoreStage();
         clearOmamoriContributions();
+        hideInfoPopup();
 
-        stage.dispose();
-        if (fbo != null) fbo.dispose();
-        if (screenBatch != null) screenBatch.dispose();
-        if (edgeShader != null) edgeShader.dispose();
-        corruptionEngine.dispose();
-        if (skin != null) skin.dispose();
-        if (atlas != null) atlas.dispose();
-        if (background != null) background.dispose();
+        // Nur screen-eigene Ressourcen freigeben.
+        if (stage != null) stage.dispose();
+        if (fbo != null) {
+            fbo.dispose();
+            fbo = null;
+        }
+        if (screenBatch != null) {
+            screenBatch.dispose();
+            screenBatch = null;
+        }
+        if (edgeShader != null) {
+            edgeShader.dispose();
+            edgeShader = null;
+        }
+        if (corruptionEngine != null) {
+            corruptionEngine.dispose();
+            corruptionEngine = null;
+        }
+        if (background != null) {
+            background.dispose();
+            background = null;
+        }
         cardTextures.clear();
+        // Skin, Atlas, Panel-/Button-Textur sind geliehen (Eigentum: GameAssets)
+        // und werden hier bewusst NICHT disposet.
     }
 }

@@ -134,7 +134,7 @@ public class ScoreAccumulator {
     private static double requireNonNegative(String context, double value) {
         if (!Double.isFinite(value) || value < 0.0) {
             throw new IllegalArgumentException(
-                context + ": ungueltiger Wert " + value + " (erwartet: endlich und >= 0)");
+                context + ": invalid value " + value + " (expected: finite and >= 0)");
         }
         return value;
     }
@@ -143,7 +143,7 @@ public class ScoreAccumulator {
     private static double requirePositive(String context, double value) {
         if (!Double.isFinite(value) || value <= 0.0) {
             throw new IllegalArgumentException(
-                context + ": ungueltiger Wert " + value + " (erwartet: endlich und > 0)");
+                context + ": invalid value " + value + " (expected: finite and > 0)");
         }
         return value;
     }
@@ -152,7 +152,7 @@ public class ScoreAccumulator {
     private static double requireFiniteResult(String context, double value) {
         if (!Double.isFinite(value)) {
             throw new IllegalArgumentException(
-                context + ": Zwischenergebnis ist nicht endlich (" + value + ")");
+                context + ": intermediate result is not finite (" + value + ")");
         }
         return value;
     }

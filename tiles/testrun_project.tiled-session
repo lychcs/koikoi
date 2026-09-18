@@ -32,10 +32,10 @@
         },
         "C:/Users/igort/Documents/manu/koikoi/lib/assets/map/testmap.tmx": {
             "scale": 1.128125,
-            "selectedLayer": 3,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 320,
-                "y": 284.98614958448746
+                "x": 486.6481994459834,
+                "y": 250.41551246537398
             }
         },
         "SHOP_WAGGON_1.tsx": {

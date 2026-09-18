@@ -39,6 +39,8 @@ public class AltarFlameActor extends Actor {
         ShaderProgram flameShader = HankoShaderManager.getVoidFlameShader();
         if (flameShader == null || !flameShader.isCompiled()) return;
 
+        // Eigenen Shader setzen und den vorher aktiven danach wiederherstellen.
+        ShaderProgram previousShader = batch.getShader();
         batch.setShader(flameShader);
         flameShader.setUniformf("u_time", HankoShaderManager.getTotalTime());
 
@@ -56,6 +58,6 @@ public class AltarFlameActor extends Actor {
         batch.draw(flameRegion, getX() + getWidth() - 8f + flameW, yOffset, -flameW, flameH);
 
         batch.setColor(Color.WHITE);
-        batch.setShader(null);
+        batch.setShader(previousShader);
     }
 }

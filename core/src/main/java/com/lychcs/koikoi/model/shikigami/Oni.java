@@ -32,10 +32,10 @@ public class Oni extends Shikigami {
     @Override
     public String getDescription() {
         return switch (getStage()) {
-            case EGG -> "Ein schlummernder Dämon. Benötigt Evolution.";
-            case LEVEL_1 -> "Saison-Fokus: Petals (Blüten) der aktuellen Jahreszeit zählen als Ribbons (Bänder).";
-            case LEVEL_2 -> "Chimären-Zorn: Ribbons (Bänder) zählen auch als Beasts (Tiere), aber Hikari (Licht) werden entwertet.";
-            case LEVEL_3 -> "Dämonischer Tribut: Bei 5 Karten wird die höchste geopfert; die restlichen 4 übernehmen ihren Rang.";
+            case EGG -> "A slumbering demon. Requires evolution to take effect.";
+            case LEVEL_1 -> "Season Focus: Petals of the current season count as Ribbons.";
+            case LEVEL_2 -> "Chimera's Wrath: Ribbons also count as Beasts, and Hikari cards count as Petals.";
+            case LEVEL_3 -> "Demonic Tribute: With 5 cards, the highest card becomes a Petal, the other 4 take on its rank and Mult is multiplied by x1.5.";
         };
     }
 
@@ -52,7 +52,7 @@ public class Oni extends Shikigami {
                     // Season-Abgleich über den Namen, da Season und GameSeason getrennte Enums sind
                     boolean sameSeason = c.season().name().equals(currentSeason.name());
                     if (c.rank() == Rank.PETAL && sameSeason) {
-                        mutated.add(new Card(c.id(), c.season(), Rank.RIBBON, c.name() + " (Band-Form)", c.effect()));
+                        mutated.add(new Card(c.id(), c.season(), Rank.RIBBON, c.name() + " (Ribbon Form)", c.effect()));
                     } else {
                         mutated.add(c);
                     }
@@ -61,9 +61,9 @@ public class Oni extends Shikigami {
             case LEVEL_2 -> {
                 for (Card c : originalHand) {
                     if (c.rank() == Rank.RIBBON) {
-                        mutated.add(new Card(c.id(), c.season(), Rank.BEAST, c.name() + " (Tier-Form)", c.effect()));
+                        mutated.add(new Card(c.id(), c.season(), Rank.BEAST, c.name() + " (Beast Form)", c.effect()));
                     } else if (c.rank() == Rank.HIKARI) {
-                        mutated.add(new Card(c.id(), c.season(), Rank.PETAL, c.name() + " (Entweiht)", c.effect()));
+                        mutated.add(new Card(c.id(), c.season(), Rank.PETAL, c.name() + " (Desecrated)", c.effect()));
                     } else {
                         mutated.add(c);
                     }
@@ -78,9 +78,9 @@ public class Oni extends Shikigami {
 
                     for (Card c : originalHand) {
                         if (c.equals(highest)) {
-                            mutated.add(new Card(c.id(), c.season(), Rank.PETAL, c.name() + " (Opfergabe)", c.effect()));
+                            mutated.add(new Card(c.id(), c.season(), Rank.PETAL, c.name() + " (Offering)", c.effect()));
                         } else {
-                            mutated.add(new Card(c.id(), c.season(), highest.rank(), c.name() + " (Ermächtigt)", c.effect()));
+                            mutated.add(new Card(c.id(), c.season(), highest.rank(), c.name() + " (Empowered)", c.effect()));
                         }
                     }
                 } else {
@@ -96,7 +96,7 @@ public class Oni extends Shikigami {
     @Override
     public boolean activate(ScoreContext context, ScoreAccumulator acc) {
         if (getStage() == ShikigamiStage.LEVEL_3 && context.hand().getTotalCardCount() == 5) {
-            acc.multiplyMult(getName() + " (Blutpakt)", 1.5);
+            acc.multiplyMult(getName() + " (Blood Pact)", 1.5);
             return true;
         }
         return false;

@@ -42,7 +42,7 @@ public class JuicyShikigamiActor extends JuicyDraggableActor {
 
         if (shikigami.isExhausted()) {
             mainImg.setColor(0.35f, 0.35f, 0.35f, 0.6f);
-            Label exLabel = new Label("Rastet", skin);
+            Label exLabel = new Label("Exhausted", skin);
             exLabel.setFontScale(0.75f);
             Table t = new Table();
             t.center().add(exLabel);

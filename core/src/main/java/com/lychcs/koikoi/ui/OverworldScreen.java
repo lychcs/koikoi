@@ -35,17 +35,25 @@ import com.badlogic.gdx.utils.GdxRuntimeException;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
+import com.lychcs.koikoi.entities.OverworldYokaiEntity;
 import com.lychcs.koikoi.entities.Player;
+import com.lychcs.koikoi.graphics.AsepriteSheet;
 import com.lychcs.koikoi.graphics.CorruptionEngine;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.graphics.GameAssets;
+import com.lychcs.koikoi.model.yokai.YokaiSpecies;
 import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
+import com.lychcs.koikoi.run.YokaiEncounter;
+import com.lychcs.koikoi.run.YokaiEncounterCatalog;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class OverworldScreen extends ScreenAdapter {
 
@@ -58,7 +66,24 @@ public class OverworldScreen extends ScreenAdapter {
     /** Map-Property mit der Season des Ortes. */
     private static final String MAP_PROPERTY_SEASON = "season";
 
+    /** Map-Property mit einer expliziten Encounter-Id eines Spawnobjekts. */
+    private static final String MAP_PROPERTY_ENCOUNTER_ID = "encounterId";
+
+    /** Trigger-Typ, der als Spawnmarkierung eines wilden Yokai dient. */
+    private static final String TRIGGER_TYPE_YOKAI_SPAWN = "enemy1";
+
+    /** Trigger-Typ einer wiederholbaren Kampfflaeche ohne Entity. */
+    private static final String TRIGGER_TYPE_COMBAT_ZONE = "combat_zone";
+
+    /**
+     * Fallback-Id der Spawnmarkierung, falls die Testmap genau ein unbenanntes
+     * {@code enemy1}-Objekt enthaelt (siehe {@link #createYokaiEntities()}).
+     */
+    private static final String FALLBACK_YOKAI_SPAWN_ID = "spring_village_kitsune_01";
+
     private final RunSession runSession;
+    /** Geliehene, global verwaltete Assets (Eigentum: GameAssets). */
+    private final GameAssets assets;
     private TiledMap map;
     private float mapPixelWidth;
     private float mapPixelHeight;
@@ -86,6 +111,9 @@ public class OverworldScreen extends ScreenAdapter {
     // der Spieler alle automatischen Kampfzonen verlassen hat.
     private boolean automaticCombatLocked;
 
+    /** Schutz gegen Mehrfach-Dispose durch den Screen-Manager. */
+    private boolean disposed;
+
     // Box2D Physik-Welt
 
     private World world;
@@ -95,14 +123,46 @@ public class OverworldScreen extends ScreenAdapter {
         float y;
         com.lychcs.koikoi.entities.Player playerEntity; // Eindeutiger Name
         TiledMapTileMapObject mapObject;
+        OverworldYokaiEntity yokaiEntity;
 
         public RenderNode(float y, com.lychcs.koikoi.entities.Player playerEntity) {
             this.y = y;
             this.playerEntity = playerEntity;
+            this.mapObject = null;
+            this.yokaiEntity = null;
         }
         public RenderNode(float y, TiledMapTileMapObject mapObject) {
             this.y = y;
             this.mapObject = mapObject;
+            this.playerEntity = null;
+            this.yokaiEntity = null;
+        }
+
+        /** Wiederverwendung eines gepoolten Knotens ohne neue Allokation. */
+        RenderNode setPlayer(float y, com.lychcs.koikoi.entities.Player playerEntity) {
+            this.y = y;
+            this.playerEntity = playerEntity;
+            this.mapObject = null;
+            this.yokaiEntity = null;
+            return this;
+        }
+
+        /** Wiederverwendung eines gepoolten Knotens ohne neue Allokation. */
+        RenderNode setMapObject(float y, TiledMapTileMapObject mapObject) {
+            this.y = y;
+            this.mapObject = mapObject;
+            this.playerEntity = null;
+            this.yokaiEntity = null;
+            return this;
+        }
+
+        /** Wiederverwendung eines gepoolten Knotens fuer ein wildes Yokai. */
+        RenderNode setYokai(float y, OverworldYokaiEntity yokaiEntity) {
+            this.y = y;
+            this.yokaiEntity = yokaiEntity;
+            this.playerEntity = null;
+            this.mapObject = null;
+            return this;
         }
 
         @Override
@@ -111,8 +171,34 @@ public class OverworldScreen extends ScreenAdapter {
         }
     }
 
-    public OverworldScreen(RunSession runSession) {
+    /** Wiederverwendete Y-Sortier-Liste des laufenden Frames (keine Allokation pro Frame). */
+    private final List<RenderNode> renderList = new ArrayList<>();
+    /** Pool der Sortierknoten; waechst einmalig bis zur Anzahl der Map-Objekte. */
+    private final List<RenderNode> renderNodePool = new ArrayList<>();
+    private int renderNodeCursor;
+    /** Wiederverwendete Interaktionsbox (keine Allokation pro Frame). */
+    private final Rectangle interactionBox = new Rectangle();
+
+    /** Tilegroesse der geladenen Map (für Roaming-Bereiche der Yokai). */
+    private int tileWidth;
+    private int tileHeight;
+
+    /** Kollisionsrechtecke der Map (dieselbe Quelle wie die Box2D-Waende). */
+    private final List<Rectangle> collisionRects = new ArrayList<>();
+
+    /** Wilde Yokai dieses Screenaufbaus (keine statische globale Liste). */
+    private final List<OverworldYokaiEntity> yokaiEntities = new ArrayList<>();
+
+    /** Einmalige Methodenreferenz: keine Allokation pro Frame. */
+    private final OverworldYokaiEntity.CollisionQuery collisionQuery = this::isBlockedInWorld;
+
+    public OverworldScreen(RunSession runSession, GameAssets assets) {
+        if (assets == null) {
+            throw new IllegalArgumentException("assets must not be null");
+        }
+
         this.runSession = runSession;
+        this.assets = assets;
 
         // 1. Box2D Welt ohne Schwerkraft (Top-Down RPG) erstellen
         world = new World(new Vector2(0, 0), true);
@@ -125,14 +211,17 @@ public class OverworldScreen extends ScreenAdapter {
 
         int mapWidthTiles = map.getProperties().get("width", Integer.class);
         int mapHeightTiles = map.getProperties().get("height", Integer.class);
-        int tileWidth = map.getProperties().get("tilewidth", Integer.class);
-        int tileHeight = map.getProperties().get("tileheight", Integer.class);
+        this.tileWidth = map.getProperties().get("tilewidth", Integer.class);
+        this.tileHeight = map.getProperties().get("tileheight", Integer.class);
 
-        mapPixelWidth = mapWidthTiles * tileWidth;
-        mapPixelHeight = mapHeightTiles * tileHeight;
+        mapPixelWidth = mapWidthTiles * this.tileWidth;
+        mapPixelHeight = mapHeightTiles * this.tileHeight;
 
         // 2. Vollautomatische Erstellung der Physik-Wände aus der "collision"-Ebene von Tiled
         createCollisionBoxes();
+
+        // 3. Wilde Yokai aus ihren Spawnmarkierungen erzeugen (genau eine je MapObject).
+        createYokaiEntities();
 
         mapRenderer = new OrthogonalTiledMapRenderer(map, 1f);
 
@@ -162,11 +251,13 @@ public class OverworldScreen extends ScreenAdapter {
             }
         }
 
-        player = new Player(world, startX, startY);
+        // Sprite-Sheet ist geliehen (Eigentum: GameAssets).
+        player = new Player(world, startX, startY, assets.getTexture(GameAssets.PLAYER_SHEET));
 
         // UI Stage für Overworld-Popups (z.B. "Press E to Shop")
         uiStage = new Stage(new FitViewport(1280, 720));
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        // Geliehene, global verwaltete Skin: kein Dispose in diesem Screen.
+        skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
         promptLabel = new Label("", skin);
@@ -187,20 +278,23 @@ public class OverworldScreen extends ScreenAdapter {
         );
 
         if (!windShader.isCompiled()) {
-            Gdx.app.error("Shader", "Tree Wind Shader Fehler:\n" + windShader.getLog());
+            String log = windShader.getLog();
+            windShader.dispose();
+            throw new GdxRuntimeException("Failed to compile Tree Wind shader:\n" + log);
         }
 
-        gameAtlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
+        // Geliehener, global geladener Atlas (kein Laden, kein Dispose).
+        gameAtlas = assets.getAtlas(GameAssets.GAME_ATLAS);
 
-        Texture buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
+        // NinePatch-Drawables verweisen nur auf die gemeinsamen Texturen und
+        // besitzen selbst keine GPU-Ressource.
         TextButton.TextButtonStyle btnStyle = new TextButton.TextButtonStyle();
-        btnStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
+        btnStyle.up = assets.newButtonDrawable();
         btnStyle.down = ((NinePatchDrawable) btnStyle.up).tint(Color.LIGHT_GRAY);
         btnStyle.font = FontManager.getFont();
         btnStyle.fontColor = FontManager.COLOR_TEXT_MAIN;
 
-        Texture panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        NinePatchDrawable panelBg = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
+        NinePatchDrawable panelBg = assets.newPanelDrawable();
 
         inventoryOverlay = new InventoryOverlay(runSession, skin, gameAtlas, panelBg, btnStyle);
         uiStage.addActor(inventoryOverlay);
@@ -213,7 +307,7 @@ public class OverworldScreen extends ScreenAdapter {
 
         if (!edgeShader.isCompiled()) {
             throw new GdxRuntimeException(
-                "edge_detection Shader konnte nicht kompiliert werden:\n"
+                "edge_detection shader could not be compiled:\n"
                     + edgeShader.getLog()
             );
         }
@@ -242,7 +336,7 @@ public class OverworldScreen extends ScreenAdapter {
         if (rawSeason == null || rawSeason.trim().isEmpty()) {
             Gdx.app.error(
                 "OverworldScreen",
-                "Season-Property '" + MAP_PROPERTY_SEASON + "' fehlt in Map " + fallbackLocationId
+                "Season property '" + MAP_PROPERTY_SEASON + "' is missing in map " + fallbackLocationId
                     + ". Fallback: " + runSession.getCurrentSeason()
             );
         } else {
@@ -251,8 +345,8 @@ public class OverworldScreen extends ScreenAdapter {
             } catch (IllegalArgumentException e) {
                 Gdx.app.error(
                     "OverworldScreen",
-                    "Ungueltige Season '" + rawSeason + "' in Map " + fallbackLocationId
-                        + ". Erlaubte Werte: " + Arrays.toString(GameSeason.values())
+                    "Invalid Season '" + rawSeason + "' in map " + fallbackLocationId
+                        + ". Allowed values: " + Arrays.toString(GameSeason.values())
                         + ". Fallback: " + runSession.getCurrentSeason()
                 );
             }
@@ -272,6 +366,10 @@ public class OverworldScreen extends ScreenAdapter {
         for (MapObject object : collisionLayer.getObjects()) {
             if (object instanceof RectangleMapObject) {
                 Rectangle rect = ((RectangleMapObject) object).getRectangle();
+
+                // Dieselben Rechtecke dienen der Physik des Spielers UND der geometrischen
+                // Kollision der Yokai: eine Quelle, keine zweite Kollisionskarte.
+                collisionRects.add(rect);
 
                 // Statischer Physik-Körper für jedes manuell gezeichnete Rechteck in Tiled
                 BodyDef bdef = new BodyDef();
@@ -295,13 +393,242 @@ public class OverworldScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(uiStage);
     }
 
+    /**
+     * Erzeugt die wilden Yokai aus den Spawnmarkierungen der Map.
+     *
+     * <p>Gesucht wird in <b>allen</b> Objektlayern der Map (in der Testmap liegt die
+     * Markierung in {@code Objektebene 1}): die Identitaet kommt ausschliesslich aus Typ,
+     * Name und Properties, niemals aus der Ebene oder Bildschirmkoordinaten. Ein
+     * {@code enemy1}-Objekt ist eine reine Spawnmarkierung und wird nicht mehr selbst
+     * gezeichnet und auch nicht mehr als statische Kampfflaeche benutzt.</p>
+     *
+     * <p>Aufloesung der Identitaet: zuerst die Property {@code encounterId}, danach der
+     * Objektname (oder dieselbe Property als Spawn-Id); die dokumentierte Fallback-Id der
+     * Testmap ({@value #FALLBACK_YOKAI_SPAWN_ID}) greift nur, wenn die Map genau ein
+     * unbenanntes {@code enemy1}-Objekt besitzt.</p>
+     *
+     * <p>Bereits besiegte, nicht wiederholbare Begegnungen erzeugen keine Entity mehr
+     * (das Kitsune bleibt fuer den restlichen Run verschwunden).</p>
+     */
+    private void createYokaiEntities() {
+        yokaiEntities.clear();
+
+        List<MapObject> spawnObjects = new ArrayList<>();
+        for (MapLayer layer : map.getLayers()) {
+            for (MapObject object : layer.getObjects()) {
+                if (TRIGGER_TYPE_YOKAI_SPAWN.equals(triggerTypeOf(object))) {
+                    spawnObjects.add(object);
+                }
+            }
+        }
+        if (spawnObjects.isEmpty()) {
+            return;
+        }
+
+        boolean singleUnnamedSpawn = spawnObjects.size() == 1 && explicitEncounterIdOf(spawnObjects.get(0)) == null;
+        Set<String> usedEncounterIds = new LinkedHashSet<>();
+        Rectangle spawnRect = new Rectangle();
+
+        for (MapObject object : spawnObjects) {
+            if (!spawnRectOf(object, spawnRect)) {
+                Gdx.app.error("OverworldScreen", "Yokai spawn marker without usable bounds in map "
+                    + LOCATION_MAP_PATH + ": object type '" + TRIGGER_TYPE_YOKAI_SPAWN
+                    + "' needs a rectangle or a tile object. Spawn skipped.");
+                continue;
+            }
+
+            String spawnKey = explicitEncounterIdOf(object);
+            if (spawnKey == null) {
+                if (!singleUnnamedSpawn) {
+                    Gdx.app.error("OverworldScreen", "Yokai spawn without a stable id in map " + LOCATION_MAP_PATH
+                        + " at (" + spawnRect.x + ", " + spawnRect.y + "): give the object a name or an '"
+                        + MAP_PROPERTY_ENCOUNTER_ID + "' property. Spawn skipped.");
+                    continue;
+                }
+                spawnKey = FALLBACK_YOKAI_SPAWN_ID;
+            }
+
+            YokaiEncounter encounter = null;
+            String encounterIdProperty = stringProperty(object, MAP_PROPERTY_ENCOUNTER_ID);
+            if (encounterIdProperty != null) {
+                encounter = YokaiEncounterCatalog.findById(encounterIdProperty);
+                if (encounter == null) {
+                    Gdx.app.error("OverworldScreen", "Property '" + MAP_PROPERTY_ENCOUNTER_ID + "' = '"
+                        + encounterIdProperty + "' of a Yokai spawn in map " + LOCATION_MAP_PATH + " at ("
+                        + spawnRect.x + ", " + spawnRect.y + ") is not registered.");
+                }
+            }
+            if (encounter == null) {
+                encounter = YokaiEncounterCatalog.findBySpawnId(spawnKey);
+            }
+            if (encounter == null) {
+                encounter = YokaiEncounterCatalog.findById(spawnKey);
+            }
+            if (encounter == null) {
+                Gdx.app.error("OverworldScreen", "No encounter registered for Yokai spawn id '" + spawnKey
+                    + "' in map " + LOCATION_MAP_PATH + " at (" + spawnRect.x + ", " + spawnRect.y
+                    + "). Spawn skipped.");
+                continue;
+            }
+
+            if (!usedEncounterIds.add(encounter.getId())) {
+                Gdx.app.error("OverworldScreen", "Duplicate Yokai encounter '" + encounter.getId() + "' in map "
+                    + LOCATION_MAP_PATH + " at (" + spawnRect.x + ", " + spawnRect.y + "). Spawn skipped.");
+                continue;
+            }
+
+            if (!encounter.isRepeatable() && runSession.isEncounterDefeated(encounter.getId())) {
+                // Besiegt und nicht wiederholbar: bleibt fuer diesen Run verschwunden.
+                continue;
+            }
+
+            YokaiSpecies species = encounter.getSpecies();
+            if (!species.hasWildSheet()) {
+                Gdx.app.error("OverworldScreen", "Species '" + species.getId()
+                    + "' has no animated wild form; spawn '" + spawnKey + "' skipped.");
+                continue;
+            }
+
+            AsepriteSheet sheet = assets.getWildYokaiSheet(
+                species.getWildSheetTexturePath(), species.getWildSheetJsonPath());
+
+            yokaiEntities.add(new OverworldYokaiEntity(
+                encounter.getId(),
+                species.getId(),
+                species.getWildName(),
+                OverworldYokaiEntity.WalkAnimations.from(sheet),
+                spawnRect.x + (spawnRect.width / 2f),
+                spawnRect.y + (spawnRect.height / 2f),
+                tileWidth,
+                tileHeight));
+        }
+    }
+
+    /**
+     * Schreibt die Weltgrenzen einer Spawnmarkierung in die uebergebene Box. Rechteckobjekte
+     * liefern ihre Flaeche, Kachelobjekte ihre Position samt Breite/Hoehe (aus den Properties
+     * oder der Kachel selbst). Die Box wird wiederverwendet, damit kein Objekt pro Spawn
+     * entsteht.
+     */
+    private static boolean spawnRectOf(MapObject object, Rectangle out) {
+        if (object instanceof RectangleMapObject) {
+            out.set(((RectangleMapObject) object).getRectangle());
+            return true;
+        }
+
+        if (object instanceof TiledMapTileMapObject) {
+            TiledMapTileMapObject tileObject = (TiledMapTileMapObject) object;
+            float width = floatProperty(tileObject, "width");
+            float height = floatProperty(tileObject, "height");
+            if (width <= 0f || height <= 0f) {
+                TextureRegion region = tileObject.getTile().getTextureRegion();
+                if (region == null) {
+                    return false;
+                }
+                width = region.getRegionWidth();
+                height = region.getRegionHeight();
+            }
+            out.set(tileObject.getX(), tileObject.getY(), width, height);
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Nicht-leerer String-Wert einer Map-Property oder {@code null}. */
+    private static String stringProperty(MapObject object, String name) {
+        String value = object.getProperties().get(name, String.class);
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    /** Zahlenwert einer Map-Property oder 0. */
+    private static float floatProperty(MapObject object, String name) {
+        Float value = object.getProperties().get(name, Float.class);
+        return value == null ? 0f : value;
+    }
+
+    /** Trigger-Typ (oder Tiled-{@code class}) eines Map-Objekts, oder {@code null}. */
+    private static String triggerTypeOf(MapObject object) {
+        String type = object.getProperties().get("type", String.class);
+        if (type == null) {
+            type = object.getProperties().get("class", String.class);
+        }
+        return type;
+    }
+
+    /**
+     * Explizite, stabile Spawn-Id eines Objekts: Objektname oder Property
+     * {@code encounterId}. {@code null}, wenn beides fehlt.
+     */
+    private static String explicitEncounterIdOf(MapObject object) {
+        String name = object.getName();
+        if (name != null && !name.trim().isEmpty()) {
+            return name.trim();
+        }
+        String property = object.getProperties().get(MAP_PROPERTY_ENCOUNTER_ID, String.class);
+        if (property != null && !property.trim().isEmpty()) {
+            return property.trim();
+        }
+        return null;
+    }
+
+    /**
+     * Kollisionsabfrage fuer die wilden Yokai: dieselben Tiles-Rechtecke wie die Physik
+     * des Spielers plus die Mapgrenzen. Reines Praedikat ohne Allokation.
+     */
+    private boolean isBlockedInWorld(Rectangle box) {
+        if (box.x < 0f || box.y < 0f
+            || box.x + box.width > mapPixelWidth
+            || box.y + box.height > mapPixelHeight) {
+            return true;
+        }
+
+        for (int i = 0; i < collisionRects.size(); i++) {
+            if (box.overlaps(collisionRects.get(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Bewegt alle wilden Yokai; laeuft unabhaengig vom Spieler-Input. */
+    private void updateYokaiEntities(float delta) {
+        for (int i = 0; i < yokaiEntities.size(); i++) {
+            yokaiEntities.get(i).update(delta, collisionQuery);
+        }
+    }
+
+    /** Erstes Yokai, dessen aktuelle Encounter-Flaeche den Spieler beruehrt (oder {@code null}). */
+    private OverworldYokaiEntity findContactedYokai() {
+        for (int i = 0; i < yokaiEntities.size(); i++) {
+            OverworldYokaiEntity entity = yokaiEntities.get(i);
+            if (interactionBox.overlaps(entity.getInteractionBounds())) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
     @Override
     public void resize(int width, int height) {
         uiStage.getViewport().update(width, height, true);
 
+        // Kein neuer FBO ohne echte Groessenaenderung und nie mit Groesse 0.
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        if (fbo != null && fbo.getWidth() == width && fbo.getHeight() == height
+            && screenBatch != null) {
+            return;
+        }
+
         // 1. FBO an neue Bildschirmauflösung anpassen
         if (fbo != null) fbo.dispose();
         fbo = new FrameBuffer(com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888, width, height, false);
+        // Frische Region pro FBO: der Y-Flip wird dadurch nie mehrfach angewendet.
         fboRegion = new TextureRegion(fbo.getColorBufferTexture());
         fboRegion.flip(false, true);
 
@@ -332,6 +659,9 @@ public class OverworldScreen extends ScreenAdapter {
             delta,
             player.body.getLinearVelocity()
         );
+
+        // Wilde Yokai bewegen sich vor der Kontaktpruefung.
+        updateYokaiEntities(delta);
 
         handleInteractions();
 
@@ -416,15 +746,22 @@ public class OverworldScreen extends ScreenAdapter {
             }
         }
 
-        // Y-Sorting-Liste aufbauen
-        List<RenderNode> renderList = new ArrayList<>();
+        // Y-Sorting-Liste aufbauen (wiederverwendet, keine Allokation pro Frame)
+        renderList.clear();
+        renderNodeCursor = 0;
 
         renderList.add(
-            new RenderNode(
+            obtainRenderNode().setPlayer(
                 renderPos.y,
                 player
             )
         );
+
+        // Wilde Yokai mit ihrer Fuss-/Sortierposition in dasselbe Y-Sorting aufnehmen.
+        for (int i = 0; i < yokaiEntities.size(); i++) {
+            OverworldYokaiEntity entity = yokaiEntities.get(i);
+            renderList.add(obtainRenderNode().setYokai(entity.getFootY(), entity));
+        }
 
         for (MapLayer layer : map.getLayers()) {
             if (!(layer instanceof TiledMapTileLayer)) {
@@ -433,8 +770,14 @@ public class OverworldScreen extends ScreenAdapter {
                         TiledMapTileMapObject tiledObject =
                             (TiledMapTileMapObject) obj;
 
+                        // Spawnmarkierungen wilder Yokai werden von der Entity gezeichnet,
+                        // nicht zusaetzlich als Standbild.
+                        if (TRIGGER_TYPE_YOKAI_SPAWN.equals(triggerTypeOf(tiledObject))) {
+                            continue;
+                        }
+
                         renderList.add(
-                            new RenderNode(
+                            obtainRenderNode().setMapObject(
                                 tiledObject.getY(),
                                 tiledObject
                             )
@@ -453,6 +796,14 @@ public class OverworldScreen extends ScreenAdapter {
                     (SpriteBatch) mapRenderer.getBatch()
                 );
 
+                continue;
+            }
+
+            if (node.yokaiEntity != null) {
+                // Yokai werden ohne Wind-Shader gezeichnet; der Batch-Shader ist hier
+                // garantiert zurueckgesetzt (jeder Baum setzt ihn nach sich auf null).
+                mapRenderer.getBatch().setShader(null);
+                node.yokaiEntity.render((SpriteBatch) mapRenderer.getBatch());
                 continue;
             }
 
@@ -648,6 +999,40 @@ public class OverworldScreen extends ScreenAdapter {
         player.body.setLinearVelocity(velX, velY);
     }
 
+    /**
+     * Stabile Welt-Id eines Triggers: bevorzugt der Objektname aus Tiled, danach der
+     * Trigger-Typ. Bildschirmkoordinaten werden bewusst NICHT als Identitaet benutzt.
+     *
+     * <p>Anschlussstelle fuer echte Yokai-Entities: sobald Objekte in der Tiled-Map
+     * einen eigenen {@code name} tragen (z. B. {@code yokai_oni_grove_01}), liefert
+     * diese Methode automatisch die stabile Spawn-Id und
+     * {@link YokaiEncounterCatalog#findBySpawnId(String)} bindet die zugehoerige
+     * Begegnung - inklusive dauerhaftem Fernbleiben nach einem Sieg.</p>
+     */
+    private static String spawnIdentifierOf(MapObject object) {
+        if (object == null) {
+            return "";
+        }
+        String name = object.getName();
+        if (name != null && !name.trim().isEmpty()) {
+            return name.trim();
+        }
+        String type = object.getProperties().get("type", String.class);
+        if (type == null) {
+            type = object.getProperties().get("class", String.class);
+        }
+        return type == null ? "" : type.trim();
+    }
+
+    /**
+     * Loest die Begegnung einer Kampfzone auf. Zonen ohne eigene Definition nutzen den
+     * Standard-Encounter und verhalten sich damit exakt wie bisher.
+     */
+    private YokaiEncounter resolveEncounter(MapObject object) {
+        YokaiEncounter encounter = YokaiEncounterCatalog.findBySpawnId(spawnIdentifierOf(object));
+        return encounter == null ? YokaiEncounterCatalog.defaultEncounter() : encounter;
+    }
+
     private void handleInteractions() {
         if (inventoryOverlay.isOpen()) {
             promptLabel.setVisible(false);
@@ -662,11 +1047,36 @@ public class OverworldScreen extends ScreenAdapter {
         }
 
         Vector2 playerPos = player.body.getPosition();
-        Rectangle interactionBox = new Rectangle(playerPos.x - 24f, playerPos.y - 12f, 48f, 48f);
+        interactionBox.set(playerPos.x - 24f, playerPos.y - 12f, 48f, 48f);
 
         boolean ePressed = Gdx.input.isKeyJustPressed(Input.Keys.E);
         boolean nearAnyManualTrigger = false;
-        boolean insideAutomaticCombatZone = false;
+
+        // --- 0. WILDES YOKAI: Kontakt ueber die AKTUELLE Entity-Position ---
+        // Die alte statische Spawnflaeche loest keinen Kampf mehr aus; die Encounter-Flaeche
+        // wandert mit dem Kitsune.
+        OverworldYokaiEntity contactedYokai = findContactedYokai();
+        boolean insideAutomaticCombatZone = contactedYokai != null;
+
+        if (contactedYokai != null && !automaticCombatLocked) {
+            YokaiEncounter contactedEncounter = YokaiEncounterCatalog.findById(contactedYokai.getEncounterId());
+            if (contactedEncounter == null) {
+                Gdx.app.error("OverworldScreen", "No encounter defined for contact with Yokai '"
+                    + contactedYokai.getEncounterId() + "'. No battle started.");
+            } else {
+                // Sofort sperren, damit bis zum verzoegerten Screen-Wechsel kein zweiter
+                // Kampf eingeplant werden kann. Die Sperre endet erst, wenn der Spieler das
+                // Kitsune wieder verlassen hat (kein Sofort-Retrigger nach der Rueckkehr).
+                automaticCombatLocked = true;
+
+                runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
+                promptLabel.setVisible(false);
+
+                ((KoiKoiGame) Gdx.app.getApplicationListener())
+                    .changeScreen(new GameScreen(runSession, assets, contactedEncounter));
+                return;
+            }
+        }
 
         for (MapObject object : triggersLayer.getObjects()) {
             if (!(object instanceof RectangleMapObject)) {
@@ -682,9 +1092,26 @@ public class OverworldScreen extends ScreenAdapter {
             if (type == null) type = object.getProperties().get("class", String.class);
             if (type == null) continue;
 
-            // --- 1. AUTOMATISCHE TRIGGER (Gegner / Kampf) ---
-            if ("enemy1".equals(type) || "combat_zone".equals(type)) {
+            // --- 1. AUTOMATISCHE TRIGGER ---
+            if (TRIGGER_TYPE_YOKAI_SPAWN.equals(type)) {
+                // Reine Spawnmarkierung eines wilden Yokai: kein statischer Kampf mehr,
+                // der Kontakt laeuft ausschliesslich ueber die Entity (siehe oben).
+                continue;
+            }
+
+            if (TRIGGER_TYPE_COMBAT_ZONE.equals(type)) {
                 insideAutomaticCombatZone = true;
+
+                // Begegnung ueber eine stabile Inhalts-Id aufloesen (Tiled-Objektname oder
+                // Trigger-Typ) - niemals ueber Bildschirmkoordinaten.
+                YokaiEncounter yokaiEncounter = resolveEncounter(object);
+
+                // Einmalig besiegte Begegnungen bleiben dauerhaft fern. Wiederholbare
+                // Kampfzonen behalten die bestehende Orts-Fortschrittslogik.
+                if (!yokaiEncounter.isRepeatable()
+                    && runSession.isEncounterDefeated(yokaiEncounter.getId())) {
+                    continue;
+                }
 
                 if (!automaticCombatLocked) {
                     // Sofort sperren, damit bis zum verzögerten Screen-Wechsel
@@ -695,7 +1122,7 @@ public class OverworldScreen extends ScreenAdapter {
                     promptLabel.setVisible(false);
 
                     ((KoiKoiGame) Gdx.app.getApplicationListener())
-                        .changeScreen(new GameScreen(runSession));
+                        .changeScreen(new GameScreen(runSession, assets, yokaiEncounter));
                     return;
                 }
 
@@ -711,7 +1138,7 @@ public class OverworldScreen extends ScreenAdapter {
                 if (ePressed) {
                     runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
                     ((KoiKoiGame) Gdx.app.getApplicationListener())
-                        .changeScreen(new ShopScreen(runSession));
+                        .changeScreen(new ShopScreen(runSession, assets));
                     return;
                 }
             } else if ("shrine".equals(type)) {
@@ -722,7 +1149,7 @@ public class OverworldScreen extends ScreenAdapter {
                 if (ePressed) {
                     runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
                     ((KoiKoiGame) Gdx.app.getApplicationListener())
-                        .changeScreen(new ShrineScreen(runSession));
+                        .changeScreen(new ShrineScreen(runSession, assets));
                     return;
                 }
             }
@@ -739,23 +1166,68 @@ public class OverworldScreen extends ScreenAdapter {
         }
     }
 
+    /** Liefert einen wiederverwendeten Sortierknoten (Pool waechst nur einmalig). */
+    private RenderNode obtainRenderNode() {
+        if (renderNodeCursor == renderNodePool.size()) {
+            renderNodePool.add(new RenderNode(0f, (TiledMapTileMapObject) null));
+        }
+        return renderNodePool.get(renderNodeCursor++);
+    }
+
     @Override
     public void dispose() {
-        if (gameAtlas != null) gameAtlas.dispose();
-        map.dispose();
-        // Post-Processing
-        if (fbo != null) fbo.dispose();
-        if (screenBatch != null) screenBatch.dispose();
-        if (edgeShader != null) edgeShader.dispose();
+        if (disposed) {
+            return;
+        }
+        disposed = true;
 
-        if (corruptionEngine != null) corruptionEngine.dispose(); // <--- DAS HIER FEHLTE NOCH
-
-        mapRenderer.dispose();
-        world.dispose(); // Physik-Welt sauber freigeben
-        debugRenderer.dispose();
-        player.dispose();
-        if (uiStage != null) uiStage.dispose();
-        if (skin != null) skin.dispose();
-        if (windShader != null) windShader.dispose();
+        // Reihenfolge: erst die Welt-/Renderobjekte, dann Physik und Modelle.
+        if (mapRenderer != null) {
+            mapRenderer.dispose();
+            mapRenderer = null;
+        }
+        if (map != null) {
+            map.dispose();
+            map = null;
+        }
+        if (fbo != null) {
+            fbo.dispose();
+            fbo = null;
+        }
+        if (screenBatch != null) {
+            screenBatch.dispose();
+            screenBatch = null;
+        }
+        if (edgeShader != null) {
+            edgeShader.dispose();
+            edgeShader = null;
+        }
+        if (windShader != null) {
+            windShader.dispose();
+            windShader = null;
+        }
+        if (corruptionEngine != null) {
+            corruptionEngine.dispose();
+            corruptionEngine = null;
+        }
+        if (debugRenderer != null) {
+            debugRenderer.dispose();
+            debugRenderer = null;
+        }
+        if (world != null) {
+            // Erst hier freigeben: vorher werden keine Bodies mehr verwendet.
+            world.dispose();
+            world = null;
+        }
+        if (uiStage != null) {
+            uiStage.dispose();
+            uiStage = null;
+        }
+        // Wilde Yokai besitzen keine GPU-Ressourcen (nur geliehene TextureRegions);
+        // es genuegt, die Liste dieses Screenaufbaus zu leeren.
+        yokaiEntities.clear();
+        collisionRects.clear();
+        // Skin, Atlas, Panel-/Button-Textur und das Spieler-Sheet sind geliehen
+        // (Eigentum: GameAssets) und werden hier bewusst NICHT disposet.
     }
 }

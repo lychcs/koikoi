@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Dialog;
@@ -24,6 +25,8 @@ import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
+import com.badlogic.gdx.utils.viewport.Viewport;
+import com.lychcs.koikoi.graphics.GameAssets;
 import com.lychcs.koikoi.model.Card;
 import com.lychcs.koikoi.model.Rank;
 import com.lychcs.koikoi.model.Season;
@@ -33,12 +36,14 @@ import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.omamori.Rarity;
 import com.lychcs.koikoi.model.shikigami.Shikigami;
+import com.lychcs.koikoi.model.shikigami.ShikigamiInfo;
 import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.run.YakuProgression;
 import com.lychcs.koikoi.scoring.ScoreFormat;
 import com.lychcs.koikoi.scoring.YakuType;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 public class InventoryOverlay extends Group {
@@ -54,6 +59,26 @@ public class InventoryOverlay extends Group {
     private static final Color COLOR_TRACK = new Color(0.30f, 0.25f, 0.21f, 1f);
     private static final Color COLOR_ACCENT_TEXT = new Color(0.86f, 0.44f, 0.38f, 1f);
 
+    /** Anteil der Panelbreite fuer die Detailspalte (ca. 35 %). */
+    private static final float DETAIL_WIDTH_RATIO = 0.35f;
+    /** Untere Grenze der Detailspalte relativ zur Panelbreite: bewusst kein fester
+     *  Pixelwert, damit das Panel bei kleinen Stage-Aufloesungen nicht ueberlaeuft. */
+    private static final float DETAIL_MIN_WIDTH_RATIO = 0.24f;
+    /** Sicherer Aussenabstand des Hauptpanels zum Stage-Rand. */
+    private static final float PANEL_MARGIN = 18f;
+
+    /** Statuslabel eines aktiven Omamori. */
+    private static final String STATUS_ACTIVE = "Active";
+
+    /** Statuslabel eines inaktiven Omamori. */
+    private static final String STATUS_INACTIVE = "Inactive";
+
+    /** Meldung, wenn kein weiterer Omamori-Platz frei ist. */
+    private static final String SLOTS_FULL_TEXT = "All active slots are occupied.";
+
+    /** Meldung, wenn ein Reserve-Begleiter nicht in den vollen Beutel verschoben werden kann. */
+    private static final String BAG_FULL_TEXT = "Bag is full: no free slot for another Shikigami.";
+
     private final RunSession runSession;
     private final Skin skin;
     private final TextureAtlas atlas;
@@ -68,6 +93,7 @@ public class InventoryOverlay extends Group {
     private final Drawable accentDrawable;
     private final Drawable trackDrawable;
 
+    private final Image dimBackground;
     private final Table root;
     private final Table mainPanel;
     private final Table tabBar;
@@ -120,11 +146,12 @@ public class InventoryOverlay extends Group {
         this.accentDrawable = skin.newDrawable("white", COLOR_ACCENT);
         this.trackDrawable = skin.newDrawable("white", COLOR_TRACK);
 
-        setSize(1280f, 720f);
+        // Startgroesse 0: die tatsaechliche Groesse kommt ausschliesslich aus
+        // syncSizeToStage() (Stage-Viewport), sobald das Overlay in der Stage liegt.
+        setSize(0f, 0f);
         setVisible(false);
 
-        Image dimBackground = new Image(skin.getRegion("white"));
-        dimBackground.setFillParent(true);
+        dimBackground = new Image(skin.getRegion("white"));
         dimBackground.setColor(0f, 0f, 0f, 0.72f);
         dimBackground.setTouchable(Touchable.enabled);
         dimBackground.addListener(new ClickListener() {
@@ -135,10 +162,12 @@ public class InventoryOverlay extends Group {
         });
         addActor(dimBackground);
 
-        // Wurzel: fuellt die sichere Stage-Flaeche mit Aussenabstand.
+        // Wurzel: fuellt die sichere Stage-Flaeche mit Aussenabstand. Die Bounds
+        // werden in syncSizeToStage() gesetzt - bewusst nicht ueber
+        // setFillParent(true), weil der direkte Parent eine Group ohne eigene
+        // Layoutvalidierung ist und beim Einfuegen in die Stage noch 0x0 gross war.
         root = new Table();
-        root.setFillParent(true);
-        root.pad(18f);
+        root.pad(PANEL_MARGIN);
         addActor(root);
 
         mainPanel = new Table();
@@ -154,7 +183,7 @@ public class InventoryOverlay extends Group {
         root.add(mainPanel).grow().maxWidth(1240f).maxHeight(700f);
 
         // Kopfzeile: Titel, Waehrungen und Exit - der Exit bleibt immer sichtbar.
-        Label titleLabel = new Label("INVENTAR", skin);
+        Label titleLabel = new Label("INVENTORY", skin);
         titleLabel.setFontScale(1.3f);
         titleLabel.setColor(COLOR_GOLD);
 
@@ -179,7 +208,7 @@ public class InventoryOverlay extends Group {
         mainPanel.add(separatorLine()).growX().height(2f).padTop(6f).padBottom(10f).row();
 
         // Tab-Leiste: jeder Tab waechst mit der Breite und ragt nie aus dem Panel.
-        deckTab = tabButton("Karten", this::showDeckTab);
+        deckTab = tabButton("Cards", this::showDeckTab);
         hankoTab = tabButton("Hanko", this::showHankoTab);
         omamoriTab = tabButton("Omamori", this::showOmamoriTab);
         shikigamiTab = tabButton("Shikigami", this::showShikigamiTab);
@@ -212,8 +241,8 @@ public class InventoryOverlay extends Group {
         Table body = new Table();
         body.add(collectionScroll).grow();
         body.add(detailScroll)
-            .width(Value.percentWidth(0.35f, mainPanel))
-            .minWidth(330f)
+            .width(Value.percentWidth(DETAIL_WIDTH_RATIO, mainPanel))
+            .minWidth(Value.percentWidth(DETAIL_MIN_WIDTH_RATIO, mainPanel))
             .growY()
             .padLeft(14f);
         mainPanel.add(body).grow().row();
@@ -253,7 +282,7 @@ public class InventoryOverlay extends Group {
     /** Setzt das Detailpanel auf den Ausgangshinweis zurueck. */
     private void showDetailPlaceholder() {
         Table panel = beginDetail("Details", null);
-        addDetailText(panel, "Waehle einen Eintrag in der Sammlung.", COLOR_MUTED, 0.8f);
+        addDetailText(panel, "Select an entry from the collection.", COLOR_MUTED, 0.8f);
     }
 
     /**
@@ -374,15 +403,9 @@ public class InventoryOverlay extends Group {
         panel.add(row).growX().padTop(4f).row();
     }
 
-    /** Anzeigename der aktuellen Entwicklungsstufe eines Shikigami. */
+    /** Anzeigename der aktuellen Entwicklungsstufe (gemeinsame Formatierung mit dem Kampf). */
     private static String stageText(Shikigami shikigami) {
-        switch (shikigami.getStage()) {
-            case EGG: return "Ei";
-            case LEVEL_1: return "Stufe 1";
-            case LEVEL_2: return "Stufe 2";
-            case LEVEL_3: return "Stufe 3 (finale Form)";
-            default: return shikigami.getStage().name();
-        }
+        return ShikigamiInfo.stageName(shikigami);
     }
 
     // ---------------------------------------------------------------------
@@ -420,9 +443,9 @@ public class InventoryOverlay extends Group {
     /** Kurzmarkierung der Jahreszeit fuer das Kartenraster. */
     private static String shortSeason(Season season) {
         switch (season) {
-            case SPRING: return "FR";
-            case SUMMER: return "SO";
-            case AUTUMN: return "HE";
+            case SPRING: return "SP";
+            case SUMMER: return "SU";
+            case AUTUMN: return "AU";
             case WINTER: return "WI";
             default: return season.name();
         }
@@ -433,7 +456,7 @@ public class InventoryOverlay extends Group {
      * ausschliesslich aus dem zentralen Hanko-Katalog (keine Duplikate im UI).
      */
     private void showCardDetail(Card card) {
-        Table panel = beginDetail(card.name(), card.rank().name() + " · " + card.season().name());
+        Table panel = beginDetail(card.name(), card.rank().name() + " | " + card.season().name());
 
         addDetailImage(panel, atlas.findRegion(card.id().name()), 150f, 210f);
         addDetailBadges(panel,
@@ -442,8 +465,8 @@ public class InventoryOverlay extends Group {
 
         addDetailSection(panel, "Hanko");
         if (!card.hasHanko()) {
-            addDetailText(panel, "Kein Hanko", COLOR_CREAM, 0.84f);
-            addDetailText(panel, "Kein zusätzlicher Effekt", COLOR_MUTED, 0.78f);
+            addDetailText(panel, "No Hanko", COLOR_CREAM, 0.84f);
+            addDetailText(panel, "No additional effect", COLOR_MUTED, 0.78f);
         } else {
             addDetailText(panel, HankoCatalog.getName(card.effect()), COLOR_CREAM, 0.86f);
             addDetailText(panel, HankoCatalog.getDescription(card.effect()), COLOR_MUTED, 0.78f);
@@ -451,8 +474,8 @@ public class InventoryOverlay extends Group {
 
         if (selectedHankoToApply != null) {
             addDetailText(panel,
-                "Hanko-Modus: Klicke diese Karte im Raster, um "
-                    + HankoCatalog.getName(selectedHankoToApply) + " anzuwenden.",
+                "Hanko mode: click this card in the grid to apply "
+                    + HankoCatalog.getName(selectedHankoToApply) + ".",
                 COLOR_GOLD, 0.74f);
         }
     }
@@ -483,11 +506,51 @@ public class InventoryOverlay extends Group {
         }
     }
 
-    /** Haelt das Overlay deckungsgleich mit der sicheren Stage-Flaeche. */
+    /**
+     * Haelt das Overlay deckungsgleich mit der sicheren Stage-Flaeche. Es werden
+     * ausschliesslich die Weltkoordinaten des Stage-Viewports verwendet (nicht
+     * {@code Gdx.graphics.getWidth()/getHeight()}), damit auch eine skalierte
+     * Viewport-Welt vollstaendig abgedeckt wird. Danach werden die Bounds von
+     * Abdunkler und Wurzel-Tabelle gesetzt und das Layout neu validiert.
+     */
     private void syncSizeToStage() {
-        Group stageRoot = getStage() == null ? null : getStage().getRoot();
-        if (stageRoot != null) {
-            setSize(stageRoot.getWidth(), stageRoot.getHeight());
+        Stage stage = getStage();
+        if (stage == null) {
+            return;
+        }
+
+        Viewport viewport = stage.getViewport();
+        float width = viewport.getWorldWidth();
+        float height = viewport.getWorldHeight();
+        if (width <= 0f || height <= 0f) {
+            return;
+        }
+
+        setPosition(0f, 0f);
+        setSize(width, height);
+
+        // Hintergrund und Wurzel fuellen die vollstaendige Stage-Flaeche.
+        dimBackground.setBounds(0f, 0f, width, height);
+        root.setBounds(0f, 0f, width, height);
+
+        // Nach einer Groessenaenderung muss die Hierarchie neu validiert werden;
+        // sonst behaelt die Tabelle ihre alte Groesse und das Panel kollabiert.
+        root.invalidateHierarchy();
+        root.validate();
+    }
+
+    /**
+     * Setzt die Groesse nur bei einer echten Aenderung (Resize, Vollbildwechsel).
+     * Dabei entstehen keine neuen Objekte pro Frame.
+     */
+    private void syncSizeToStageIfNeeded() {
+        Stage stage = getStage();
+        if (stage == null) {
+            return;
+        }
+        Viewport viewport = stage.getViewport();
+        if (viewport.getWorldWidth() != getWidth() || viewport.getWorldHeight() != getHeight()) {
+            syncSizeToStage();
         }
     }
 
@@ -495,14 +558,8 @@ public class InventoryOverlay extends Group {
     public void act(float delta) {
         super.act(delta);
 
-        // Responsiv auch nach einem Resize, ohne pro Frame Objekte zu erzeugen.
-        if (getStage() != null) {
-            Group stageRoot = getStage().getRoot();
-            if (stageRoot != null
-                && (getWidth() != stageRoot.getWidth() || getHeight() != stageRoot.getHeight())) {
-                setSize(stageRoot.getWidth(), stageRoot.getHeight());
-            }
-        }
+        // Responsiv auch nach einem Resize oder Vollbildwechsel.
+        syncSizeToStageIfNeeded();
     }
 
     public boolean isOpen() {
@@ -539,8 +596,8 @@ public class InventoryOverlay extends Group {
 
         if (selectedHankoToApply != null) {
             Label hint = new Label(
-                "Hanko-Modus: Karte waehlen fuer " + HankoCatalog.getName(selectedHankoToApply)
-                    + ". Ein vorhandener Stempel wird ersetzt.", skin);
+                "Hanko mode: choose a card for " + HankoCatalog.getName(selectedHankoToApply)
+                    + ". An existing Seal is replaced.", skin);
             hint.setWrap(true);
             hint.setFontScale(0.78f);
             hint.setColor(COLOR_GOLD);
@@ -566,7 +623,7 @@ public class InventoryOverlay extends Group {
         shelf.setBackground(tileDrawable);
         shelf.pad(10f);
 
-        shelf.add(new Label("Hanko anwenden:", skin)).padRight(15f);
+        shelf.add(new Label("Apply Hanko:", skin)).padRight(15f);
 
         Map<HankoEffect, Integer> counts = new EnumMap<>(HankoEffect.class);
         for (HankoEffect effect : runSession.getPurchasedHankos()) {
@@ -611,7 +668,7 @@ public class InventoryOverlay extends Group {
         }
 
         if (selectedHankoToApply != null) {
-            TextButton cancel = new TextButton("Abbrechen", buttonStyle);
+            TextButton cancel = new TextButton("Cancel", buttonStyle);
             cancel.addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
@@ -666,7 +723,7 @@ public class InventoryOverlay extends Group {
 
         cardBox.add(cardStack).size(60f, 106f).padBottom(2f).row();
 
-        Label marker = new Label(card.rank().name().charAt(0) + " · " + shortSeason(card.season()), skin);
+        Label marker = new Label(card.rank().name().charAt(0) + " | " + shortSeason(card.season()), skin);
         marker.setFontScale(0.6f);
         marker.setColor(selectedHanko != null && !canApply ? Color.GRAY : COLOR_MUTED);
         cardBox.add(marker).row();
@@ -707,7 +764,7 @@ public class InventoryOverlay extends Group {
 
         hankoDialogOpen = true;
 
-        Dialog dialog = new Dialog("Hanko anwenden", skin) {
+        Dialog dialog = new Dialog("Apply Hanko", skin) {
             @Override
             protected void result(Object object) {
                 hankoDialogOpen = false;
@@ -719,11 +776,11 @@ public class InventoryOverlay extends Group {
 
         StringBuilder message = new StringBuilder();
         message.append(HankoCatalog.getName(effect))
-            .append(" auf\n")
+            .append(" on\n")
             .append(targetCard.name())
-            .append(" anwenden?\n\n");
+            .append("?\n\n");
         if (targetCard.hasHanko()) {
-            message.append("Der vorhandene Stempel wird ersetzt.\n\n");
+            message.append("The existing Seal is replaced.\n\n");
         }
         message.append(HankoCatalog.getDescription(effect));
 
@@ -732,8 +789,8 @@ public class InventoryOverlay extends Group {
         text.setWrap(true);
 
         dialog.getContentTable().add(text).width(420f).pad(20f);
-        dialog.button("Abbrechen", false);
-        dialog.button("Anwenden", true);
+        dialog.button("Cancel", false);
+        dialog.button("Apply", true);
         dialog.show(getStage());
     }
 
@@ -770,7 +827,7 @@ public class InventoryOverlay extends Group {
         String regionName = HankoCatalog.getAtlasRegionName(effect);
         TextureRegion region = regionName == null ? null : atlas.findRegion(regionName);
         if (region == null) {
-            Gdx.app.error("InventoryOverlay", "Hanko-Atlas-Region fehlt: " + regionName + " (Hanko " + effect + ")");
+            Gdx.app.error("InventoryOverlay", "Hanko atlas region missing: " + regionName + " (Hanko " + effect + ")");
         }
         return region;
     }
@@ -782,7 +839,7 @@ public class InventoryOverlay extends Group {
         updateHankoTabBadge();
 
         if (runSession.getPurchasedHankos().isEmpty()) {
-            Label empty = new Label("Keine Hankos im Vorrat.\nKaufe sie im Tengu-Markt.", skin);
+            Label empty = new Label("No Hanko in stock.\nBuy them at the Tengu Market.", skin);
             empty.setAlignment(Align.center);
             empty.setColor(COLOR_MUTED);
             contentArea.add(empty).growX().pad(20f).row();
@@ -828,7 +885,7 @@ public class InventoryOverlay extends Group {
         label.setColor(COLOR_CREAM);
         tile.add(label).row();
 
-        Label stock = new Label("Bestand: " + count, skin);
+        Label stock = new Label("Owned: " + count, skin);
         stock.setFontScale(0.62f);
         stock.setColor(COLOR_MUTED);
         tile.add(stock).row();
@@ -847,16 +904,16 @@ public class InventoryOverlay extends Group {
 
     /** Hanko-Details mit Beschreibung, Anwendungshinweis und Stempel-Aktion. */
     private void showHankoDetail(HankoEffect effect, int count) {
-        Table panel = beginDetail(HankoCatalog.getName(effect), "Siegel · Bestand " + count);
+        Table panel = beginDetail(HankoCatalog.getName(effect), "Seal | Owned " + count);
         addDetailImage(panel, findHankoRegion(effect), 96f, 96f);
         addDetailText(panel, HankoCatalog.getDescription(effect), COLOR_MUTED, 0.8f);
 
-        addDetailSection(panel, "Anwenden");
+        addDetailSection(panel, "Apply");
         addDetailText(panel,
-            "Aktiviere den Stempelmodus und waehle danach eine Karte im Karten-Tab. "
-                + "Ein vorhandener Hanko wird ersetzt.", COLOR_MUTED, 0.75f);
+            "Activate seal mode, then pick a card in the Cards tab. "
+                + "An existing Hanko is replaced.", COLOR_MUTED, 0.75f);
 
-        TextButton stamp = new TextButton("Stempeln", buttonStyle);
+        TextButton stamp = new TextButton("Apply Seal", buttonStyle);
         stamp.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -877,7 +934,7 @@ public class InventoryOverlay extends Group {
         selectedTileActor = null;
 
         Label activeTitle = new Label(
-            "Aktive Plätze (" + runSession.getActiveOmamoris().size()
+            "Active Slots (" + runSession.getActiveOmamoris().size()
                 + "/" + runSession.getMaxActiveOmamoris() + ")", skin);
         activeTitle.setFontScale(0.95f);
         activeTitle.setColor(COLOR_GOLD);
@@ -894,7 +951,7 @@ public class InventoryOverlay extends Group {
                 Omamori omamori = runSession.getActiveOmamoris().get(slot);
                 addActiveOmamoriSlotContent(slotBox, omamori, slot);
             } else {
-                Label empty = new Label("Platz " + (slot + 1) + "\nLeer", skin);
+                Label empty = new Label("Slot " + (slot + 1) + "\nEmpty", skin);
                 empty.setAlignment(Align.center);
                 empty.setFontScale(0.72f);
                 empty.setColor(COLOR_MUTED);
@@ -911,13 +968,13 @@ public class InventoryOverlay extends Group {
         }
         contentArea.add(activeSlots).growX().padBottom(14f).row();
 
-        Label storageTitle = new Label("Sammlung", skin);
+        Label storageTitle = new Label("Collection", skin);
         storageTitle.setFontScale(0.95f);
         storageTitle.setColor(COLOR_GOLD);
         contentArea.add(storageTitle).growX().left().padBottom(6f).row();
 
         if (runSession.getOwnedOmamoris().isEmpty()) {
-            Label empty = new Label("Noch keine Omamori gekauft.", skin);
+            Label empty = new Label("No Omamori owned yet.", skin);
             empty.setColor(COLOR_MUTED);
             contentArea.add(empty).growX().pad(16f).row();
             fadeInCollection();
@@ -959,12 +1016,12 @@ public class InventoryOverlay extends Group {
         name.setColor(COLOR_CREAM);
         text.add(name).left().row();
 
-        Label state = new Label("Aktiv", skin);
+        Label state = new Label(STATUS_ACTIVE, skin);
         state.setFontScale(0.62f);
         state.setColor(COLOR_GOLD);
         text.add(state).left().row();
 
-        Label hint = new Label("Klick fuer Details", skin);
+        Label hint = new Label("Click for details", skin);
         hint.setFontScale(0.58f);
         hint.setColor(COLOR_MUTED);
         text.add(hint).left();
@@ -996,21 +1053,21 @@ public class InventoryOverlay extends Group {
         int slotIndex = runSession.getActiveOmamoris().indexOf(omamori);
 
         Rarity rarity = omamori.getRarity();
-        String typeLine = (rarity == null ? "unbekannt" : rarity.name())
-            + (active ? " · AKTIV · PLATZ " + (slotIndex + 1) : " · INAKTIV");
+        String typeLine = (rarity == null ? "Unknown" : rarity.name())
+            + (active ? " | ACTIVE | SLOT " + (slotIndex + 1) : " | INACTIVE");
 
         Table panel = beginDetail(omamori.getName(), typeLine);
         addDetailImage(panel, findOmamoriRegion(omamori), 96f, 128f);
         addDetailBadges(panel,
-            active ? "Aktiv" : "Inaktiv",
-            slotIndex >= 0 ? "Platz " + (slotIndex + 1) + "/" + runSession.getMaxActiveOmamoris() : "nicht belegt");
+            active ? STATUS_ACTIVE : STATUS_INACTIVE,
+            slotIndex >= 0 ? "Slot " + (slotIndex + 1) + "/" + runSession.getMaxActiveOmamoris() : "not assigned");
 
-        addDetailSection(panel, "Wirkung");
+        addDetailSection(panel, "Effect");
         addDetailText(panel, omamori.getDescription(), COLOR_MUTED, 0.8f);
 
-        addDetailSection(panel, "Aktionen");
+        addDetailSection(panel, "Actions");
 
-        TextButton activate = new TextButton("Aktivieren", buttonStyle);
+        TextButton activate = new TextButton("Activate", buttonStyle);
         activate.setDisabled(active || slotsFull);
         activate.getColor().a = activate.isDisabled() ? 0.45f : 1f;
         activate.addListener(new ClickListener() {
@@ -1029,12 +1086,12 @@ public class InventoryOverlay extends Group {
 
         if (activate.isDisabled()) {
             addDetailText(panel,
-                active ? "Dieses Omamori ist bereits aktiv."
-                    : "Alle aktiven Plätze sind belegt.",
+                active ? "This Omamori is already active."
+                    : SLOTS_FULL_TEXT,
                 COLOR_ACCENT_TEXT, 0.74f);
         }
 
-        TextButton deactivate = new TextButton("Deaktivieren", buttonStyle);
+        TextButton deactivate = new TextButton("Deactivate", buttonStyle);
         deactivate.setDisabled(!active);
         deactivate.getColor().a = deactivate.isDisabled() ? 0.45f : 1f;
         deactivate.addListener(new ClickListener() {
@@ -1049,7 +1106,7 @@ public class InventoryOverlay extends Group {
         });
         addDetailPrimaryAction(panel, deactivate);
 
-        TextButton left = new TextButton("Nach links", buttonStyle);
+        TextButton left = new TextButton("Move Left", buttonStyle);
         left.setDisabled(slotIndex <= 0);
         left.getColor().a = left.isDisabled() ? 0.45f : 1f;
         left.addListener(new ClickListener() {
@@ -1061,7 +1118,7 @@ public class InventoryOverlay extends Group {
             }
         });
 
-        TextButton right = new TextButton("Nach rechts", buttonStyle);
+        TextButton right = new TextButton("Move Right", buttonStyle);
         right.setDisabled(slotIndex < 0
             || slotIndex >= runSession.getActiveOmamoris().size() - 1);
         right.getColor().a = right.isDisabled() ? 0.45f : 1f;
@@ -1103,7 +1160,7 @@ public class InventoryOverlay extends Group {
         text.left();
         text.setTouchable(Touchable.disabled);
 
-        Label state = new Label(active ? "Aktiv" : "Inaktiv", skin);
+        Label state = new Label(active ? STATUS_ACTIVE : STATUS_INACTIVE, skin);
         state.setFontScale(0.68f);
         state.setColor(active ? COLOR_GOLD : COLOR_MUTED);
 
@@ -1125,13 +1182,13 @@ public class InventoryOverlay extends Group {
         text.add(description).growX().left().row();
 
         if (!active && slotsFull) {
-            Label full = new Label("Alle aktiven Plätze sind belegt.", skin);
+            Label full = new Label(SLOTS_FULL_TEXT, skin);
             full.setFontScale(0.68f);
             full.setColor(COLOR_ACCENT_TEXT);
             text.add(full).growX().left().padTop(2f).row();
         }
 
-        Label hint = new Label("Klick fuer Details und Aktionen", skin);
+        Label hint = new Label("Click for details and actions", skin);
         hint.setFontScale(0.66f);
         hint.setColor(COLOR_MUTED);
         text.add(hint).left().padTop(2f);
@@ -1165,7 +1222,7 @@ public class InventoryOverlay extends Group {
         contentArea.clearChildren();
         selectedTileActor = null;
 
-        Label title = new Label("Yaku-Fortschritt", skin);
+        Label title = new Label("Yaku Progress", skin);
         title.setFontScale(0.95f);
         title.setColor(COLOR_GOLD);
         contentArea.add(title).growX().left().padBottom(6f).row();
@@ -1198,7 +1255,7 @@ public class InventoryOverlay extends Group {
         info.add(name).left().row();
 
         Label level = new Label("Level " + progression.getLevel(type)
-            + " · XP " + progression.getXp(type) + " / " + required, skin);
+            + " | XP " + progression.getXp(type) + " / " + required, skin);
         level.setFontScale(0.7f);
         level.setColor(COLOR_MUTED);
         info.add(level).left().row();
@@ -1206,7 +1263,7 @@ public class InventoryOverlay extends Group {
         info.add(createCompactProgress(progression.getXp(type), required)).growX().left().padTop(2f).row();
 
         Label values = new Label(ScoreFormat.format(progression.getUpgradedChips(type))
-            + " Chips × " + ScoreFormat.format(progression.getUpgradedMult(type)) + " Mult", skin);
+            + " Chips x " + ScoreFormat.format(progression.getUpgradedMult(type)) + " Mult", skin);
         values.setFontScale(0.7f);
         values.setColor(COLOR_GOLD);
         info.add(values).left().padTop(2f);
@@ -1250,23 +1307,23 @@ public class InventoryOverlay extends Group {
             "XP " + progression.getXp(type) + " / " + required,
             "Level " + level);
 
-        addDetailSection(panel, "Fortschritt");
+        addDetailSection(panel, "Progress");
         addDetailProgress(panel, progression.getXp(type), required);
 
-        addDetailSection(panel, "Aktuell");
-        addDetailText(panel, ScoreFormat.format(progression.getUpgradedChips(type)) + " Chips × "
+        addDetailSection(panel, "Current");
+        addDetailText(panel, ScoreFormat.format(progression.getUpgradedChips(type)) + " Chips x "
             + ScoreFormat.format(progression.getUpgradedMult(type)) + " Mult", COLOR_CREAM, 0.85f);
-        addDetailText(panel, "Basis auf Level 1: "
-            + ScoreFormat.format(type.getBaseChips()) + " Chips × "
+        addDetailText(panel, "Base at Level 1: "
+            + ScoreFormat.format(type.getBaseChips()) + " Chips x "
             + ScoreFormat.format(type.getBaseMult()) + " Mult", COLOR_MUTED, 0.76f);
 
-        addDetailSection(panel, "Nächstes Level");
+        addDetailSection(panel, "Next Level");
         addDetailText(panel, "+" + ScoreFormat.format(YakuProgression.CHIPS_PER_LEVEL) + " Chips",
             COLOR_CREAM, 0.8f);
         addDetailText(panel, "+" + ScoreFormat.format(YakuProgression.MULT_PER_LEVEL) + " Mult",
             COLOR_CREAM, 0.8f);
 
-        addDetailSection(panel, "Bedingung");
+        addDetailSection(panel, "Condition");
         addDetailText(panel, type.getDescription(), COLOR_MUTED, 0.78f);
     }
 
@@ -1285,25 +1342,58 @@ public class InventoryOverlay extends Group {
         contentArea.clearChildren();
         selectedTileActor = null;
 
-        if (runSession.getShikigamiBag().isEmpty()) {
-            Label empty = new Label("Keine Shikigami im Beutel.", skin);
+        List<Shikigami> bag = runSession.getShikigamiBag();
+        List<Shikigami> reserve = runSession.getShikigamiReserve();
+
+        if (bag.isEmpty() && reserve.isEmpty()) {
+            Label empty = new Label("No Shikigami in the bag.", skin);
             empty.setColor(COLOR_MUTED);
             contentArea.add(empty).growX().pad(16f).row();
             fadeInCollection();
             return;
         }
 
+        Label bagTitle = new Label("Bag (" + bag.size() + "/" + runSession.getMaxShikigamiBag() + ")", skin);
+        bagTitle.setFontScale(0.95f);
+        bagTitle.setColor(COLOR_GOLD);
+        contentArea.add(bagTitle).growX().left().padBottom(6f).row();
+
+        if (bag.isEmpty()) {
+            Label emptyBag = new Label("No Shikigami in the bag.", skin);
+            emptyBag.setColor(COLOR_MUTED);
+            contentArea.add(emptyBag).growX().pad(10f).row();
+        } else {
+            contentArea.add(createShikigamiGrid(bag)).growX().padBottom(14f).row();
+        }
+
+        Label reserveTitle = new Label("Reserve (" + reserve.size() + ")", skin);
+        reserveTitle.setFontScale(0.95f);
+        reserveTitle.setColor(COLOR_GOLD);
+        contentArea.add(reserveTitle).growX().left().padBottom(6f).row();
+
+        if (reserve.isEmpty()) {
+            Label emptyReserve = new Label("Reserve is empty.", skin);
+            emptyReserve.setColor(COLOR_MUTED);
+            contentArea.add(emptyReserve).growX().pad(10f).row();
+        } else {
+            contentArea.add(createShikigamiGrid(reserve)).growX().row();
+        }
+
+        fadeInCollection();
+    }
+
+    /** Portraet-Raster der uebergebenen Begleiter (bewusst nicht draggable). */
+    private Table createShikigamiGrid(List<Shikigami> shikigamis) {
         Table grid = new Table();
         int column = 0;
-        for (Shikigami shikigami : runSession.getShikigamiBag()) {
+        for (Shikigami shikigami : shikigamis) {
             grid.add(createShikigamiTile(shikigami)).pad(6f);
             column++;
             if (column % 3 == 0) {
                 grid.row();
             }
         }
-        contentArea.add(grid).growX().row();
-        fadeInCollection();
+        return grid;
     }
 
     /**
@@ -1325,6 +1415,10 @@ public class InventoryOverlay extends Group {
             // Erschoepfte Shikigami sind sichtbar gedaempft.
             image.setColor(1f, 1f, 1f, shikigami.isExhausted() ? 0.5f : 1f);
             tile.add(image).size(74f, 130f).row();
+        } else {
+            Gdx.app.error("InventoryOverlay", "Shikigami atlas region missing: "
+                + shikigami.getAtlasRegionName() + " in " + GameAssets.GAME_ATLAS
+                + " (using text-only tile).");
         }
 
         Label name = new Label(shikigami.getName(), skin);
@@ -1332,8 +1426,8 @@ public class InventoryOverlay extends Group {
         name.setColor(shikigami.isExhausted() ? COLOR_MUTED : COLOR_CREAM);
         tile.add(name).row();
 
-        Label badge = new Label("Lv " + shikigami.getLevel() + " · "
-            + (shikigami.isExhausted() ? "Erschöpft" : "Bereit"), skin);
+        Label badge = new Label("Lv " + shikigami.getLevel() + " | "
+            + (shikigami.isExhausted() ? "Exhausted" : "Ready"), skin);
         badge.setFontScale(0.62f);
         badge.setColor(shikigami.isExhausted() ? COLOR_MUTED : COLOR_GOLD);
         tile.add(badge).row();
@@ -1352,27 +1446,56 @@ public class InventoryOverlay extends Group {
 
     private void showShikigamiDetail(Shikigami shikigami) {
         int required = shikigami.getXpToNextLevel();
-        String typeLine = stageText(shikigami) + " · LEVEL " + shikigami.getLevel()
-            + " · " + (shikigami.isExhausted() ? "ERSCHÖPFT" : "BEREIT");
+        boolean reserve = runSession.getShikigamiReserve().contains(shikigami);
 
-        Table panel = beginDetail(shikigami.getName(), typeLine);
+        Table panel = beginDetail(shikigami.getName(), ShikigamiInfo.inventoryTypeLine(shikigami));
         addDetailImage(panel, atlas.findRegion(shikigami.getAtlasRegionName()), 110f, 190f);
         addDetailBadges(panel,
             "Level " + shikigami.getLevel() + "/" + Shikigami.MAX_LEVEL,
-            shikigami.isExhausted() ? "Erschöpft" : "Bereit");
+            ShikigamiInfo.statusName(shikigami),
+            reserve ? "Reserve" : "Bag",
+            "Species: " + ShikigamiInfo.speciesName(shikigami));
 
-        addDetailSection(panel, "Erfahrung");
+        addDetailSection(panel, "XP");
         if (required > 0) {
-            addDetailText(panel, "XP " + shikigami.getCurrentXp() + " / " + required,
-                COLOR_CREAM, 0.8f);
+            addDetailText(panel, ShikigamiInfo.xpLine(shikigami), COLOR_CREAM, 0.8f);
             addDetailProgress(panel, shikigami.getCurrentXp(), required);
         } else {
-            addDetailText(panel, "XP " + shikigami.getCurrentXp(), COLOR_CREAM, 0.8f);
-            addDetailText(panel, "Maximale Entwicklung erreicht", COLOR_GOLD, 0.8f);
+            addDetailText(panel, ShikigamiInfo.xpLine(shikigami), COLOR_CREAM, 0.8f);
+            addDetailText(panel, "Maximum evolution reached", COLOR_GOLD, 0.8f);
         }
 
-        addDetailSection(panel, "Fähigkeit");
+        addDetailSection(panel, "Ability");
         addDetailText(panel, shikigami.getName(), COLOR_CREAM, 0.84f);
-        addDetailText(panel, shikigami.getDescription(), COLOR_MUTED, 0.78f);
+        addDetailText(panel, ShikigamiInfo.abilityLine(shikigami), COLOR_MUTED, 0.78f);
+
+        // Klartextgrund, falls der Begleiter gerade nicht einsetzbar ist.
+        String reason = ShikigamiInfo.unusableReason(shikigami, reserve);
+        if (reason != null) {
+            addDetailText(panel, reason, COLOR_ACCENT_TEXT, 0.76f);
+        }
+
+        // Reserve: minimaler, sicherer Transfer in den aktiven Beutel. Eine vollstaendige
+        // Austausch-UI (Beutel zurueck in die Reserve) ist bewusst noch nicht umgesetzt.
+        if (reserve) {
+            boolean bagHasSpace = runSession.getShikigamiBag().size() < runSession.getMaxShikigamiBag();
+            TextButton moveToBag = new TextButton("Move to Bag", buttonStyle);
+            moveToBag.setDisabled(!bagHasSpace);
+            moveToBag.getColor().a = moveToBag.isDisabled() ? 0.45f : 1f;
+            moveToBag.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    if (!runSession.moveReserveShikigamiToBag(shikigami)) {
+                        return;
+                    }
+                    showShikigamiTab();
+                    showShikigamiDetail(shikigami);
+                }
+            });
+            addDetailPrimaryAction(panel, moveToBag);
+            if (!bagHasSpace) {
+                addDetailText(panel, BAG_FULL_TEXT, COLOR_ACCENT_TEXT, 0.74f);
+            }
+        }
     }
 }

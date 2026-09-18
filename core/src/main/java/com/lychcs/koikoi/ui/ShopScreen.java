@@ -22,6 +22,7 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.graphics.FontManager;
+import com.lychcs.koikoi.graphics.GameAssets;
 import com.lychcs.koikoi.model.hanko.HankoCatalog;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
@@ -38,27 +39,44 @@ public class ShopScreen extends ScreenAdapter {
 
     private record PurchaseButton(TextButton button, int price) {}
 
+    /** Anzeigetext eines bereits gekauften Omamori-Slots. */
+    private static final String SOLD_OMAMORI_TEXT = "PURCHASED - IN STORAGE";
+
+    /** Anzeigetext eines bereits gekauften Hanko-Slots. */
+    private static final String SOLD_HANKO_TEXT = "PURCHASED - HANKO STOCK";
+
+    /** Anzeigetext, wenn ein Omamori bereits im Lager liegt. */
+    private static final String ALREADY_IN_STORAGE_TEXT = "ALREADY IN STORAGE";
+
     private final Stage stage;
     private final RunSession runSession;
     private final ShopState shopState;
     private final List<PurchaseButton> purchaseButtons = new ArrayList<>();
 
+    /** Geliehene, global verwaltete Assets (Eigentum: GameAssets). */
+    private GameAssets assets;
     private Skin skin;
     private TextureAtlas atlas;
+    /** Screen-lokaler, saisonabhaengiger Hintergrund. */
     private Texture background;
-    private Texture panelTex;
-    private Texture buttonTex;
     private NinePatchDrawable panelBackground;
     private TextButton.TextButtonStyle indieButtonStyle;
 
     private Label monLabel;
 
-    public ShopScreen(RunSession runSession) {
+    /** Schutz gegen Mehrfach-Dispose durch den Screen-Manager. */
+    private boolean disposed;
+
+    public ShopScreen(RunSession runSession, GameAssets assets) {
         if (runSession == null) {
-            throw new IllegalArgumentException("runSession darf nicht null sein");
+            throw new IllegalArgumentException("runSession must not be null");
+        }
+        if (assets == null) {
+            throw new IllegalArgumentException("assets must not be null");
         }
 
         this.runSession = runSession;
+        this.assets = assets;
         // Persistenter Shopzustand: Die Angebote werden hier einmalig erzeugt und
         // bleiben beim Verlassen und erneuten Betreten dieses Shops unveraendert.
         this.shopState = runSession.getOrCreateShopState(RunSession.DEFAULT_SHOP_ID);
@@ -70,22 +88,20 @@ public class ShopScreen extends ScreenAdapter {
     }
 
     private void initAssets() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        // Geliehene, global verwaltete Assets: kein Laden und kein Dispose hier.
+        skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
 
-        atlas = new TextureAtlas(Gdx.files.internal("packed/game_assets.atlas"));
-        for (Texture texture : atlas.getTextures()) {
-            texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        }
+        atlas = assets.getAtlas(GameAssets.GAME_ATLAS);
 
+        // Screen-lokal: der Hintergrund haengt von der Jahreszeit ab.
         background = new Texture(Gdx.files.internal(getSeasonalBackgroundPath("SHOP")));
 
-        panelTex = new Texture(Gdx.files.internal("backgrounds/PANEL_PLAYING_BOARD.9.png"));
-        panelBackground = new NinePatchDrawable(new NinePatch(panelTex, 20, 20, 20, 20));
+        // NinePatch-Drawables verweisen nur auf die gemeinsamen Texturen.
+        panelBackground = assets.newPanelDrawable();
 
-        buttonTex = new Texture(Gdx.files.internal("backgrounds/BUTTONS_PLAYING_BOARD.9.png"));
         indieButtonStyle = new TextButton.TextButtonStyle();
-        indieButtonStyle.up = new NinePatchDrawable(new NinePatch(buttonTex, 15, 15, 15, 15));
+        indieButtonStyle.up = assets.newButtonDrawable();
         indieButtonStyle.down = ((NinePatchDrawable) indieButtonStyle.up).tint(Color.LIGHT_GRAY);
         indieButtonStyle.font = FontManager.getFont();
         indieButtonStyle.fontColor = COLOR_TEXT_MAIN;
@@ -117,9 +133,9 @@ public class ShopScreen extends ScreenAdapter {
         for (int slot = 0; slot < ShopState.OMAMORI_OFFER_COUNT; slot++) {
             Table offerCard;
             if (slot >= omamoriOffers.size()) {
-                offerCard = createPlaceholderCard("Alle verfuegbaren Omamori wurden gesammelt.");
+                offerCard = createPlaceholderCard("All available Omamori have been collected.");
             } else if (shopState.isOmamoriSold(slot)) {
-                offerCard = createSoldCard("GEKAUFT - IM LAGER");
+                offerCard = createSoldCard(SOLD_OMAMORI_TEXT);
             } else {
                 offerCard = createOmamoriCard(omamoriOffers.get(slot), slot);
             }
@@ -133,7 +149,7 @@ public class ShopScreen extends ScreenAdapter {
 
         Table hankoColumn = new Table();
         hankoColumn.top();
-        Label hankoTitle = new Label("Hankos", skin);
+        Label hankoTitle = new Label("Hanko", skin);
         hankoTitle.setFontScale(1.1f);
         hankoColumn.add(hankoTitle).padBottom(10f).row();
 
@@ -142,9 +158,9 @@ public class ShopScreen extends ScreenAdapter {
         for (int slot = 0; slot < ShopState.HANKO_OFFER_COUNT; slot++) {
             Table offerCard;
             if (slot >= hankoOffers.size()) {
-                offerCard = createPlaceholderCard("Keine weiteren Hankos verfuegbar.");
+                offerCard = createPlaceholderCard("No more Hanko available.");
             } else if (shopState.isHankoSold(slot)) {
-                offerCard = createSoldCard("GEKAUFT - IM HANKO-VORRAT");
+                offerCard = createSoldCard(SOLD_HANKO_TEXT);
             } else {
                 offerCard = createHankoCard(hankoOffers.get(slot), slot);
             }
@@ -172,7 +188,7 @@ public class ShopScreen extends ScreenAdapter {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 ((KoiKoiGame) Gdx.app.getApplicationListener())
-                    .changeScreen(new OverworldScreen(runSession));
+                    .changeScreen(new OverworldScreen(runSession, assets));
             }
         });
 
@@ -215,7 +231,7 @@ public class ShopScreen extends ScreenAdapter {
             public void clicked(InputEvent event, float x, float y) {
                 if (runSession.ownsOmamori(omamori.getClass())) {
                     shopState.markOmamoriSold(slot);
-                    markSold(card, "BEREITS IM LAGER");
+                    markSold(card, ALREADY_IN_STORAGE_TEXT);
                     return;
                 }
 
@@ -233,7 +249,7 @@ public class ShopScreen extends ScreenAdapter {
                 // Ausverkauft bleibt persistent: der Slot wird nie wieder angeboten.
                 shopState.markOmamoriSold(slot);
                 updateMonDisplay();
-                markSold(card, "GEKAUFT - IM LAGER");
+                markSold(card, SOLD_OMAMORI_TEXT);
             }
         });
 
@@ -279,7 +295,7 @@ public class ShopScreen extends ScreenAdapter {
                 // Ausverkauft bleibt persistent: der Slot wird nie wieder angeboten.
                 shopState.markHankoSold(slot);
                 updateMonDisplay();
-                markSold(card, "GEKAUFT - IM HANKO-VORRAT");
+                markSold(card, SOLD_HANKO_TEXT);
             }
         });
 
@@ -389,11 +405,15 @@ public class ShopScreen extends ScreenAdapter {
 
     @Override
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+
+        // Nur screen-eigene Ressourcen freigeben.
         stage.dispose();
-        if (skin != null) skin.dispose();
         if (background != null) background.dispose();
-        if (atlas != null) atlas.dispose();
-        if (panelTex != null) panelTex.dispose();
-        if (buttonTex != null) buttonTex.dispose();
+        // Skin, Atlas, Panel-/Button-Textur sind geliehen (Eigentum: GameAssets)
+        // und werden hier bewusst NICHT disposet.
     }
 }

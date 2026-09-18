@@ -14,7 +14,7 @@ public class BlackSeal implements Hanko {
 
     @Override
     public String getDescription() {
-        return "Grants +" + (long) MULT_BONUS + " Multiplier when this card is played.";
+        return "Grants +" + (long) MULT_BONUS + " Mult when scored.";
     }
 
     @Override

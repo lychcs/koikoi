@@ -2,8 +2,10 @@ package com.lychcs.koikoi.scoring;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.lychcs.koikoi.model.Card;
+import com.lychcs.koikoi.model.hanko.BlackSeal;
 import com.lychcs.koikoi.model.hanko.BloodSeal;
 import com.lychcs.koikoi.model.hanko.StoneSeal;
+import com.lychcs.koikoi.model.hanko.WhiteSeal;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.shikigami.Shikigami;
 
@@ -112,8 +114,8 @@ public final class ScoreCalculator {
      */
     private static void applyHanko(ScoreAccumulator acc, Card card, boolean commit) {
         switch (card.effect()) {
-            case WHITE_SEAL -> acc.addChips(card.name() + " (White Seal)", 30.0);
-            case BLACK_SEAL -> acc.addMult(card.name() + " (Black Seal)", 4.0);
+            case WHITE_SEAL -> acc.addChips(card.name() + " (White Seal)", WhiteSeal.CHIP_BONUS);
+            case BLACK_SEAL -> acc.addMult(card.name() + " (Black Seal)", BlackSeal.MULT_BONUS);
             case GOLDEN_SEAL -> {
                 if (commit) {
                     if (MathUtils.random(1, 4) == 1) {

@@ -2,6 +2,7 @@ package com.lychcs.koikoi.model.shikigami;
 
 import com.lychcs.koikoi.scoring.ScoreAccumulator;
 import com.lychcs.koikoi.scoring.ScoreContext;
+import com.lychcs.koikoi.model.shikigami.ability.ShikigamiAbility;
 
 public abstract class Shikigami {
 
@@ -40,6 +41,24 @@ public abstract class Shikigami {
     public abstract boolean activate(ScoreContext context, ScoreAccumulator acc);
 
     /**
+     * Deklarative Faehigkeit ausserhalb der Scorewertung oder {@code null}, wenn
+     * der Begleiter keine solche Faehigkeit besitzt.
+     *
+     * <p>Die Basisklasse liefert bewusst {@code null}: scorebasierte Faehigkeiten
+     * (Beispiel Oni) laufen weiterhin ausschliesslich ueber
+     * {@link #activate(ScoreContext, ScoreAccumulator)} im autoritativen
+     * {@code ScoreCalculator}. Faehigkeiten mit eigenem Ausloesezeitpunkt (Beispiel
+     * Kitsune "Fox Trick") liefern hier ein {@link ShikigamiAbility}; die UI fragt
+     * dann {@code getTiming()} und {@code getSelectionMode()} ab, statt konkrete
+     * Klassen zu pruefen oder Namen zu vergleichen.</p>
+     *
+     * <p>Das Modell enthaelt dabei keine Scene2D-Typen.</p>
+     */
+    public ShikigamiAbility getAbility() {
+        return null;
+    }
+
+    /**
      * Fügt Erfahrungspunkte hinzu.
      * Erreicht die Leiste das Maximum, steigt der Shikigami sofort ein Level auf
      * und entwickelt sich wie in Pokémon zur nächsten Stufe weiter.
@@ -62,7 +81,7 @@ public abstract class Shikigami {
     private void levelUp() {
         level++;
         evolve();
-        System.out.println("Evolving! " + baseName + " hat sich zu " + getName() + " (Stufe " + level + ") entwickelt!");
+        System.out.println("Evolving! " + baseName + " evolved into " + getName() + " (Level " + level + ")!");
     }
 
     public void evolve() {

@@ -10,8 +10,10 @@ import com.lychcs.koikoi.model.shikigami.ShikigamiStage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class RunSession {
 
@@ -48,6 +50,20 @@ public class RunSession {
 
     private final List<Shikigami> shikigamiBag = new ArrayList<>();
     private int maxShikigamiBag = 5;
+
+    /**
+     * Reserve fuer gewonnene Begleiter, die nicht mehr in den aktiven Beutel passten.
+     * Run-lokal und verlustfrei: eine gewonnene Belohnung geht nie verloren. Ein
+     * Eintrag liegt eindeutig entweder im Beutel oder in der Reserve.
+     */
+    private final List<Shikigami> shikigamiReserve = new ArrayList<>();
+
+    /**
+     * Bereits besiegte Begegnungen (stabile Encounter-Ids, run-lokal). Wiederholbare
+     * Kampfzonen bleiben davon unberuehrt; einmalige Begegnungen erscheinen danach
+     * nicht erneut.
+     */
+    private final Set<String> defeatedEncounterIds = new LinkedHashSet<>();
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
@@ -89,7 +105,7 @@ public class RunSession {
 
     public void addClearedShrine() {
         shrineRank++;
-        System.out.println("Schrein geläutert! Spirituelles Ansehen gestiegen auf Rang: " + shrineRank);
+        System.out.println("Shrine purified! Spiritual renown increased to rank: " + shrineRank);
     }
 
     public boolean hasRequiredRank(int requiredRank) {
@@ -125,10 +141,10 @@ public class RunSession {
      */
     public void enterLocation(String locationId, GameSeason season) {
         if (locationId == null) {
-            throw new IllegalArgumentException("locationId darf nicht null sein");
+            throw new IllegalArgumentException("locationId must not be null");
         }
         if (season == null) {
-            throw new IllegalArgumentException("season darf nicht null sein");
+            throw new IllegalArgumentException("season must not be null");
         }
 
         if (!locationId.equals(currentLocationId)) {
@@ -267,6 +283,115 @@ public class RunSession {
         return maxShikigamiBag;
     }
 
+    /** Run-lokale Reserve: Begleiter, die nicht in den aktiven Beutel passten. */
+    public List<Shikigami> getShikigamiReserve() {
+        return Collections.unmodifiableList(shikigamiReserve);
+    }
+
+    /**
+     * true, wenn diese Spezies bereits im Besitz ist - im aktiven Beutel
+     * <b>oder</b> in der Reserve. Damit kann dieselbe Spezies nie zweimal
+     * rekrutiert werden.
+     */
+    public boolean ownsShikigamiSpecies(String speciesId) {
+        if (speciesId == null) {
+            return false;
+        }
+        for (Shikigami shikigami : shikigamiBag) {
+            if (speciesId.equals(shikigami.getId())) {
+                return true;
+            }
+        }
+        for (Shikigami shikigami : shikigamiReserve) {
+            if (speciesId.equals(shikigami.getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Zentrale Rekrutierungsbelohnung eines gewonnenen Kampfes.
+     *
+     * <p>Wird ausschliesslich aus dem Victory-Commit des {@code GameScreen}
+     * aufgerufen - nie aus einer Vorschau/ESTIMATE-Berechnung und nie bei einer
+     * Niederlage. Die Methode ist idempotent: eine bereits besessene Spezies
+     * (Beutel oder Reserve) erzeugt keine zweite Instanz, unabhaengig davon, wie
+     * oft sie aufgerufen wird.</p>
+     *
+     * <p>Die Belohnung ist immer eine frische Instanz in der ersten gereinigten
+     * Form, Level 1, 0 XP und nicht erschoepft. Ist der Beutel voll, wandert sie
+     * verlustfrei in die Reserve.</p>
+     *
+     * @return Ergebnis mit Instanz und Ablageort; niemals {@code null}
+     */
+    public ShikigamiReward grantShikigamiReward(YokaiEncounter encounter) {
+        if (encounter == null) {
+            throw new IllegalArgumentException("encounter must not be null");
+        }
+
+        String speciesId = encounter.getSpeciesId();
+        if (ownsShikigamiSpecies(speciesId)) {
+            return ShikigamiReward.alreadyRecruited(speciesId);
+        }
+
+        if (!encounter.getSpecies().isRewardAvailable()) {
+            // Fehlende Shikigami-Klasse: dokumentierter Blocker statt erfundenem
+            // Ersatz-Begleiter und ohne Exception im Victory-Commit.
+            return ShikigamiReward.rewardUnavailable(speciesId);
+        }
+
+        Shikigami reward = encounter.newShikigamiReward();
+        if (shikigamiBag.size() < maxShikigamiBag) {
+            shikigamiBag.add(reward);
+            return ShikigamiReward.addedToBag(reward);
+        }
+
+        shikigamiReserve.add(reward);
+        return ShikigamiReward.addedToReserve(reward);
+    }
+
+    /**
+     * Verschiebt einen Reserve-Eintrag in den aktiven Beutel. Es wird keine neue
+     * Instanz erzeugt; ohne freien Platz bleibt der Eintrag unveraendert in der
+     * Reserve.
+     */
+    public boolean moveReserveShikigamiToBag(Shikigami shikigami) {
+        if (shikigami == null
+            || !shikigamiReserve.contains(shikigami)
+            || shikigamiBag.size() >= maxShikigamiBag) {
+            return false;
+        }
+
+        shikigamiReserve.remove(shikigami);
+        shikigamiBag.add(shikigami);
+        return true;
+    }
+
+    // ---------------------------------------------------------------------
+    // Begegnungen (Encounter-Zustand)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Markiert eine Begegnung als besiegt. Idempotent.
+     *
+     * @return true, wenn sie zuvor noch nicht als besiegt vermerkt war
+     */
+    public boolean markEncounterDefeated(String encounterId) {
+        if (encounterId == null || encounterId.trim().isEmpty()) {
+            throw new IllegalArgumentException("encounterId must not be blank");
+        }
+        return defeatedEncounterIds.add(encounterId);
+    }
+
+    public boolean isEncounterDefeated(String encounterId) {
+        return encounterId != null && defeatedEncounterIds.contains(encounterId);
+    }
+
+    public Set<String> getDefeatedEncounterIds() {
+        return Collections.unmodifiableSet(defeatedEncounterIds);
+    }
+
     public Deck getPlayerDeck() {
         return playerDeck;
     }
@@ -290,7 +415,7 @@ public class RunSession {
 
     public boolean spendMon(int amount) {
         if (amount < 0) {
-            throw new IllegalArgumentException("amount darf nicht negativ sein");
+            throw new IllegalArgumentException("amount must not be negative");
         }
         if (mon < amount) {
             return false;

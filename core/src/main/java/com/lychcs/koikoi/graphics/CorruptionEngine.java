@@ -25,6 +25,7 @@ public class CorruptionEngine {
 
     private boolean isPingPong = true;
     private boolean active = false;
+    private boolean disposed = false;
     private float accumulator = 0f;
 
     private boolean hasPendingInjection = false;
@@ -71,7 +72,7 @@ public class CorruptionEngine {
         simShader = new ShaderProgram(VERT, FRAG);
         if (!simShader.isCompiled()) {
             throw new GdxRuntimeException(
-                "CorruptionEngine Gray-Scott-Shader konnte nicht kompiliert werden:\n" + simShader.getLog()
+                "CorruptionEngine Gray-Scott shader could not be compiled:\n" + simShader.getLog()
             );
         }
 
@@ -97,6 +98,7 @@ public class CorruptionEngine {
     }
 
     public void reset() {
+        requireUsable("reset()");
         clearFbo(fboA);
         clearFbo(fboB);
         isPingPong = true;
@@ -109,6 +111,7 @@ public class CorruptionEngine {
     }
 
     public void injectDisturbance(float normalizedX, float normalizedY, float radius) {
+        requireUsable("injectDisturbance()");
         if (radius > 0f) {
             this.injectX = normalizedX;
             this.injectY = normalizedY;
@@ -119,6 +122,7 @@ public class CorruptionEngine {
     }
 
     public void update(float delta) {
+        requireUsable("update()");
         if (!active) {
             return;
         }
@@ -185,6 +189,7 @@ public class CorruptionEngine {
     }
 
     public Texture getCorruptionMap() {
+        requireUsable("getCorruptionMap()");
         return isPingPong ? fboA.getColorBufferTexture() : fboB.getColorBufferTexture();
     }
 
@@ -192,10 +197,33 @@ public class CorruptionEngine {
         return active;
     }
 
+    public boolean isDisposed() {
+        return disposed;
+    }
+
+    /**
+     * Gibt Batch, beide Ping-Pong-FBOs und den Simulationsshader genau einmal
+     * frei. Ein zweiter Aufruf ist wirkungslos; nach dem Dispose schlaegt jede
+     * weitere Nutzung mit klarer Meldung fehl, statt mit disposed GL-Ressourcen
+     * weiterzuarbeiten.
+     */
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        active = false;
+
         batch.dispose();
         fboA.dispose();
         fboB.dispose();
         simShader.dispose();
+    }
+
+    private void requireUsable(String action) {
+        if (disposed) {
+            throw new GdxRuntimeException(
+                "Attempted to use disposed CorruptionEngine in " + action + ".");
+        }
     }
 }

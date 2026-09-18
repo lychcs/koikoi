@@ -14,8 +14,8 @@ public class AssetPacker {
 
         settings.flattenPaths = true;
 
-        System.out.println("Packe Texturen aus assets_solo...");
+        System.out.println("Packing textures from assets_solo...");
         TexturePacker.process(settings, "assets_solo", "assets/packed", "game_assets");
-        System.out.println("Packen abgeschlossen!");
+        System.out.println("Packing complete!");
     }
 }

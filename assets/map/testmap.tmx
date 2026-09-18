@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="10" height="10" tilewidth="64" tileheight="64" infinite="0" nextlayerid="9" nextobjectid="96">
+<map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="right-down" width="10" height="10" tilewidth="64" tileheight="64" infinite="0" nextlayerid="9" nextobjectid="97">
  <properties>
-  <property name="season" value="SPRING"/>
   <property name="locationId" value="spring_village"/>
+  <property name="season" value="SPRING"/>
  </properties>
  <tileset firstgid="1" source="SPRING_TREE1.tsx"/>
  <tileset firstgid="2" source="TILESET_SPRING.tsx"/>
@@ -11,6 +11,10 @@
  <tileset firstgid="20" source="SPRING_TREE2.tsx"/>
  <tileset firstgid="21" source="ENEMY_1.tsx"/>
  <layer id="3" name="Kachelebene 1" width="10" height="10">
+  <properties>
+   <property name="locationId" value="spring_village"/>
+   <property name="season" value="SPRING"/>
+  </properties>
   <data encoding="csv">
 14,14,3,13,14,14,14,14,14,14,
 14,14,3,13,14,14,14,14,14,14,
@@ -46,11 +50,16 @@
   <object id="52" type="tree" gid="20" x="405.333" y="305.333" width="128" height="192"/>
   <object id="53" type="tree" gid="20" x="494.667" y="152" width="128" height="192"/>
   <object id="57" type="tree" gid="20" x="514.667" y="404" width="128" height="192"/>
-  <object id="91" gid="21" x="158.582" y="113.64" width="64" height="128"/>
+  <object id="96" name="kitsune_spawn_01" type="enemy1" x="192" y="64" width="64" height="64">
+   <properties>
+    <property name="encounterId" value="spring_village_kitsune_01"/>
+    <property name="speciesId" value="kitsune"/>
+   </properties>
+  </object>
+  <object id="64" type="solid" x="360.453" y="373.568" width="155.321" height="48.5249"/>
  </objectgroup>
  <objectgroup id="5" name="collision">
   <object id="59" type="solid" x="566.636" y="375.637" width="27.25" height="18.4086"/>
-  <object id="64" type="solid" x="373.749" y="370.909" width="142.911" height="35.2285"/>
   <object id="67" type="solid" x="456.886" y="280.251" width="28" height="14.1357"/>
   <object id="68" type="solid" x="527.5" y="161.5" width="19.5" height="14.5"/>
   <object id="69" type="solid" x="542.5" y="126.978" width="35" height="14.1357"/>
@@ -77,6 +86,5 @@
  </objectgroup>
  <objectgroup id="7" name="triggers">
   <object id="88" type="shop" x="419.319" y="419.823" width="48" height="19.3333"/>
-  <object id="95" type="enemy1" x="172.41" y="158.67" width="38.1163" height="31.9114"/>
  </objectgroup>
 </map>

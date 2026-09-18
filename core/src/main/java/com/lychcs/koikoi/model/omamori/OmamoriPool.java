@@ -40,7 +40,7 @@ public final class OmamoriPool {
     public static Omamori getRandomOmamori() {
         List<Omamori> result = getRandomDistinctOmamoris(1, List.of());
         if (result.isEmpty()) {
-            throw new IllegalStateException("Der Omamori-Pool ist leer.");
+            throw new IllegalStateException("The Omamori pool is empty.");
         }
         return result.get(0);
     }
