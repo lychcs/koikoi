@@ -23,20 +23,26 @@ public final class CardDeckComponent implements Component {
 
     /** The three equipped card archetypes. Colours are muted earth tones. */
     public enum CardType {
-        RED("RED", 0.80f, 0.30f, 0.20f),
-        BLUE("BLUE", 0.30f, 0.52f, 0.64f),
-        GOLD("GOLD", 0.88f, 0.70f, 0.36f);
+        // RED is the Hikari/Cherry-Blossom slot: petal ink with AoE damage.
+        RED("RED", 0.80f, 0.30f, 0.20f, '*'),
+        // BLUE is the Ribbon slot: wave/ribbon ink with mana refund.
+        BLUE("BLUE", 0.30f, 0.52f, 0.64f, '~'),
+        // GOLD is the Beast slot: horn/beast ink with heavy damage and stun.
+        GOLD("GOLD", 0.88f, 0.70f, 0.36f, 'Y');
 
         public final String label;
         public final float red;
         public final float green;
         public final float blue;
+        /** Hanafuda-flavoured ASCII projectile sigil. */
+        public final char projectileGlyph;
 
-        CardType(String label, float red, float green, float blue) {
+        CardType(String label, float red, float green, float blue, char projectileGlyph) {
             this.label = label;
             this.red = red;
             this.green = green;
             this.blue = blue;
+            this.projectileGlyph = projectileGlyph;
         }
     }
 

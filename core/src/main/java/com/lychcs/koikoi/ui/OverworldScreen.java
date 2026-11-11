@@ -590,12 +590,45 @@ public class OverworldScreen extends ScreenAdapter {
         }
         List<YakuType> pending = runSession.drainPendingYakuEffects();
         YakuEffectApplier applier = new YakuEffectApplier(ecs);
+        TransformComponent target = resolveYakuTarget();
+        float targetX = target == null ? Float.NaN : target.x;
+        float targetY = target == null ? Float.NaN : target.y;
         for (int i = 0; i < pending.size(); i++) {
             YakuType type = pending.get(i);
             YakuEffectKind kind = YakuEffects.kindFor(type);
-            applier.apply(kind);
-            Gdx.app.log("OverworldScreen", "Yaku payload " + type + " -> " + kind);
+            applier.apply(kind, targetX, targetY);
+            Gdx.app.log("OverworldScreen", "Yaku payload " + type + " -> " + kind
+                + " at " + Math.round(targetX) + "," + Math.round(targetY));
         }
+    }
+
+    /**
+     * Yaku finishers resolve on the nearest living hostile so their rune/ink
+     * bursts are visible at the combat target; without hostiles they fall back
+     * to the player.
+     */
+    private TransformComponent resolveYakuTarget() {
+        TransformComponent player = ecs.getPlayerTransform();
+        if (player == null) {
+            return null;
+        }
+        TransformComponent nearest = player;
+        float bestDistance = Float.MAX_VALUE;
+        for (Entity hostileEntity : ecs.getHostiles()) {
+            HealthComponent health = Mappers.HEALTH.get(hostileEntity);
+            TransformComponent transform = Mappers.TRANSFORM.get(hostileEntity);
+            if (health == null || transform == null || health.isDead()) {
+                continue;
+            }
+            float dx = transform.x - player.x;
+            float dy = transform.y - player.y;
+            float distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                nearest = transform;
+            }
+        }
+        return nearest;
     }
 
     private ShaderProgram compileShader(String name, String vertexPath, String fragmentPath) {
@@ -1520,9 +1553,29 @@ public class OverworldScreen extends ScreenAdapter {
                 actor.getWorldY(),
                 HOSTILE_RADIUS,
                 HOSTILE_MAX_HEALTH,
-                actor::setSpeedScale);
+                hostileBridge(actor));
             hostileActors.put(hostile, actor);
         }
+    }
+
+    /** Bridges ECS hostile effects onto the roaming ASCII actor. */
+    private static HostileComponent.HostileActor hostileBridge(OverworldYokaiEntity actor) {
+        return new HostileComponent.HostileActor() {
+            @Override
+            public void setSpeedScale(float scale) {
+                actor.setSpeedScale(scale);
+            }
+
+            @Override
+            public void flashHit(float seconds) {
+                actor.flashHit(seconds);
+            }
+
+            @Override
+            public void knockback(float directionX, float directionY, float distance) {
+                actor.knockback(directionX, directionY, distance);
+            }
+        };
     }
 
     /** Loest die Encounter-Id einer {@code Y}-Zelle auf; Fallback ist der Standard-Encounter. */
@@ -1929,8 +1982,14 @@ public class OverworldScreen extends ScreenAdapter {
             return;
         }
         batch.setShader(null);
-        avatar.render(batch, yokai.getWorldX(), yokai.getFootY(), 1f, 1f,
-            0f, false, AsciiFacing.DOWN);
+        if (yokai.isHitFlashing()) {
+            avatar.render(batch, yokai.getWorldX(), yokai.getFootY(), 1f, 1f,
+                0f, false, AsciiFacing.DOWN, Color.WHITE,
+                0.92f * yokai.getHitFlashRatio());
+        } else {
+            avatar.render(batch, yokai.getWorldX(), yokai.getFootY(), 1f, 1f,
+                0f, false, AsciiFacing.DOWN);
+        }
     }
 
     private AsciiGlyphRenderer wildYokaiAvatar(OverworldYokaiEntity yokai) {

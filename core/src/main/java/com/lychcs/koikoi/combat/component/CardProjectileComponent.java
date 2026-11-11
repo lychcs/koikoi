@@ -30,7 +30,11 @@ public final class CardProjectileComponent implements Component {
     /** Distance already travelled. */
     public float travelled;
 
-    /** Directional glyph rendered for the card ({@code > < ^ v} or {@code *}). */
+    /**
+     * Rendered card glyph. Basic throws use a directional arrow; locked W-cards
+     * replace it with a Hanafuda sigil ({@code *} petal, {@code ~} ribbon,
+     * {@code Y} beast).
+     */
     public char glyph = '*';
 
     /** Glowing parchment/gold tint. */
@@ -52,4 +56,7 @@ public final class CardProjectileComponent implements Component {
 
     /** Gold card: stun/slow duration applied to the hit hostile. */
     public float stunDuration;
+
+    /** Heavy-card knockback distance in world pixels (0 = none). */
+    public float knockbackDistance;
 }

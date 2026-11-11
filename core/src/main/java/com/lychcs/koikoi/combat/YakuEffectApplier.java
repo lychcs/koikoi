@@ -17,7 +17,9 @@ import com.lychcs.koikoi.run.YakuEffectKind;
  *
  * <p>Pure ECS logic (no screen, no GL): Karma creates a pulsing rune seal and
  * resets Q, Beast grants temporary lifesteal, Ribbon refunds mana/W, and Petal
- * spreads a slow with petal particles.</p>
+ * spreads a slow with petal particles. An optional target lets the overworld
+ * place the rune/ink bursts at the relevant combat location; without one the
+ * player position is used.</p>
  */
 public final class YakuEffectApplier {
 
@@ -43,16 +45,24 @@ public final class YakuEffectApplier {
         this.ecs = ecs;
     }
 
-    /** Applies one payload; {@link YakuEffectKind#NONE} is ignored. */
+    /** Applies one payload at the player; {@link YakuEffectKind#NONE} is ignored. */
     public void apply(YakuEffectKind kind) {
+        apply(kind, Float.NaN, Float.NaN);
+    }
+
+    /**
+     * Applies one payload with an optional overworld target. Non-finite
+     * coordinates fall back to the player position.
+     */
+    public void apply(YakuEffectKind kind, float targetX, float targetY) {
         if (kind == null) {
             return;
         }
         switch (kind) {
-            case KARMA_FIELD -> applyKarmaField();
-            case LIFESTEAL -> applyLifesteal();
-            case RESOURCE_REFUND -> applyResourceRefund();
-            case PETAL_SPREAD -> applyPetalSpread();
+            case KARMA_FIELD -> applyKarmaField(targetX, targetY);
+            case LIFESTEAL -> applyLifesteal(targetX, targetY);
+            case RESOURCE_REFUND -> applyResourceRefund(targetX, targetY);
+            case PETAL_SPREAD -> applyPetalSpread(targetX, targetY);
             case NONE -> {
             }
         }
@@ -60,15 +70,22 @@ public final class YakuEffectApplier {
 
     /** Karma: pulsing rune seal, tick damage and an instant Q-dash reset. */
     public void applyKarmaField() {
+        applyKarmaField(Float.NaN, Float.NaN);
+    }
+
+    /** Karma at an explicit target; the burst and rune seal share that point. */
+    public void applyKarmaField(float targetX, float targetY) {
         PlayerComponent playerComponent = ecs.getPlayer();
-        TransformComponent transform = ecs.getPlayerTransform();
-        if (playerComponent == null || transform == null) {
+        TransformComponent player = ecs.getPlayerTransform();
+        if (playerComponent == null || player == null) {
             return;
         }
         playerComponent.dashCooldownRemaining = 0f;
+        float x = effectX(targetX, player);
+        float y = effectY(targetY, player);
 
         Entity seal = ecs.getEngine().createEntity();
-        seal.add(new TransformComponent().set(transform.x, transform.y));
+        seal.add(new TransformComponent().set(x, y));
         SealComponent field = new SealComponent();
         field.duration = KARMA_DURATION;
         field.startRadius = 34f;
@@ -84,26 +101,36 @@ public final class YakuEffectApplier {
         field.blue = 0.70f;
         seal.add(field);
         ecs.getEngine().addEntity(seal);
-        ecs.getParticleBurst().glyphBurst(transform.x, transform.y, "*+*",
+        ecs.getParticleBurst().glyphBurst(x, y, "*+*",
             field.red, field.green, field.blue);
     }
 
     /** Beast: heal for a share of all card damage for a short window. */
     public void applyLifesteal() {
+        applyLifesteal(Float.NaN, Float.NaN);
+    }
+
+    /** Beast aura at an explicit target; the buff stays on the player. */
+    public void applyLifesteal(float targetX, float targetY) {
         PlayerComponent playerComponent = ecs.getPlayer();
-        if (playerComponent == null) {
+        TransformComponent player = ecs.getPlayerTransform();
+        if (playerComponent == null || player == null) {
             return;
         }
         playerComponent.grantLifesteal(LIFESTEAL_PERCENT, LIFESTEAL_SECONDS);
-        TransformComponent transform = ecs.getPlayerTransform();
-        if (transform != null) {
-            ecs.getParticleBurst().glyphBurst(transform.x, transform.y, "*o",
-                0.40f, 0.95f, 0.50f);
-        }
+        float x = effectX(targetX, player);
+        float y = effectY(targetY, player);
+        ecs.getParticleBurst().glyphBurst(x, y, "*o*",
+            0.40f, 0.95f, 0.50f);
     }
 
     /** Ribbon: mana refund, W-card reset and companion cooldown relief. */
     public void applyResourceRefund() {
+        applyResourceRefund(Float.NaN, Float.NaN);
+    }
+
+    /** Ribbon refund explosion at an explicit target; resources stay player-bound. */
+    public void applyResourceRefund(float targetX, float targetY) {
         PlayerComponent playerComponent = ecs.getPlayer();
         if (playerComponent != null) {
             playerComponent.addMana(RIBBON_MANA_REFUND);
@@ -121,19 +148,29 @@ public final class YakuEffectApplier {
                 companion.ultimateCooldownRemaining = 0f;
             }
         }
-        TransformComponent transform = ecs.getPlayerTransform();
-        if (transform != null) {
-            ecs.getParticleBurst().glyphBurst(transform.x, transform.y, "*+",
+        TransformComponent player = ecs.getPlayerTransform();
+        if (player != null) {
+            float x = effectX(targetX, player);
+            float y = effectY(targetY, player);
+            ecs.getParticleBurst().glyphBurst(x, y, "~*+~",
                 0.45f, 0.72f, 0.95f);
         }
     }
 
     /** Petal: slow every nearby hostile and scatter petal glyphs. */
     public void applyPetalSpread() {
-        TransformComponent transform = ecs.getPlayerTransform();
-        if (transform == null) {
+        applyPetalSpread(Float.NaN, Float.NaN);
+    }
+
+    /** Petal burst/slow field centred on the requested target. */
+    public void applyPetalSpread(float targetX, float targetY) {
+        TransformComponent player = ecs.getPlayerTransform();
+        if (player == null) {
             return;
         }
+        float x = effectX(targetX, player);
+        float y = effectY(targetY, player);
+
         final float radiusSquared = PETAL_RADIUS * PETAL_RADIUS;
         for (Entity hostileEntity : ecs.getHostiles()) {
             HealthComponent health = Mappers.HEALTH.get(hostileEntity);
@@ -142,8 +179,8 @@ public final class YakuEffectApplier {
             if (health == null || hostile == null || target == null || health.isDead()) {
                 continue;
             }
-            float dx = target.x - transform.x;
-            float dy = target.y - transform.y;
+            float dx = target.x - x;
+            float dy = target.y - y;
             if (dx * dx + dy * dy > radiusSquared) {
                 continue;
             }
@@ -154,10 +191,18 @@ public final class YakuEffectApplier {
             }
             slow.apply(PETAL_SLOW_FACTOR, PETAL_SLOW_SECONDS);
             hostile.setSpeedScale(slow.factor);
-            ecs.getParticleBurst().glyphBurst(target.x, target.y, "*o",
+            ecs.getParticleBurst().glyphBurst(target.x, target.y, "*o*",
                 0.95f, 0.55f, 0.75f);
         }
-        ecs.getParticleBurst().glyphBurst(transform.x, transform.y, "*o*",
+        ecs.getParticleBurst().glyphBurst(x, y, "*o*",
             0.95f, 0.55f, 0.75f);
+    }
+
+    private static float effectX(float requestedX, TransformComponent player) {
+        return Float.isFinite(requestedX) ? requestedX : player.x;
+    }
+
+    private static float effectY(float requestedY, TransformComponent player) {
+        return Float.isFinite(requestedY) ? requestedY : player.y;
     }
 }

@@ -280,9 +280,17 @@ class PlayerControlSystemTest {
 
         CardProjectileComponent card = firstCard();
         assertEquals(CardDeckComponent.CardType.BLUE, card.deckCard);
+        assertEquals('~', card.glyph, "ribbon W-card must use ribbon ink");
         assertTrue(card.refundCooldowns);
         assertEquals(30f, card.manaRefund, 0.001f);
         assertEquals(CardDeckComponent.State.COOLDOWN, deck.state);
+    }
+
+    @Test
+    void cardTypesExposeDistinctHanafudaProjectileSigils() {
+        assertEquals('*', CardDeckComponent.CardType.RED.projectileGlyph);
+        assertEquals('~', CardDeckComponent.CardType.BLUE.projectileGlyph);
+        assertEquals('Y', CardDeckComponent.CardType.GOLD.projectileGlyph);
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.lychcs.koikoi.combat.component.CardDeckComponent;
 import com.lychcs.koikoi.combat.component.PlayerComponent;
 import com.lychcs.koikoi.combat.component.SealComponent;
 import com.lychcs.koikoi.combat.component.SlowComponent;
+import com.lychcs.koikoi.combat.component.TransformComponent;
 import com.lychcs.koikoi.run.YakuEffectKind;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** ECS-level verification of every unique Yaku payload. */
 class YakuEffectApplierTest {
@@ -43,6 +45,30 @@ class YakuEffectApplierTest {
         assertEquals(YakuEffectApplier.KARMA_TICK_DAMAGE, field.tickDamage, 0.0001f);
         assertEquals(YakuEffectApplier.KARMA_TICK_INTERVAL, field.tickInterval, 0.0001f);
         assertEquals(YakuEffectApplier.KARMA_DURATION, field.duration, 0.0001f);
+    }
+
+    @Test
+    void karmaUsesTheRequestedTargetForSealAndInkBurst() {
+        applier.apply(YakuEffectKind.KARMA_FIELD, 120f, -45f);
+
+        Entity seal = ecs.getEngine().getEntitiesFor(
+            Family.all(SealComponent.class).get()).first();
+        TransformComponent sealTransform = seal.getComponent(TransformComponent.class);
+        assertNotNull(sealTransform);
+        assertEquals(120f, sealTransform.x, 0.001f);
+        assertEquals(-45f, sealTransform.y, 0.001f);
+
+        var particles = ecs.getEngine().getEntitiesFor(
+            Family.all(com.lychcs.koikoi.combat.component.ParticleComponent.class).get());
+        assertTrue(particles.size() > 0, "Yaku must spawn visible ASCII particles");
+        boolean particleAtTarget = false;
+        for (Entity particle : particles) {
+            TransformComponent transform = particle.getComponent(TransformComponent.class);
+            particleAtTarget |= transform != null
+                && Math.abs(transform.x - 120f) < 0.001f
+                && Math.abs(transform.y + 45f) < 0.001f;
+        }
+        assertTrue(particleAtTarget, "Yaku particles must appear at the target location");
     }
 
     @Test

@@ -102,6 +102,8 @@ public final class AsciiGlyphRenderer {
     private final AsciiAsset side;
     private final BitmapFont font;
     private final Color[] glyphColors;
+    /** Scratch colour for the hit-flash tint; avoids per-glyph allocations. */
+    private final Color tintedColor = new Color();
     private final float cellSize;
     private final int cellStride;
     /** False for the player: ':' background dither is never painted. */
@@ -291,6 +293,16 @@ public final class AsciiGlyphRenderer {
     public void render(SpriteBatch batch, float centerX, float bottomY,
                        float scaleX, float scaleY, float walkPhase, boolean moving,
                        AsciiFacing facing) {
+        render(batch, centerX, bottomY, scaleX, scaleY, walkPhase, moving, facing, null, 0f);
+    }
+
+    /**
+     * Renders the matrix with an optional high-contrast ink tint. The tint is
+     * mixed per visible glyph and is used for the momentary Yokai hit flash.
+     */
+    public void render(SpriteBatch batch, float centerX, float bottomY,
+                       float scaleX, float scaleY, float walkPhase, boolean moving,
+                       AsciiFacing facing, Color tint, float tintMix) {
         AsciiFacing view = facing == null ? AsciiFacing.DOWN : facing;
         Matrix matrix = switch (view) {
             case DOWN -> downMatrix;
@@ -333,6 +345,10 @@ public final class AsciiGlyphRenderer {
                 float x = originX + destination * cellWidth + glyphInset;
 
                 font.setColor(block.color);
+                if (tint != null && tintMix > 0f) {
+                    tintedColor.set(block.color).lerp(tint, Math.min(1f, tintMix));
+                    font.setColor(tintedColor);
+                }
                 font.draw(batch, ASCII_TEXT[drawGlyph], x, baseline);
                 glyphCount++;
             }

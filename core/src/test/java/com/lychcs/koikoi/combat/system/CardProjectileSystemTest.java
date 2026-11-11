@@ -185,6 +185,99 @@ class CardProjectileSystemTest {
             "lifesteal must heal 50% of the 20 card damage");
     }
 
+    @Test
+    void heavyCardFlashesAndKnocksTheTargetAwayFromThePlayer() {
+        Engine engine = new Engine();
+        engine.addSystem(new CardProjectileSystem(noopParticles(), (x, y) -> false));
+
+        Entity playerEntity = engine.createEntity();
+        playerEntity.add(new TransformComponent().set(0f, 0f));
+        playerEntity.add(new PlayerComponent());
+        playerEntity.add(new HealthComponent().set(100f));
+        engine.addEntity(playerEntity);
+
+        RecordingActor actor = new RecordingActor();
+        HostileComponent hostileComponent = new HostileComponent();
+        hostileComponent.radius = 20f;
+        hostileComponent.actor = actor;
+        Entity hostile = engine.createEntity();
+        hostile.add(new TransformComponent().set(50f, 0f));
+        hostile.add(hostileComponent);
+        hostile.add(new HealthComponent().set(100f));
+        engine.addEntity(hostile);
+
+        CardProjectileComponent card = cardComponentAt(500f, 0f, 1000f);
+        card.damage = 36f;
+        card.deckCard = com.lychcs.koikoi.combat.component.CardDeckComponent.CardType.GOLD;
+        card.knockbackDistance = 30f;
+        Entity projectile = new Entity();
+        projectile.add(new TransformComponent().set(0f, 0f));
+        projectile.add(card);
+        engine.addEntity(projectile);
+
+        engine.update(0.1f);
+
+        assertEquals(CardProjectileSystem.HIT_FLASH_SECONDS, actor.flashSeconds, 0.001f);
+        assertEquals(30f, actor.knockbackDistance, 0.001f);
+        assertTrue(actor.knockbackX > 0.9f, "knockback must point away from the player");
+        assertEquals(0f, actor.knockbackY, 0.01f);
+    }
+
+    @Test
+    void lockedCardImpactUsesTypeSpecificAsciiInk() {
+        Engine engine = new Engine();
+        StringBuilder glyphs = new StringBuilder();
+        ParticleBurst particles = new ParticleBurst() {
+            @Override
+            public void burst(float x, float y, int dustCount, int petalCount) {
+            }
+
+            @Override
+            public void glyphBurst(float x, float y, String value,
+                                   float red, float green, float blue) {
+                glyphs.append(value);
+            }
+        };
+        engine.addSystem(new CardProjectileSystem(particles, (x, y) -> false));
+
+        CardProjectileComponent card = cardComponentAt(500f, 0f, 1000f);
+        card.damage = 14f;
+        card.deckCard = com.lychcs.koikoi.combat.component.CardDeckComponent.CardType.RED;
+        Entity projectile = new Entity();
+        projectile.add(new TransformComponent().set(0f, 0f));
+        projectile.add(card);
+        engine.addEntity(projectile);
+        spawnHostile(engine, 50f, 0f);
+
+        engine.update(0.1f);
+
+        assertTrue(glyphs.toString().contains("*.*"),
+            "petal/Hikari impact must use its own ASCII ink, got: " + glyphs);
+    }
+
+    private static final class RecordingActor implements HostileComponent.HostileActor {
+        float flashSeconds;
+        float knockbackX;
+        float knockbackY;
+        float knockbackDistance;
+
+        @Override
+        public void setSpeedScale(float scale) {
+        }
+
+        @Override
+        public void flashHit(float seconds) {
+            flashSeconds = seconds;
+        }
+
+        @Override
+        public void knockback(float directionX, float directionY, float distance) {
+            knockbackX = directionX;
+            knockbackY = directionY;
+            knockbackDistance = distance;
+        }
+    }
+
     private static ParticleBurst noopParticles() {
         return (x, y, dust, petals) -> {
         };

@@ -19,12 +19,16 @@ import java.util.List;
 
 /**
  * Advances left-click card projectiles, applies damage to the first hostile,
- * detects wall contact and expires the card after its maximum range.
+ * triggers the hit flash/knockback feedback, detects wall contact and expires
+ * the card after its maximum range.
  *
  * <p>The wall check is injected by the screen so the system stays independent
  * of the ASCII map and Box2D. World travel is pure kinematic movement.</p>
  */
 public final class CardProjectileSystem extends IteratingSystem {
+
+    /** High-contrast ink flash shown on a struck Yokai. */
+    public static final float HIT_FLASH_SECONDS = 0.16f;
 
     /** Query used to stop a card on a solid map tile or outside the map. */
     @FunctionalInterface
@@ -119,6 +123,8 @@ public final class CardProjectileSystem extends IteratingSystem {
                 target.x, target.y, hostile.radius)) {
                 health.damage(card.damage);
                 healPlayerFromLifesteal(card.damage);
+                hostile.flashHit(HIT_FLASH_SECONDS);
+                applyKnockback(hostile, target, card);
             }
         }
     }
@@ -129,6 +135,8 @@ public final class CardProjectileSystem extends IteratingSystem {
                                 CardProjectileComponent card) {
         health.damage(card.damage);
         healPlayerFromLifesteal(card.damage);
+        hostile.flashHit(HIT_FLASH_SECONDS);
+        applyKnockback(hostile, target, card);
 
         if (card.stunDuration > 0f) {
             SlowComponent slow = Mappers.SLOW.get(hostileEntity);
@@ -143,6 +151,45 @@ public final class CardProjectileSystem extends IteratingSystem {
         if (card.refundCooldowns) {
             refundAbilities(card.manaRefund);
         }
+    }
+
+    /**
+     * Heavy cards push the struck Yokai directly away from the player. The
+     * vector is computed from the player transform, not the projectile path, so
+     * an angled card still produces a clean kiting push.
+     */
+    private void applyKnockback(HostileComponent hostile, TransformComponent target,
+                                CardProjectileComponent card) {
+        if (card.knockbackDistance <= 0f) {
+            return;
+        }
+
+        TransformComponent origin = firstPlayerTransform();
+        float dx;
+        float dy;
+        if (origin != null) {
+            dx = target.x - origin.x;
+            dy = target.y - origin.y;
+        } else {
+            dx = card.vx;
+            dy = card.vy;
+        }
+
+        float length = (float) Math.sqrt(dx * dx + dy * dy);
+        if (length <= 0.0001f) {
+            return;
+        }
+        hostile.knockback(dx / length, dy / length, card.knockbackDistance);
+    }
+
+    private TransformComponent firstPlayerTransform() {
+        for (Entity playerEntity : getEngine().getEntitiesFor(PLAYERS)) {
+            TransformComponent transform = Mappers.TRANSFORM.get(playerEntity);
+            if (transform != null) {
+                return transform;
+            }
+        }
+        return null;
     }
 
     /** Beast-Yaku sustain: heal the player for a share of the card damage. */
@@ -190,13 +237,14 @@ public final class CardProjectileSystem extends IteratingSystem {
             return;
         }
         if (card.deckCard == CardDeckComponent.CardType.RED) {
-            // Fire/explosion ink is warm orange-gold and additive, so it tints
-            // the existing terrain instead of stamping an opaque sprite.
-            particles.glyphBurst(x, y, "*#*", 1f, 0.58f, 0.18f);
+            // Petal/Hikari ink: warm blossom sparks.
+            particles.glyphBurst(x, y, "*.*", 1f, 0.58f, 0.18f);
         } else if (card.deckCard == CardDeckComponent.CardType.BLUE) {
-            particles.glyphBurst(x, y, "*", card.red, card.green, card.blue);
+            // Ribbon ink: cool wave marks and a mana spark.
+            particles.glyphBurst(x, y, "~=~", card.red, card.green, card.blue);
         } else if (card.deckCard == CardDeckComponent.CardType.GOLD) {
-            particles.glyphBurst(x, y, "*o", 1f, 0.82f, 0.32f);
+            // Beast ink: heavy horn/beast marks.
+            particles.glyphBurst(x, y, "Y*Y", 1f, 0.82f, 0.32f);
         } else {
             particles.burst(x, y, 2, 2);
         }

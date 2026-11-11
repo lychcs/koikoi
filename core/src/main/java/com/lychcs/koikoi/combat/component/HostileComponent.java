@@ -30,8 +30,30 @@ public final class HostileComponent implements Component {
         }
     }
 
+    /** Forwards a brief high-contrast ink flash to the legacy actor. */
+    public void flashHit(float seconds) {
+        if (actor != null) {
+            actor.flashHit(seconds);
+        }
+    }
+
+    /** Pushes the actor away from a normalized direction by {@code distance} px. */
+    public void knockback(float directionX, float directionY, float distance) {
+        if (actor != null) {
+            actor.knockback(directionX, directionY, distance);
+        }
+    }
+
     /** Minimal bridge to the animated overworld Yokai actor. */
     public interface HostileActor {
         void setSpeedScale(float scale);
+
+        /** Default no-op keeps lightweight test actors source-compatible. */
+        default void flashHit(float seconds) {
+        }
+
+        /** Default no-op keeps lightweight test actors source-compatible. */
+        default void knockback(float directionX, float directionY, float distance) {
+        }
     }
 }

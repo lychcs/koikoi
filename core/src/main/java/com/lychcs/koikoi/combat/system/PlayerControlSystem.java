@@ -275,10 +275,12 @@ public final class PlayerControlSystem extends IteratingSystem {
         card.red = type.red;
         card.green = type.green;
         card.blue = type.blue;
+        card.glyph = type.projectileGlyph;
         switch (type) {
             case RED -> {
                 card.damage = 14f;
                 card.areaRadius = 2.5f * gridSize;
+                card.knockbackDistance = 26f;
             }
             case BLUE -> {
                 card.damage = 8f;
@@ -288,6 +290,7 @@ public final class PlayerControlSystem extends IteratingSystem {
             case GOLD -> {
                 card.damage = 36f;
                 card.stunDuration = 1.25f;
+                card.knockbackDistance = 34f;
             }
         }
     }

@@ -50,6 +50,15 @@ public final class OverworldYokaiEntity {
     /** Obergrenze fuer delta, damit ein Frameeinbruch die Entity nicht springen laesst. */
     public static final float MAX_STEP_DELTA = 0.1f;
 
+    /** Dauer des weissen Treffer-Ink-Flashes. */
+    public static final float HIT_FLASH_SECONDS = 0.16f;
+
+    /** Grundgeschwindigkeit eines kurzen Karten-Knockbacks. */
+    public static final float KNOCKBACK_SPEED = 620f;
+
+    /** Maximale Knockback-Strecke in Pixeln. */
+    public static final float MAX_KNOCKBACK_DISTANCE = 96f;
+
     /** Maximale Zielversuche pro Zustandswechsel (keine Endlosschleife). */
     public static final int MAX_TARGET_ATTEMPTS = 8;
 
@@ -157,6 +166,15 @@ public final class OverworldYokaiEntity {
 
     /** Movement multiplier from slow effects (1 = normal, lower = slowed). */
     private float speedScale = 1f;
+
+    /** Remaining high-contrast hit flash and its original duration. */
+    private float hitFlashRemaining;
+    private float hitFlashDuration = HIT_FLASH_SECONDS;
+
+    /** Short knockback impulse away from the card caster. */
+    private float knockbackVelocityX;
+    private float knockbackVelocityY;
+    private float knockbackRemaining;
 
     private final Rectangle collisionBox = new Rectangle();
     private final Rectangle interactionBounds = new Rectangle();
@@ -336,6 +354,9 @@ public final class OverworldYokaiEntity {
             return;
         }
 
+        hitFlashRemaining = Math.max(0f, hitFlashRemaining - step);
+        applyKnockback(step, collisionQuery);
+
         stateTime += step;
 
         if (paused) {
@@ -348,6 +369,61 @@ public final class OverworldYokaiEntity {
         }
 
         moveTowardsTarget(step, collisionQuery);
+    }
+
+    /**
+     * Applies the pending card knockback before the roam AI. Axis-separated
+     * collision checks keep the impulse from pushing the Yokai through walls.
+     */
+    private void applyKnockback(float step, CollisionQuery collisionQuery) {
+        if (knockbackRemaining <= 0f) {
+            return;
+        }
+
+        float stepLength = Math.min(KNOCKBACK_SPEED * step, knockbackRemaining);
+        float moveX = knockbackVelocityX * step;
+        float moveY = knockbackVelocityY * step;
+        float moveLength = (float) Math.sqrt(moveX * moveX + moveY * moveY);
+        if (moveLength > stepLength && moveLength > 0.0001f) {
+            moveX = moveX / moveLength * stepLength;
+            moveY = moveY / moveLength * stepLength;
+        }
+
+        float movedX = 0f;
+        float movedY = 0f;
+        if (moveX != 0f) {
+            if (isBlockedAt(x + moveX, y, collisionQuery)) {
+                stopKnockback();
+                return;
+            }
+            x += moveX;
+            movedX = moveX;
+        }
+        if (moveY != 0f) {
+            if (isBlockedAt(x, y + moveY, collisionQuery)) {
+                stopKnockback();
+                return;
+            }
+            y += moveY;
+            movedY = moveY;
+        }
+
+        x = MathUtils.clamp(x, roamMinX, roamMaxX);
+        y = MathUtils.clamp(y, roamMinY, roamMaxY);
+
+        float moved = (float) Math.sqrt(movedX * movedX + movedY * movedY);
+        knockbackRemaining = Math.max(0f, knockbackRemaining - moved);
+        if (knockbackRemaining <= 0f) {
+            stopKnockback();
+        } else if (moved > 0f) {
+            updateDirection(movedX, movedY);
+        }
+    }
+
+    private void stopKnockback() {
+        knockbackRemaining = 0f;
+        knockbackVelocityX = 0f;
+        knockbackVelocityY = 0f;
     }
 
     private void moveTowardsTarget(float step, CollisionQuery collisionQuery) {
@@ -449,6 +525,46 @@ public final class OverworldYokaiEntity {
     /** Current movement multiplier of slow effects. */
     public float getSpeedScale() {
         return speedScale;
+    }
+
+    /** Starts or refreshes the high-contrast ink flash. */
+    public void flashHit(float seconds) {
+        float duration = Math.max(0.01f, seconds);
+        hitFlashDuration = duration;
+        hitFlashRemaining = Math.max(hitFlashRemaining, duration);
+    }
+
+    public boolean isHitFlashing() {
+        return hitFlashRemaining > 0f;
+    }
+
+    /** 1 at the start of the flash, 0 when it expires. */
+    public float getHitFlashRatio() {
+        if (hitFlashRemaining <= 0f || hitFlashDuration <= 0f) {
+            return 0f;
+        }
+        return MathUtils.clamp(hitFlashRemaining / hitFlashDuration, 0f, 1f);
+    }
+
+    /**
+     * Queues a short knockback impulse. The direction is normalized here so
+     * callers only need to provide the away-from-player vector.
+     */
+    public void knockback(float directionX, float directionY, float distance) {
+        if (distance <= 0f) {
+            return;
+        }
+        float length = (float) Math.sqrt(directionX * directionX + directionY * directionY);
+        if (length <= 0.0001f) {
+            return;
+        }
+        knockbackVelocityX = directionX / length * KNOCKBACK_SPEED;
+        knockbackVelocityY = directionY / length * KNOCKBACK_SPEED;
+        knockbackRemaining = Math.min(MAX_KNOCKBACK_DISTANCE, distance);
+    }
+
+    public float getKnockbackRemaining() {
+        return knockbackRemaining;
     }
 
     /** Aktuelle Weltposition X (Anschlussstelle fuer die spaetere Corruption-Phase). */
