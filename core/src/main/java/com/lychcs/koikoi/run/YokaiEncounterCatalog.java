@@ -8,7 +8,7 @@ import java.util.List;
  * Zentrale Registrierung aller Begegnungen.
  *
  * <p>Lookup-Schluessel sind die stabile Encounter-Id und die optionale Welt-/Spawn-Id.
- * Die Spawn-Id ist bewusst inhaltsbasiert (Tiled-Objektname oder Trigger-Typ) und
+ * Die Spawn-Id ist bewusst inhaltsbasiert (Yokai-Spawnname oder Trigger-Typ) und
  * niemals eine Bildschirmkoordinate.</p>
  */
 public final class YokaiEncounterCatalog {
@@ -52,7 +52,25 @@ public final class YokaiEncounterCatalog {
         false
     );
 
-    private static final List<YokaiEncounter> ALL = List.of(ONI_WILD, KITSUNE_SPRING_VILLAGE);
+    /**
+     * Wiederholbare wilde Kitsune-Begegnung fuer prozedural generierte Karten.
+     *
+     * <p>Sie hat bewusst keine Weltbindung: jede {@code Y}-Zelle einer generierten
+     * ASCII-Karte referenziert diese stabile Encounter-Id ueber die
+     * {@code !yokai}-Metadatenzeile. Da die Kitsune-Spezies als einzige eine
+     * animierte wilde Form besitzt, ist dies die Begegnung der Wahl fuer
+     * Zufallskarten.</p>
+     */
+    private static final YokaiEncounter KITSUNE_WILD = new YokaiEncounter(
+        "encounter_kitsune_wild",
+        YokaiSpecies.requireById(YokaiSpecies.ID_KITSUNE),
+        DEFAULT_TARGET_SCORE,
+        null,
+        true
+    );
+
+    private static final List<YokaiEncounter> ALL =
+        List.of(ONI_WILD, KITSUNE_SPRING_VILLAGE, KITSUNE_WILD);
 
     private YokaiEncounterCatalog() {}
 

@@ -11,7 +11,7 @@ import com.lychcs.koikoi.model.yokai.YokaiSpecies;
  * <ul>
  *   <li>einer stabilen Encounter-Id (Inhalts-Id, keine Bildschirmkoordinate),</li>
  *   <li>dem Zielscore des Kampfes,</li>
- *   <li>einer optionalen Welt-/Spawn-Id (Tiled-Objektname oder Trigger-Typ),</li>
+ *   <li>einer optionalen Welt-/Spawn-Id (Yokai-Spawnname oder Trigger-Typ),</li>
  *   <li>der Factory fuer eine frische Gegnerinstanz ({@link #newYokai()}) und</li>
  *   <li>der Factory fuer eine frische Rekrutierungsbelohnung
  *       ({@link #newShikigamiReward()}).</li>
@@ -84,7 +84,7 @@ public final class YokaiEncounter {
         return targetScore;
     }
 
-    /** Optionale Welt-/Spawn-Id (Tiled-Name oder Trigger-Typ) oder {@code null}. */
+    /** Optionale Welt-/Spawn-Id (Yokai-Spawnname oder Trigger-Typ) oder {@code null}. */
     public String getWorldSpawnId() {
         return worldSpawnId;
     }

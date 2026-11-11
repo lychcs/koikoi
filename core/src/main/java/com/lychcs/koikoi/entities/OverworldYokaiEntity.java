@@ -1,7 +1,6 @@
 package com.lychcs.koikoi.entities;
 
 import com.badlogic.gdx.graphics.g2d.Animation;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
@@ -156,6 +155,9 @@ public final class OverworldYokaiEntity {
     private float pauseRemaining;
     private boolean paused;
 
+    /** Movement multiplier from slow effects (1 = normal, lower = slowed). */
+    private float speedScale = 1f;
+
     private final Rectangle collisionBox = new Rectangle();
     private final Rectangle interactionBounds = new Rectangle();
     private final Vector2 worldPosition = new Vector2();
@@ -193,7 +195,13 @@ public final class OverworldYokaiEntity {
             this.frameHeight = frameHeight;
         }
 
-        /** Baut die Animationssicht aus einem geladenen Aseprite-Sheet. */
+        /** ASCII-only overworld placeholder: no atlas/Aseprite frame is ever drawn. */
+    public static WalkAnimations placeholder() {
+        Animation<TextureRegion> empty = new Animation<>(1f, new TextureRegion[0]);
+        return new WalkAnimations(empty, empty, empty, empty, 1, 1);
+    }
+
+    /** Baut die Animationssicht aus einem geladenen Aseprite-Sheet. */
         public static WalkAnimations from(AsepriteSheet sheet) {
             if (sheet == null) {
                 throw new IllegalArgumentException("sheet must not be null");
@@ -267,8 +275,8 @@ public final class OverworldYokaiEntity {
      * @param animations   geliehene Laufanimationen der wilden Form
      * @param spawnX       Spawnposition X in Weltkoordinaten
      * @param spawnY       Spawnposition Y in Weltkoordinaten
-     * @param tileWidth    Tilebreite aus der geladenen TiledMap
-     * @param tileHeight   Tilehoehe aus der geladenen TiledMap
+     * @param tileWidth    Kachelbreite aus der geladenen ASCII-Map
+     * @param tileHeight   Kachelhoehe aus der geladenen ASCII-Map
      */
     public OverworldYokaiEntity(
         String encounterId,
@@ -353,7 +361,7 @@ public final class OverworldYokaiEntity {
             return;
         }
 
-        float stepLength = Math.min(WALK_SPEED * step, distance);
+        float stepLength = Math.min(WALK_SPEED * speedScale * step, distance);
         float moveX = (dx / distance) * stepLength;
         float moveY = (dy / distance) * stepLength;
 
@@ -414,21 +422,8 @@ public final class OverworldYokaiEntity {
         return collisionQuery.isBlocked(collisionBoxAt(posX, posY, collisionBox));
     }
 
-    /**
-     * Zeichnet den aktuellen Frame mit dem bestehenden MapRenderer-Batch. Waehrend einer
-     * Pause bleibt der erste Frame der zuletzt gelaufenen Richtung stehen; eine
-     * Idle-Animation existiert (noch) nicht. Keine Allokation, kein Shaderwechsel.
-     */
-    public void render(SpriteBatch batch) {
-        TextureRegion frame = animations.frameFor(paused, direction, lastWalkDirection, stateTime);
-        batch.draw(
-            frame,
-            x - (animations.getFrameWidth() * 0.5f),
-            y - FOOT_OFFSET_Y);
-    }
-
     // ------------------------------------------------------------------
-    // Zugriff fuer Overworld und spaetere Systeme
+    // Access for Overworld and later systems
     // ------------------------------------------------------------------
 
     public String getEncounterId() {
@@ -441,6 +436,19 @@ public final class OverworldYokaiEntity {
 
     public String getDisplayName() {
         return displayName;
+    }
+
+    /**
+     * Movement multiplier of slow effects (1 = normal speed). The ECS status
+     * system writes this from a seal's slow factor.
+     */
+    public void setSpeedScale(float scale) {
+        this.speedScale = MathUtils.clamp(scale, 0.05f, 1f);
+    }
+
+    /** Current movement multiplier of slow effects. */
+    public float getSpeedScale() {
+        return speedScale;
     }
 
     /** Aktuelle Weltposition X (Anschlussstelle fuer die spaetere Corruption-Phase). */

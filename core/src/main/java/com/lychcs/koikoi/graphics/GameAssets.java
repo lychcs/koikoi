@@ -51,9 +51,6 @@ public final class GameAssets implements Disposable {
     /** Gemeinsame Panel-Quelltextur fuer alle NinePatch-Panels. */
     public static final String PANEL_TEXTURE = "backgrounds/PANEL_PLAYING_BOARD.9.png";
 
-    /** Sprite-Sheet des Spielers in der Overworld. */
-    public static final String PLAYER_SHEET = "entities/player.png";
-
     /** Spritesheet der wilden Kitsune-Form (Aseprite-Export). */
     public static final String KITSUNE_WILD_SHEET = "entities/kitsune_wild.png";
 
@@ -108,7 +105,6 @@ public final class GameAssets implements Disposable {
         manager.load(GAME_ATLAS, TextureAtlas.class);
         manager.load(BUTTON_TEXTURE, Texture.class);
         manager.load(PANEL_TEXTURE, Texture.class);
-        manager.load(PLAYER_SHEET, Texture.class);
         manager.load(KITSUNE_WILD_SHEET, Texture.class);
 
         // Fuer den aktuellen Projektumfang existiert bewusst kein LoadingScreen,
@@ -129,7 +125,6 @@ public final class GameAssets implements Disposable {
         }
         requireTexture(BUTTON_TEXTURE).setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         requireTexture(PANEL_TEXTURE).setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        requireTexture(PLAYER_SHEET).setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         requireTexture(KITSUNE_WILD_SHEET).setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
     }
 

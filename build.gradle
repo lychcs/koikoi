@@ -73,3 +73,16 @@ project(":lwjgl3") {
     implementation "com.badlogicgames.gdx:gdx-tools:$gdxVersion"
   }
 }
+
+/**
+ * Regenerates assets/ascii/*.json from the raw PNG sprites (player, Yokai,
+ * Omamori, Hanko, Hanafuda cards) using the standalone converter in tools/.
+ * Run it after changing sprite art: .\gradlew.bat convertAsciiAssets
+ */
+tasks.register('convertAsciiAssets', Exec) {
+  group = 'assets'
+  description = 'Converts the raw PNG sprite assets into ASCII JSON matrices.'
+  workingDir = rootProject.projectDir
+  commandLine "${System.getProperty('java.home')}/bin/java", 'tools/PngToAsciiConverter.java'
+}
+

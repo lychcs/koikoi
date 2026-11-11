@@ -27,27 +27,118 @@ public final class FontManager {
             return;
         }
 
-        // Ersetze den Dateinamen mit dem genauen Namen deiner .ttf-Datei in assets/fonts/
+        // 1. Standard-Schrift für Buttons, Beschreibungen & UI (z. B. 16 px)
+        pixelFont = createFont(16);
+
+        // 2. Größere Schrift für Titel, Boss-Namen & Sieges-Anzeigen (z. B. 24 px)
+        titleFont = createFont(24);
+    }
+
+    /**
+     * Erzeugt eine neue Pixel-Schrift in der angegebenen Groesse. Der Aufrufer
+     * ist Eigentuemer der zurueckgegebenen Schrift und muss sie selbst freigeben.
+     * Wird unter anderem fuer die ASCII-Karten-Glyphen der Overworld genutzt,
+     * damit deren Skalierung die globalen UI-Schriften nicht beeinflusst.
+     *
+     * @param size Schriftgroesse in Pixeln (muss > 0 sein)
+     */
+    public static BitmapFont createFont(int size) {
+        if (size <= 0) {
+            throw new IllegalArgumentException("size must be > 0 but was " + size);
+        }
+
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/font.ttf"));
-
         try {
-            // 1. Standard-Schrift für Buttons, Beschreibungen & UI (z. B. 16 px)
-            FreeTypeFontParameter paramNormal = new FreeTypeFontParameter();
-            paramNormal.size = 16;
-            paramNormal.minFilter = Texture.TextureFilter.Nearest;
-            paramNormal.magFilter = Texture.TextureFilter.Nearest;
-            pixelFont = generator.generateFont(paramNormal);
-
-            // 2. Größere Schrift für Titel, Boss-Namen & Sieges-Anzeigen (z. B. 24 px)
-            FreeTypeFontParameter paramTitle = new FreeTypeFontParameter();
-            paramTitle.size = 24;
-            paramTitle.minFilter = Texture.TextureFilter.Nearest;
-            paramTitle.magFilter = Texture.TextureFilter.Nearest;
-            titleFont = generator.generateFont(paramTitle);
+            FreeTypeFontParameter parameter = new FreeTypeFontParameter();
+            parameter.size = size;
+            parameter.minFilter = Texture.TextureFilter.Nearest;
+            parameter.magFilter = Texture.TextureFilter.Nearest;
+            return generator.generateFont(parameter);
         } finally {
-            // Der Generator wird danach nicht mehr gebraucht und muss freigegeben werden
+            // Der Generator wird danach nicht mehr gebraucht und muss freigegeben werden.
             generator.dispose();
         }
+    }
+
+    /**
+     * Creates a monospace variant of the pixel font for the dense ASCII layers.
+     *
+     * <p>The generated font forces one advance width for every glyph, so a
+     * glyph grid drawn cell-by-cell tiles seamlessly without horizontal gaps.
+     * Callers still own the returned font and must dispose it.</p>
+     *
+     * @param size font size in pixels (must be &gt; 0)
+     */
+    public static BitmapFont createMonoFont(int size) {
+        return createMonoFont("fonts/ascii.ttf", size);
+    }
+
+    /**
+     * Monospace font from an explicit TTF path. The default overload uses the
+     * bold display font ({@code fonts/ascii.ttf}); the thin UI font
+     * ({@code fonts/font.ttf}) remains available for callers that need it.
+     *
+     * @param fontPath internal path of the TTF inside {@code assets/}
+     * @param size     font size in pixels (must be &gt; 0)
+     */
+    public static BitmapFont createMonoFont(String fontPath, int size) {
+        if (size <= 0) {
+            throw new IllegalArgumentException("size must be > 0 but was " + size);
+        }
+        if (fontPath == null || fontPath.isBlank()) {
+            throw new IllegalArgumentException("fontPath must not be blank");
+        }
+
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal(fontPath));
+        try {
+            FreeTypeFontParameter parameter = new FreeTypeFontParameter();
+            parameter.size = size;
+            // 1-bit glyphs with crisp edges suit the ASCII grid.
+            parameter.mono = true;
+            parameter.minFilter = Texture.TextureFilter.Nearest;
+            parameter.magFilter = Texture.TextureFilter.Nearest;
+            // ASCII + the shade blocks used by the generated ASCII assets and
+            // the pale-cyan blossom spark (U+00B0) of the Japanese palette.
+            parameter.characters = FreeTypeFontGenerator.DEFAULT_CHARS + "░▒▓█°";
+            BitmapFont font = generator.generateFont(parameter);
+            enforceMonospace(font.getData());
+            return font;
+        } finally {
+            generator.dispose();
+        }
+    }
+
+    /**
+     * Forces a single advance width on every glyph so grid rendering has no
+     * horizontal gaps; {@code spaceXadvance} gets the same width.
+     */
+    private static void enforceMonospace(BitmapFont.BitmapFontData data) {
+        int advance = 0;
+        for (BitmapFont.Glyph[] page : data.glyphs) {
+            if (page == null) {
+                continue;
+            }
+            for (BitmapFont.Glyph glyph : page) {
+                if (glyph != null) {
+                    advance = Math.max(advance, glyph.xadvance);
+                }
+            }
+        }
+        if (advance <= 0) {
+            return;
+        }
+
+        for (BitmapFont.Glyph[] page : data.glyphs) {
+            if (page == null) {
+                continue;
+            }
+            for (BitmapFont.Glyph glyph : page) {
+                if (glyph != null) {
+                    glyph.xadvance = advance;
+                }
+            }
+        }
+        data.spaceXadvance = advance;
     }
 
     /**

@@ -2,10 +2,14 @@ package com.lychcs.koikoi.run;
 
 import com.lychcs.koikoi.model.Deck;
 import com.lychcs.koikoi.model.hanko.HankoEffect;
+import com.lychcs.koikoi.model.omamori.DarumaDoll;
+import com.lychcs.koikoi.model.omamori.KitsuneMask;
 import com.lychcs.koikoi.model.omamori.Omamori;
+import com.lychcs.koikoi.model.omamori.TenguFeather;
 import com.lychcs.koikoi.model.shikigami.Oni;
 import com.lychcs.koikoi.model.shikigami.Shikigami;
 import com.lychcs.koikoi.model.shikigami.ShikigamiStage;
+import com.lychcs.koikoi.scoring.YakuType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,7 +31,7 @@ public class RunSession {
     /** Standard-Haendler, solange es nur einen Shop gibt. */
     public static final String DEFAULT_SHOP_ID = "tengu_shop";
 
-    /** Season des aktuellen Ortes. Wird ausschliesslich ueber die Tiled-Map gesetzt. */
+    /** Season des aktuellen Ortes. Wird ausschliesslich ueber die ASCII-Map gesetzt. */
     private GameSeason currentSeason = GameSeason.SPRING;
 
     /** Id des aktuellen Ortes (aus den Map-Properties). */
@@ -48,6 +52,7 @@ public class RunSession {
     private int mon = 10000;
     private int voidDust = 5000;
 
+
     private final List<Shikigami> shikigamiBag = new ArrayList<>();
     private int maxShikigamiBag = 5;
 
@@ -67,6 +72,8 @@ public class RunSession {
     private final Deck playerDeck;
     private final List<HankoEffect> purchasedHankos = new ArrayList<>();
     private final YakuProgression yakuProgression = new YakuProgression();
+    /** Yaku payloads waiting for the next overworld screen. */
+    private final List<YakuType> pendingYakuEffects = new ArrayList<>();
 
     private final Map<String, float[]> unlockedShrines = new LinkedHashMap<>();
     private String lastVisitedShrineName = "Dorf-Schrein";
@@ -79,6 +86,21 @@ public class RunSession {
         playerDeck = new Deck();
         playerDeck.initializeDeck();
         shikigamiBag.add(new Oni(ShikigamiStage.LEVEL_1));
+
+        // Startgeschenk der Schrein-Priesterin: drei aktive Omamori, damit die
+        // passiven Overworld-Slots (Siegelradius/Mana, Begleiter-Feuerrate und
+        // Dash-Abklingzeit) vom ersten Run an wirken.
+        Omamori daruma = new DarumaDoll();
+        Omamori kitsuneMask = new KitsuneMask();
+        Omamori tenguFeather = new TenguFeather();
+
+        addOwnedOmamori(daruma);
+        addOwnedOmamori(kitsuneMask);
+        addOwnedOmamori(tenguFeather);
+
+        equipOmamori(daruma);
+        equipOmamori(kitsuneMask);
+        equipOmamori(tenguFeather);
     }
 
     // ---------------------------------------------------------------------
@@ -136,7 +158,7 @@ public class RunSession {
 
     /**
      * Betritt einen Ort. Die Season wird ausschliesslich durch den geladenen Ort
-     * (Tiled-Map) bestimmt. Ein Ortswechsel setzt den lokalen Encounter-Fortschritt
+     * (ASCII-Map) bestimmt. Ein Ortswechsel setzt den lokalen Encounter-Fortschritt
      * auf 1 zurueck, derselbe Ort behaelt seinen Fortschritt.
      */
     public void enterLocation(String locationId, GameSeason season) {
@@ -273,6 +295,32 @@ public class RunSession {
 
     public YakuProgression getYakuProgression() {
         return yakuProgression;
+    }
+
+    /**
+     * Queues the unique overworld payload of a completed Yaku. No-op for a
+     * Yaku without a payload; the queue is drained exactly once by the next
+     * overworld screen.
+     */
+    public void queueYakuEffect(YakuType type) {
+        if (type != null && YakuEffects.hasPayload(type)) {
+            pendingYakuEffects.add(type);
+        }
+    }
+
+    /** Returns and clears every payload queued since the last overworld. */
+    public List<YakuType> drainPendingYakuEffects() {
+        if (pendingYakuEffects.isEmpty()) {
+            return List.of();
+        }
+        List<YakuType> drained = List.copyOf(pendingYakuEffects);
+        pendingYakuEffects.clear();
+        return drained;
+    }
+
+    /** Number of payloads waiting for the next overworld (diagnostics/tests). */
+    public int pendingYakuEffectCount() {
+        return pendingYakuEffects.size();
     }
 
     public List<Shikigami> getShikigamiBag() {
