@@ -59,4 +59,33 @@ public final class CardProjectileComponent implements Component {
 
     /** Heavy-card knockback distance in world pixels (0 = none). */
     public float knockbackDistance;
+
+    // ------------------------------------------------------------------
+    // 3D crosshair ray (first-person rendering)
+    // ------------------------------------------------------------------
+
+    /** Camera-ray origin in libGDX world units (y = eye height). */
+    public float rayOriginX;
+    public float rayOriginY;
+    public float rayOriginZ;
+
+    /** Unit direction of the camera ray in libGDX world units. */
+    public float rayDirX;
+    public float rayDirY;
+    public float rayDirZ = -1f;
+
+    /** true when the ray fields hold a real camera ray from the crosshair. */
+    public boolean hasWorldRay;
+
+    /**
+     * Height of the flying card in libGDX world units at the current 2D travel
+     * distance. The screen supplies the pixel-to-unit world scale so the 2D
+     * combat data stays in pixels.
+     */
+    public float worldHeight(float worldScale) {
+        if (!hasWorldRay) {
+            return 0f;
+        }
+        return rayOriginY + rayDirY * travelled * worldScale;
+    }
 }

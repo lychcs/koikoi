@@ -337,4 +337,70 @@ class PlayerControlSystemTest {
         assertEquals(1f, squash.scaleX, 0.0001f);
         assertEquals(0.85f, squash.scaleY, 0.0001f);
     }
+
+    @Test
+    void cameraRelativeDirectionWalksWithoutLegacyAxes() {
+        input.hasMoveDirection = true;
+        input.moveDirection.set(0.6f, 0.8f);
+
+        engine.update(0.1f);
+
+        assertEquals(100f * 0.6f, motion.vx, 0.001f);
+        assertEquals(100f * 0.8f, motion.vy, 0.001f);
+        assertEquals(100f, motion.speed(), 0.001f);
+    }
+
+    @Test
+    void qDashFollowsCameraRelativeWasdDirectionEvenWhileAimingElsewhere() {
+        // Eyes on a target to the north, but S is held: Vayne-style backpedal.
+        input.aimX = 0f;
+        input.aimY = 500f;
+        input.hasMoveDirection = true;
+        input.moveDirection.set(0f, -1f);
+        input.dashRequested = true;
+
+        engine.update(0.016f);
+
+        assertTrue(playerComponent.isDashing());
+        assertEquals(0f, motion.vx, 0.001f);
+        assertEquals(-playerComponent.dashSpeed, motion.vy, 0.001f);
+        assertEquals(0f, playerComponent.facingX, 0.001f);
+        assertEquals(-1f, playerComponent.facingY, 0.001f);
+    }
+
+    @Test
+    void targetMoveStillOverridesCameraRelativeWasd() {
+        input.hasMoveDirection = true;
+        input.moveDirection.set(1f, 0f);
+        input.moveTarget.set(0f, 10f);
+        input.hasMoveTarget = true;
+
+        engine.update(0.1f);
+
+        assertEquals(0f, motion.vx, 0.001f);
+        assertEquals(100f, motion.vy, 0.001f);
+    }
+
+    @Test
+    void crosshairRayIsCopiedOntoTheThrownCard() {
+        input.hasAimRay = true;
+        input.aimRayOrigin.set(1f, 2f, 3f);
+        input.aimRayDirection.set(0f, 0.5f, -0.866f);
+        input.aimX = 100f;
+        input.aimY = 64f;
+        input.basicAttackRequested = true;
+
+        engine.update(0.016f);
+
+        CardProjectileComponent card = firstCard();
+        assertTrue(card.hasWorldRay);
+        assertEquals(1f, card.rayOriginX, 0.0001f);
+        assertEquals(2f, card.rayOriginY, 0.001f);
+        assertEquals(3f, card.rayOriginZ, 0.001f);
+        assertEquals(0.5f, card.rayDirY, 0.001f);
+
+        card.travelled = 64f;
+        assertEquals(2.5f, card.worldHeight(1f / 64f), 0.001f);
+    }
+
 }

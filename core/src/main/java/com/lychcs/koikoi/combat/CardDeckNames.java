@@ -45,4 +45,39 @@ public final class CardDeckNames {
         }
         return name.replaceFirst("\\s+#\\d+$", "");
     }
+
+    /**
+     * One-line FPS HUD summary of the cycling W deck.
+     *
+     * <p>All three equipped slots are listed with the actual Hanafuda names of
+     * the player's deck. While the deck shuffles or holds a locked card, the
+     * highlighted slot is wrapped in {@code < >} so the bottom-centre HUD shows
+     * which card the next throw will consume.</p>
+     */
+    public static String hudLine(CardDeckComponent deck, Deck playerDeck) {
+        if (deck == null) {
+            StringBuilder fallback = new StringBuilder();
+            CardDeckComponent.CardType[] types = CardDeckComponent.CardType.values();
+            for (int i = 0; i < types.length; i++) {
+                if (i > 0) {
+                    fallback.append("   ");
+                }
+                fallback.append("[ ").append(forType(types[i], playerDeck)).append(" ]");
+            }
+            return fallback.toString();
+        }
+
+        StringBuilder line = new StringBuilder();
+        for (int i = 0; i < deck.equipped.length; i++) {
+            if (i > 0) {
+                line.append("   ");
+            }
+            boolean active = deck.showsBadge()
+                && i == Math.floorMod(deck.activeIndex, deck.equipped.length);
+            String name = forType(deck.equipped[i], playerDeck);
+            line.append(active ? "< " : "[ ").append(name).append(active ? " >" : " ]");
+        }
+        return line.toString();
+    }
+
 }

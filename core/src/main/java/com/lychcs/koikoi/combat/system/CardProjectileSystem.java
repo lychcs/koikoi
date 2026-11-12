@@ -6,6 +6,7 @@ import com.badlogic.ashley.systems.IteratingSystem;
 import com.lychcs.koikoi.combat.ParticleBurst;
 import com.lychcs.koikoi.combat.SealGeometry;
 import com.lychcs.koikoi.combat.component.CardDeckComponent;
+import com.lychcs.koikoi.combat.component.CardBurstComponent;
 import com.lychcs.koikoi.combat.component.CardProjectileComponent;
 import com.lychcs.koikoi.combat.component.CompanionComponent;
 import com.lychcs.koikoi.combat.component.HealthComponent;
@@ -78,7 +79,7 @@ public final class CardProjectileSystem extends IteratingSystem {
         card.travelled += (float) Math.sqrt(stepX * stepX + stepY * stepY);
 
         if (wallQuery != null && wallQuery.isBlocked(transform.x, transform.y)) {
-            impact(transform.x, transform.y, card);
+            impact(transform.x, transform.y, card, false);
             expired.add(entity);
             return;
         }
@@ -98,14 +99,14 @@ public final class CardProjectileSystem extends IteratingSystem {
                 } else {
                     applySingleHit(hostileEntity, health, hostile, target, card);
                 }
-                impact(target.x, target.y, card);
+                impact(target.x, target.y, card, true);
                 expired.add(entity);
                 return;
             }
         }
 
         if (card.travelled >= card.maxRange) {
-            impact(transform.x, transform.y, card);
+            impact(transform.x, transform.y, card, false);
             expired.add(entity);
         }
     }
@@ -231,8 +232,13 @@ public final class CardProjectileSystem extends IteratingSystem {
         }
     }
 
-    /** Tiny/special ASCII impact burst at the hit position. */
-    private void impact(float x, float y, CardProjectileComponent card) {
+    /** Card impact: 3D hit bursts plus the type-specific ASCII ink. */
+    private void impact(float x, float y, CardProjectileComponent card, boolean hostileHit) {
+        spawnWorldBurst(x, y, card);
+        if (hostileHit) {
+            spawnHitFlashBurst(x, y);
+            spawnKarmaRuneBurst(x, y);
+        }
         if (particles == null) {
             return;
         }
@@ -248,5 +254,94 @@ public final class CardProjectileSystem extends IteratingSystem {
         } else {
             particles.burst(x, y, 2, 2);
         }
+    }
+
+    /**
+     * Spawns the 3D impact flavour of the card: warm petal ring, cool ribbon
+     * wave, heavy beast strokes or a plain parchment flash. The overworld
+     * renders it as camera-facing billboards on the heightmap.
+     */
+    private void spawnWorldBurst(float x, float y, CardProjectileComponent card) {
+        Entity burst = getEngine().createEntity();
+        burst.add(new TransformComponent().set(x, y));
+
+        CardBurstComponent visual = new CardBurstComponent();
+        visual.red = card.red;
+        visual.green = card.green;
+        visual.blue = card.blue;
+        visual.elevation = 64f;
+
+        CardDeckComponent.CardType type = card.deckCard;
+        if (type == CardDeckComponent.CardType.RED) {
+            visual.style = CardBurstComponent.Style.PETAL;
+            visual.startRadius = 16f;
+            visual.endRadius = card.areaRadius > 0f ? card.areaRadius : 140f;
+            visual.duration = 0.55f;
+        } else if (type == CardDeckComponent.CardType.BLUE) {
+            visual.style = CardBurstComponent.Style.RIBBON;
+            visual.startRadius = 14f;
+            visual.endRadius = 120f;
+            visual.duration = 0.40f;
+        } else if (type == CardDeckComponent.CardType.GOLD) {
+            visual.style = CardBurstComponent.Style.BEAST;
+            visual.startRadius = 18f;
+            visual.endRadius = 150f;
+            visual.duration = 0.60f;
+            visual.spinSpeed = 4.2f;
+        } else {
+            visual.style = CardBurstComponent.Style.BASIC;
+            visual.startRadius = 10f;
+            visual.endRadius = 70f;
+            visual.duration = 0.35f;
+        }
+
+        burst.add(visual);
+        getEngine().addEntity(burst);
+    }
+
+    /**
+     * White-ink flash at the struck Yokai's 3D position. The overworld renders
+     * it as a hot cross of camera-facing billboards that fades immediately.
+     */
+    private void spawnHitFlashBurst(float x, float y) {
+        Entity burst = getEngine().createEntity();
+        burst.add(new TransformComponent().set(x, y));
+
+        CardBurstComponent flash = new CardBurstComponent();
+        flash.style = CardBurstComponent.Style.FLASH;
+        flash.duration = 0.24f;
+        flash.startRadius = 8f;
+        flash.endRadius = 46f;
+        flash.elevation = 64f;
+        flash.spinSpeed = 5.0f;
+        flash.red = 1f;
+        flash.green = 1f;
+        flash.blue = 1f;
+
+        burst.add(flash);
+        getEngine().addEntity(burst);
+    }
+
+    /**
+     * Ground Karma rune-seal burst stamped at the enemy's 3D position: a
+     * rotating ring of green ink glyphs expanding over the heightmap.
+     */
+    private void spawnKarmaRuneBurst(float x, float y) {
+        Entity burst = getEngine().createEntity();
+        burst.add(new TransformComponent().set(x, y));
+
+        CardBurstComponent rune = new CardBurstComponent();
+        rune.style = CardBurstComponent.Style.RUNE;
+        rune.duration = 0.8f;
+        rune.startRadius = 14f;
+        rune.endRadius = 120f;
+        rune.elevation = 0f;
+        rune.spinSpeed = 2.4f;
+        rune.red = 0.45f;
+        rune.green = 0.95f;
+        rune.blue = 0.55f;
+
+        burst.add(rune);
+        getEngine().addEntity(burst);
     }
 }

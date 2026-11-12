@@ -37,6 +37,9 @@ public final class OverworldYokaiEntity {
     /** Ruhige Pixel-RPG-Laufgeschwindigkeit in Pixeln pro Sekunde. */
     public static final float WALK_SPEED = 42f;
 
+    /** Aggro chase speed in pixels per second (slightly below the player's 120). */
+    public static final float CHASE_SPEED = 104f;
+
     /** Pausendauer nach Erreichen eines Ziels. */
     public static final float PAUSE_MIN_SECONDS = 0.4f;
     public static final float PAUSE_MAX_SECONDS = 1.4f;
@@ -175,6 +178,12 @@ public final class OverworldYokaiEntity {
     private float knockbackVelocityX;
     private float knockbackVelocityY;
     private float knockbackRemaining;
+
+    /** Kiting engagement state: aggro chases waypoints, ignoring the roam box. */
+    private boolean aggro;
+    private boolean hasChaseTarget;
+    private float chaseTargetX;
+    private float chaseTargetY;
 
     private final Rectangle collisionBox = new Rectangle();
     private final Rectangle interactionBounds = new Rectangle();
@@ -347,6 +356,10 @@ public final class OverworldYokaiEntity {
     /**
      * Ein Simulationsschritt. {@code delta} wird begrenzt, damit ein Frameeinbruch die
      * Entity nicht aus ihrem Bereich springen laesst.
+     *
+     * <p>Im Aggro-Zustand folgt die Entity dem vom Overworld gesetzten
+     * Wegpunkt (aktive Verfolgung quer ueber die Heightmap); ausserhalb des
+     * Aggro-Zustands laeuft die ruhige 3x3-Roaming-Schleife.</p>
      */
     public void update(float delta, CollisionQuery collisionQuery) {
         float step = clampStepDelta(delta);
@@ -359,6 +372,12 @@ public final class OverworldYokaiEntity {
 
         stateTime += step;
 
+        if (aggro && hasChaseTarget) {
+            paused = false;
+            moveTowardsChaseTarget(step, collisionQuery);
+            return;
+        }
+
         if (paused) {
             pauseRemaining -= step;
             if (pauseRemaining <= 0f) {
@@ -369,6 +388,76 @@ public final class OverworldYokaiEntity {
         }
 
         moveTowardsTarget(step, collisionQuery);
+    }
+
+    /** Enables/disables the active kiting chase of this Yokai. */
+    public void setAggro(boolean aggro) {
+        this.aggro = aggro;
+        if (!aggro) {
+            hasChaseTarget = false;
+            paused = true;
+            pauseRemaining = BLOCKED_PAUSE_SECONDS;
+        }
+    }
+
+    public boolean isAggro() {
+        return aggro;
+    }
+
+    /** Next waypoint (world pixels) computed by the overworld path planner. */
+    public void setChaseTarget(float x, float y) {
+        this.chaseTargetX = x;
+        this.chaseTargetY = y;
+        this.hasChaseTarget = true;
+    }
+
+    public void clearChaseTarget() {
+        this.hasChaseTarget = false;
+    }
+
+    public boolean hasChaseTarget() {
+        return hasChaseTarget;
+    }
+
+    public float getChaseTargetX() {
+        return chaseTargetX;
+    }
+
+    public float getChaseTargetY() {
+        return chaseTargetY;
+    }
+
+    /**
+     * Actively follows a path waypoint across the terrain. Axis-separated
+     * collision lets the Yokai slide along walls while the screen recomputes
+     * the next BFS waypoint.
+     */
+    private void moveTowardsChaseTarget(float step, CollisionQuery collisionQuery) {
+        float dx = chaseTargetX - x;
+        float dy = chaseTargetY - y;
+        float distance = (float) Math.sqrt(dx * dx + dy * dy);
+        if (distance <= ARRIVE_EPSILON) {
+            return;
+        }
+
+        float stepLength = Math.min(CHASE_SPEED * speedScale * step, distance);
+        float moveX = dx / distance * stepLength;
+        float moveY = dy / distance * stepLength;
+        float movedX = 0f;
+        float movedY = 0f;
+
+        if (moveX != 0f && !isBlockedAt(x + moveX, y, collisionQuery)) {
+            x += moveX;
+            movedX = moveX;
+        }
+        if (moveY != 0f && !isBlockedAt(x, y + moveY, collisionQuery)) {
+            y += moveY;
+            movedY = moveY;
+        }
+
+        if (movedX != 0f || movedY != 0f) {
+            updateDirection(movedX, movedY);
+        }
     }
 
     /**
@@ -408,8 +497,10 @@ public final class OverworldYokaiEntity {
             movedY = moveY;
         }
 
-        x = MathUtils.clamp(x, roamMinX, roamMaxX);
-        y = MathUtils.clamp(y, roamMinY, roamMaxY);
+        if (!aggro) {
+            x = MathUtils.clamp(x, roamMinX, roamMaxX);
+            y = MathUtils.clamp(y, roamMinY, roamMaxY);
+        }
 
         float moved = (float) Math.sqrt(movedX * movedX + movedY * movedY);
         knockbackRemaining = Math.max(0f, knockbackRemaining - moved);
@@ -532,6 +623,8 @@ public final class OverworldYokaiEntity {
         float duration = Math.max(0.01f, seconds);
         hitFlashDuration = duration;
         hitFlashRemaining = Math.max(hitFlashRemaining, duration);
+        // Being hit always pulls the Yokai into the kiting engagement.
+        aggro = true;
     }
 
     public boolean isHitFlashing() {

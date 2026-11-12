@@ -1,6 +1,7 @@
 package com.lychcs.koikoi.combat.system;
 
 import com.badlogic.ashley.core.ComponentMapper;
+import com.lychcs.koikoi.combat.component.CardBurstComponent;
 import com.lychcs.koikoi.combat.component.CardDeckComponent;
 import com.lychcs.koikoi.combat.component.CardProjectileComponent;
 import com.lychcs.koikoi.combat.component.CompanionComponent;
@@ -48,6 +49,8 @@ public final class Mappers {
         ComponentMapper.getFor(ProjectileComponent.class);
     public static final ComponentMapper<CardProjectileComponent> CARD_PROJECTILE =
         ComponentMapper.getFor(CardProjectileComponent.class);
+    public static final ComponentMapper<CardBurstComponent> CARD_BURST =
+        ComponentMapper.getFor(CardBurstComponent.class);
     public static final ComponentMapper<CardDeckComponent> CARD_DECK =
         ComponentMapper.getFor(CardDeckComponent.class);
 

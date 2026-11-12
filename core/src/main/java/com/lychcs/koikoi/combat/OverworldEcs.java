@@ -14,6 +14,7 @@ import com.lychcs.koikoi.combat.component.PlayerComponent;
 import com.lychcs.koikoi.combat.component.SquashStretchComponent;
 import com.lychcs.koikoi.combat.component.TransformComponent;
 import com.lychcs.koikoi.combat.system.CardProjectileSystem;
+import com.lychcs.koikoi.combat.system.CardBurstSystem;
 import com.lychcs.koikoi.combat.system.CompanionSystem;
 import com.lychcs.koikoi.combat.system.HankoCastSystem;
 import com.lychcs.koikoi.combat.system.HostileCleanupSystem;
@@ -38,7 +39,8 @@ import java.util.List;
  * {@link #FLOATING_ORBITS_ENABLED}. Every active system is a normal Ashley
  * {@code IteratingSystem}; the engine order is explicit:</p>
  * <pre>
- * 0 control → 1 cast → 2 seal → 4 projectile → 5 status → 7 particle → 9 cleanup
+ * 0 control → 1 cast → 2 seal → 4 cards/projectiles → 5 status → 6 bursts
+ * → 7 particles → 9 cleanup
  * </pre>
  */
 public final class OverworldEcs {
@@ -111,6 +113,7 @@ public final class OverworldEcs {
         engine.addSystem(new CardProjectileSystem(particleBurst, wallQuery));
         engine.addSystem(new ProjectileSystem(particleBurst));
         engine.addSystem(new StatusSystem());
+        engine.addSystem(new CardBurstSystem());
         if (FLOATING_ORBITS_ENABLED) {
             engine.addSystem(new OrbitSystem(input));
         }

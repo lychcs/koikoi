@@ -24,10 +24,13 @@ import com.lychcs.koikoi.combat.component.TransformComponent;
  * <p>The system only writes the desired velocity into the player's
  * {@link MotionComponent}; the screen forwards it to the Box2D body. A
  * right-click destination in {@link PlayerInput#moveTarget} is followed until
- * the player is within {@link #ARRIVE_THRESHOLD} world units. A dash consumes
- * that destination, and the S stop command cancels it outright - exactly like
- * League of Legends. The legacy axis fields remain as a test/developer fallback
- * when no target is active.</p>
+ * the player is within {@link #ARRIVE_THRESHOLD} world units. The
+ * first-person overworld fills {@link PlayerInput#moveDirection} with the
+ * camera-relative WASD direction, which steers walks and gives the Q dash its
+ * kiting direction (for example {@code S + Q} backpedals while the crosshair
+ * stays on the target). A dash consumes that destination, and the S stop
+ * command cancels it outright - exactly like League of Legends. The legacy
+ * axis fields remain as a test/developer fallback when no target is active.</p>
  */
 public final class PlayerControlSystem extends IteratingSystem {
 
@@ -134,7 +137,17 @@ public final class PlayerControlSystem extends IteratingSystem {
         }
 
         if (!hasDirection) {
-            // Legacy/dev fallback only. The overworld no longer fills WASD.
+            // First-person camera-relative WASD direction from the screen.
+            float planarLength2 = input.hasMoveDirection
+                ? input.moveDirection.len2() : 0f;
+            if (planarLength2 > 0.0001f) {
+                direction.set(input.moveDirection).scl(1f / (float) Math.sqrt(planarLength2));
+                hasDirection = true;
+            }
+        }
+
+        if (!hasDirection) {
+            // Legacy/dev fallback only (8-way axis input).
             MovementVector.fromAxis(input.moveX, input.moveY, direction);
             hasDirection = direction.len2() > 0f;
         }
@@ -152,7 +165,7 @@ public final class PlayerControlSystem extends IteratingSystem {
             player.facingY = direction.y;
         }
 
-        // --- Q dash toward the current mouse position -------------------------
+        // --- Q dash: WASD direction when held, otherwise crosshair/aim --------
         if (input.dashRequested && !player.isDashing() && player.dashCooldownRemaining <= 0f) {
             player.dashRemaining = player.dashDuration;
             player.dashCooldownRemaining = player.dashCooldown;
@@ -162,18 +175,29 @@ public final class PlayerControlSystem extends IteratingSystem {
             // player stops after the dash instead of resuming the old path.
             input.hasMoveTarget = false;
 
-            float aimDx = input.aimX - transform.x;
-            float aimDy = input.aimY - transform.y;
-            float aimLength2 = aimDx * aimDx + aimDy * aimDy;
-            if (aimLength2 > 0.0001f) {
-                float inverseLength = 1f / (float) Math.sqrt(aimLength2);
-                player.facingX = aimDx * inverseLength;
-                player.facingY = aimDy * inverseLength;
-            } else if (hasDirection) {
-                player.facingX = direction.x;
-                player.facingY = direction.y;
-            } else if (player.facingX == 0f && player.facingY == 0f) {
-                player.facingY = -1f;
+            // Vayne-style kiting: a held WASD direction decides where Q goes,
+            // so holding S + Q backpedals while the crosshair keeps facing
+            // forward. Without WASD the dash follows the aim (mouse/crosshair).
+            float planarLength2 = input.hasMoveDirection
+                ? input.moveDirection.len2() : 0f;
+            if (planarLength2 > 0.0001f) {
+                float inverseLength = 1f / (float) Math.sqrt(planarLength2);
+                player.facingX = input.moveDirection.x * inverseLength;
+                player.facingY = input.moveDirection.y * inverseLength;
+            } else {
+                float aimDx = input.aimX - transform.x;
+                float aimDy = input.aimY - transform.y;
+                float aimLength2 = aimDx * aimDx + aimDy * aimDy;
+                if (aimLength2 > 0.0001f) {
+                    float inverseLength = 1f / (float) Math.sqrt(aimLength2);
+                    player.facingX = aimDx * inverseLength;
+                    player.facingY = aimDy * inverseLength;
+                } else if (hasDirection) {
+                    player.facingX = direction.x;
+                    player.facingY = direction.y;
+                } else if (player.facingX == 0f && player.facingY == 0f) {
+                    player.facingY = -1f;
+                }
             }
 
             emitDashBurst(transform.x, transform.y);
@@ -249,6 +273,18 @@ public final class PlayerControlSystem extends IteratingSystem {
         card.speed = speed;
         card.maxRange = CARD_RANGE_TILES * gridSize;
         card.glyph = cardGlyph(directionX, directionY);
+
+        // The 3D billboard follows the crosshair ray from the camera, so the
+        // card visually leaves the centre of the screen and recedes along it.
+        if (input.hasAimRay) {
+            card.hasWorldRay = true;
+            card.rayOriginX = input.aimRayOrigin.x;
+            card.rayOriginY = input.aimRayOrigin.y;
+            card.rayOriginZ = input.aimRayOrigin.z;
+            card.rayDirX = input.aimRayDirection.x;
+            card.rayDirY = input.aimRayDirection.y;
+            card.rayDirZ = input.aimRayDirection.z;
+        }
 
         // A locked W card is consumed by this throw and applies its archetype.
         if (deck != null && deck.state == CardDeckComponent.State.LOCKED) {

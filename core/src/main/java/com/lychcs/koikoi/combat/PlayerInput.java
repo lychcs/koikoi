@@ -1,6 +1,7 @@
 package com.lychcs.koikoi.combat;
 
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 
 /**
  * Input snapshot consumed by the Ashley systems.
@@ -10,9 +11,10 @@ import com.badlogic.gdx.math.Vector2;
  * dash, cast or ultimate - independent of how many entities a system iterates.</p>
  *
  * <p>Movement is MOBA-style: a right-click stores a world-space destination in
- * {@link #moveTarget}. The legacy {@link #moveX}/{@link #moveY} axes remain for
- * tests and optional developer fallback, but the overworld no longer fills them
- * from WASD.</p>
+ * {@link #moveTarget}. The first-person overworld additionally fills
+ * {@link #moveDirection} every frame with the camera-relative WASD direction,
+ * and {@link #moveX}/{@link #moveY} remain as a legacy test/developer
+ * fallback.</p>
  */
 public final class PlayerInput {
 
@@ -21,6 +23,15 @@ public final class PlayerInput {
 
     /** Optional fallback vertical axis in {@code [-1, 1]} (positive = up/north). */
     public float moveY;
+
+    /**
+     * Camera-relative ground direction in 2D world space, filled by the
+     * first-person controller ({@code W} = forward, {@code D} = right).
+     */
+    public final Vector2 moveDirection = new Vector2();
+
+    /** true while {@link #moveDirection} should steer the player. */
+    public boolean hasMoveDirection;
 
     /** World-space right-click destination. */
     public final Vector2 moveTarget = new Vector2();
@@ -51,6 +62,15 @@ public final class PlayerInput {
 
     /** Aim position in world coordinates (mouse). */
     public float aimY;
+
+    /** Camera-ray origin in libGDX world units (y = eye height). */
+    public final Vector3 aimRayOrigin = new Vector3();
+
+    /** Unit camera-ray direction in libGDX world units (the crosshair line). */
+    public final Vector3 aimRayDirection = new Vector3(0f, 0f, -1f);
+
+    /** true when the screen filled a valid crosshair ray this frame. */
+    public boolean hasAimRay;
 
     /** Accumulated screen time in seconds, used for bobbing and shader phases. */
     public float time;

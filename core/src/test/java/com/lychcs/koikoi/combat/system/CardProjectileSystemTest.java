@@ -2,7 +2,9 @@ package com.lychcs.koikoi.combat.system;
 
 import com.badlogic.ashley.core.Engine;
 import com.badlogic.ashley.core.Entity;
+import com.badlogic.ashley.core.Family;
 import com.lychcs.koikoi.combat.ParticleBurst;
+import com.lychcs.koikoi.combat.component.CardBurstComponent;
 import com.lychcs.koikoi.combat.component.CardProjectileComponent;
 import com.lychcs.koikoi.combat.component.HealthComponent;
 import com.lychcs.koikoi.combat.component.HostileComponent;
@@ -306,5 +308,40 @@ class CardProjectileSystemTest {
         card.add(new TransformComponent().set(0f, 0f));
         card.add(cardComponentAt(vx, vy, maxRange));
         return card;
+    }
+
+    @Test
+    void cardImpactSpawnsTheMatching3DBurst() {
+        Engine engine = new Engine();
+        engine.addSystem(new CardProjectileSystem(noopParticles(), (x, y) -> false));
+
+        CardProjectileComponent card = cardComponentAt(500f, 0f, 1000f);
+        card.deckCard = com.lychcs.koikoi.combat.component.CardDeckComponent.CardType.BLUE;
+        Entity projectile = new Entity();
+        projectile.add(new TransformComponent().set(0f, 0f));
+        projectile.add(card);
+        engine.addEntity(projectile);
+        spawnHostile(engine, 50f, 0f);
+
+        engine.update(0.1f);
+
+        CardBurstComponent.Style ribbon = null;
+        boolean rune = false;
+        boolean flash = false;
+        for (Entity candidate : engine.getEntitiesFor(
+            Family.all(CardBurstComponent.class).get())) {
+            CardBurstComponent burst = Mappers.CARD_BURST.get(candidate);
+            if (burst.style == CardBurstComponent.Style.RIBBON) {
+                ribbon = burst.style;
+            } else if (burst.style == CardBurstComponent.Style.RUNE) {
+                rune = true;
+            } else if (burst.style == CardBurstComponent.Style.FLASH) {
+                flash = true;
+            }
+        }
+        assertEquals(CardBurstComponent.Style.RIBBON, ribbon,
+            "a ribbon card impact must spawn its waving ink burst");
+        assertTrue(rune, "hostile hits must stamp the ground Karma rune burst");
+        assertTrue(flash, "hostile hits must spawn the white-ink flash");
     }
 }

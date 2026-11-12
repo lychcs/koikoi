@@ -35,4 +35,35 @@ class CardDeckNamesTest {
         assertEquals("Spring Ribbon", CardDeckNames.clean("Spring Ribbon"));
         assertEquals("Ribbon #2 of Spring", CardDeckNames.clean("Ribbon #2 of Spring"));
     }
+
+    @Test
+    void hudLineListsTheRealHanafudaNamesOfAllSlots() {
+        Deck deck = new Deck();
+        deck.initializeDeck();
+        CardDeckComponent cycling = new CardDeckComponent();
+
+        assertEquals("[ Spring Cherry Blossom Storm ]   [ Spring Ribbon ]   [ Spring Koi ]",
+            CardDeckNames.hudLine(cycling, deck));
+    }
+
+    @Test
+    void hudLineHighlightsTheCyclingSlotWithAngleBrackets() {
+        Deck deck = new Deck();
+        deck.initializeDeck();
+        CardDeckComponent cycling = new CardDeckComponent();
+
+        cycling.press();
+        assertEquals("< Spring Cherry Blossom Storm >   [ Spring Ribbon ]   [ Spring Koi ]",
+            CardDeckNames.hudLine(cycling, deck));
+
+        cycling.update(CardDeckComponent.SHUFFLE_INTERVAL);
+        assertEquals("[ Spring Cherry Blossom Storm ]   < Spring Ribbon >   [ Spring Koi ]",
+            CardDeckNames.hudLine(cycling, deck));
+    }
+
+    @Test
+    void hudLineFallsBackToArchetypesWithoutADeckComponent() {
+        assertEquals("[ RED ]   [ BLUE ]   [ GOLD ]", CardDeckNames.hudLine(null, null));
+    }
+
 }
