@@ -31,9 +31,10 @@ public final class CardProjectileComponent implements Component {
     public float travelled;
 
     /**
-     * Rendered card glyph. Basic throws use a directional arrow; locked W-cards
-     * replace it with a Hanafuda sigil ({@code *} petal, {@code ~} ribbon,
-     * {@code Y} beast).
+     * Logical card sigil used by the HUD and combat logs. Basic throws use a
+     * directional arrow; locked 3P cards use a Hanafuda sigil ({@code *} petal,
+     * {@code ~} ribbon, {@code Y} beast). The 3D card itself is a procedural
+     * Hanafuda plate and no longer renders this character literally.
      */
     public char glyph = '*';
 
@@ -42,7 +43,12 @@ public final class CardProjectileComponent implements Component {
     public float green = 0.82f;
     public float blue = 0.45f;
 
-    /** Locked W-card archetype, or null for a basic card. */
+    /** Coloured flight trail: crimson/sakura, azure/ribbon or gold/beast. */
+    public float trailRed = 1.00f;
+    public float trailGreen = 0.92f;
+    public float trailBlue = 0.70f;
+
+    /** Locked 3P-card archetype, or null for a basic card. */
     public CardDeckComponent.CardType deckCard;
 
     /** Red card: AoE damage radius in world pixels (0 = single target). */
@@ -61,20 +67,20 @@ public final class CardProjectileComponent implements Component {
     public float knockbackDistance;
 
     // ------------------------------------------------------------------
-    // 3D crosshair ray (first-person rendering)
+    // 3D aim ray (third-person crosshair / shoulder throw)
     // ------------------------------------------------------------------
 
-    /** Camera-ray origin in libGDX world units (y = eye height). */
+    /** Shoulder-ray origin in libGDX world units (y = shoulder height). */
     public float rayOriginX;
     public float rayOriginY;
     public float rayOriginZ;
 
-    /** Unit direction of the camera ray in libGDX world units. */
+    /** Unit direction from the shoulder to the crosshair world point. */
     public float rayDirX;
     public float rayDirY;
     public float rayDirZ = -1f;
 
-    /** true when the ray fields hold a real camera ray from the crosshair. */
+    /** true when the ray fields hold a real shoulder ray toward the crosshair. */
     public boolean hasWorldRay;
 
     /**
@@ -83,9 +89,14 @@ public final class CardProjectileComponent implements Component {
      * combat data stays in pixels.
      */
     public float worldHeight(float worldScale) {
+        return worldHeightAt(travelled, worldScale);
+    }
+
+    /** Height at an arbitrary previous travel distance (used by the trail). */
+    public float worldHeightAt(float travelledPixels, float worldScale) {
         if (!hasWorldRay) {
             return 0f;
         }
-        return rayOriginY + rayDirY * travelled * worldScale;
+        return rayOriginY + rayDirY * travelledPixels * worldScale;
     }
 }

@@ -50,10 +50,70 @@ class SceneryPlanTest {
         SceneryPlan second = SceneryPlan.generate(map, field, SCALE, SEED);
 
         assertEquals(first.getBoxes(), second.getBoxes());
+        assertEquals(first.getCylinders(), second.getCylinders());
+        assertEquals(first.getSpheres(), second.getSpheres());
         assertEquals(first.getPathTiles(), second.getPathTiles());
         assertEquals(first.getToriiAnchors(), second.getToriiAnchors());
         assertEquals(first.getTreeAnchors(), second.getTreeAnchors());
+        assertEquals(first.getNatureInstances(), second.getNatureInstances());
     }
+
+    @Test
+    void organicNatureInstancesAreGroundedAndReplaceTreeRocks() {
+        SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
+        List<SceneryPlan.NatureInstance> instances = plan.getNatureInstances();
+
+        assertFalse(instances.isEmpty(), "the imported nature models must be placed");
+        Set<SceneryPlan.NatureKind> kinds = new HashSet<>();
+        for (SceneryPlan.NatureInstance instance : instances) {
+            kinds.add(instance.kind());
+            assertTrue(Float.isFinite(instance.x()) && Float.isFinite(instance.y())
+                    && Float.isFinite(instance.z()),
+                "nature transforms must be finite: " + instance);
+            assertTrue(instance.scale() > 0.2f && instance.scale() < 2f,
+                "model scale must stay in a sane range: " + instance);
+            float ground = field.getHeight(instance.x(), instance.z());
+            assertTrue(instance.y() >= ground - 0.06f,
+                "models must not sink through the heightfield: " + instance);
+            assertTrue(instance.y() <= ground + 0.40f,
+                "models must not hover above the heightfield: " + instance);
+        }
+
+        assertTrue(kinds.contains(SceneryPlan.NatureKind.MAPLE_TREE),
+            "sakura hills need the maple canopy model");
+        assertTrue(kinds.contains(SceneryPlan.NatureKind.BOULDER_ROUND)
+                || kinds.contains(SceneryPlan.NatureKind.BOULDER_TALL),
+            "blocky stone outcrops must become boulders");
+        assertTrue(kinds.contains(SceneryPlan.NatureKind.BUSH_SMALL)
+                || kinds.contains(SceneryPlan.NatureKind.BUSH_LARGE),
+            "undergrowth needs organic bushes");
+        assertTrue(kinds.contains(SceneryPlan.NatureKind.GRASS_SMALL)
+                || kinds.contains(SceneryPlan.NatureKind.GRASS_LARGE),
+            "undergrowth needs organic grass tufts");
+    }
+
+    @Test
+    void noBlockySakuraOrBambooCrownsRemain() {
+        SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
+
+        assertTrue(plan.getBoxes().stream().noneMatch(
+                box -> box.material() == SceneryPlan.MATERIAL_SAKURA_LEAVES),
+            "no box may use the sakura-leaf texture anymore; crowns are organic models");
+        assertTrue(plan.getBoxes().stream().noneMatch(
+                box -> box.material() == SceneryPlan.MATERIAL_GRASS
+                    && box.sy() < 0.3f && box.sx() > 0.3f && box.sz() > 0.3f),
+            "flat grass/bamboo crown slabs must be replaced by organic leaf masses");
+
+        // Every bamboo grove gets five internodes and node rings per stalk.
+        long bambooCylinders = plan.getCylinders().stream()
+            .filter(cylinder -> cylinder.sides() == 8)
+            .count();
+        assertTrue(bambooCylinders >= plan.getBambooAnchors().size() * 3L * 5L,
+            "bamboo must be built from segmented round culms");
+        assertFalse(plan.getSpheres().isEmpty(),
+            "bamboo leaf masses and lantern finials need low-poly organic blobs");
+    }
+
 
     @Test
     void dirtPathsConnectTheVillagePointsOfInterest() {
@@ -76,11 +136,12 @@ class SceneryPlanTest {
         assertFalse(plan.getToriiAnchors().isEmpty());
         assertFalse(plan.getLanternAnchors().isEmpty());
 
-        long vermillionBoxes = plan.getBoxes().stream()
-            .filter(box -> box.red() > 0.6f && box.green() < 0.45f && box.blue() < 0.3f)
+        long vermillionCylinders = plan.getCylinders().stream()
+            .filter(cylinder -> cylinder.red() > 0.6f
+                && cylinder.green() < 0.45f && cylinder.blue() < 0.3f)
             .count();
-        assertTrue(vermillionBoxes >= plan.getToriiAnchors().size() * 2L,
-            "every torii gate needs its vermillion pillars");
+        assertTrue(vermillionCylinders >= plan.getToriiAnchors().size() * 4L,
+            "every torii gate needs round vermillion pillars and curved lintels");
     }
 
     @Test
@@ -107,6 +168,29 @@ class SceneryPlanTest {
     }
 
     @Test
+    void templeEntranceAnchorSitsInFrontOfTheTemple() {
+        SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
+        assertEquals(plan.getTempleAnchors().size(), plan.getTempleEntranceAnchors().size());
+
+        Vector2 temple = plan.getTempleAnchors().get(0);
+        Vector2 entrance = plan.getTempleEntranceAnchors().get(0);
+        float distance = (float) Math.hypot(
+            entrance.x - temple.x, entrance.y - temple.y);
+        assertEquals(3.10f, distance, 0.02f,
+            "the entrance anchor belongs on the front steps");
+
+        AsciiMap.Tile shrine = map.tilesOf(AsciiMap.SHRINE).get(0);
+        float shrineX = map.tileCenterX(shrine.col()) * SCALE;
+        float shrineZ = -map.tileCenterY(shrine.row()) * SCALE;
+        float templeToShrine = (float) Math.hypot(
+            shrineX - temple.x, shrineZ - temple.y);
+        float entranceToShrine = (float) Math.hypot(
+            shrineX - entrance.x, shrineZ - entrance.y);
+        assertTrue(entranceToShrine < templeToShrine,
+            "the entrance must face the shrine approach");
+    }
+
+    @Test
     void bambooAndSakuraScatterOverTheHillsButNotTheVillageFloor() {
         SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
 
@@ -126,9 +210,11 @@ class SceneryPlanTest {
     }
 
     @Test
-    void everySceneryBoxStaysInsideTheHeightmapPatch() {
+    void everySceneryPrimitiveStaysInsideTheHeightmapPatch() {
         SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
         assertFalse(plan.getBoxes().isEmpty());
+        assertFalse(plan.getCylinders().isEmpty());
+        assertFalse(plan.getSpheres().isEmpty());
 
         float minX = field.getOriginX() - 3f;
         float maxX = field.getOriginX() + field.getSize() + 3f;
@@ -139,6 +225,26 @@ class SceneryPlanTest {
             assertTrue(box.z() >= minZ && box.z() <= maxZ, "box Z outside the patch");
             assertTrue(Float.isFinite(box.y()));
             assertTrue(box.sx() > 0f && box.sy() > 0f && box.sz() > 0f);
+        }
+        for (SceneryPlan.Cylinder cylinder : plan.getCylinders()) {
+            assertTrue(cylinder.x1() >= minX && cylinder.x1() <= maxX,
+                "cylinder X outside the patch");
+            assertTrue(cylinder.z1() >= minZ && cylinder.z1() <= maxZ,
+                "cylinder Z outside the patch");
+            assertTrue(cylinder.x2() >= minX && cylinder.x2() <= maxX,
+                "cylinder end X outside the patch");
+            assertTrue(cylinder.z2() >= minZ && cylinder.z2() <= maxZ,
+                "cylinder end Z outside the patch");
+            assertTrue(cylinder.radius1() > 0f && cylinder.radius2() > 0f);
+            assertTrue(cylinder.sides() >= 4);
+        }
+        for (SceneryPlan.Sphere sphere : plan.getSpheres()) {
+            assertTrue(sphere.x() >= minX && sphere.x() <= maxX,
+                "sphere X outside the patch");
+            assertTrue(sphere.z() >= minZ && sphere.z() <= maxZ,
+                "sphere Z outside the patch");
+            assertTrue(sphere.radiusX() > 0f && sphere.radiusY() > 0f
+                && sphere.radiusZ() > 0f);
         }
     }
 
@@ -246,6 +352,8 @@ class SceneryPlanTest {
         for (SceneryPlan.Solid solid : solids) {
             assertTrue(solid.halfWidth() > 0f && solid.halfDepth() > 0f);
             assertTrue(Float.isFinite(solid.x()) && Float.isFinite(solid.z()));
+            assertTrue(Float.isFinite(solid.topY()) && solid.topY() > 0f,
+                "solid tops must expose a finite camera-boom height");
         }
 
         Vector2 temple = plan.getTempleAnchors().get(0);
@@ -277,10 +385,30 @@ class SceneryPlanTest {
             float pathZ = -map.tileCenterY(pathTile.row()) * SCALE;
             for (SceneryPlan.Solid solid : plan.getSolids()) {
                 float distance = (float) Math.hypot(solid.x() - pathX, solid.z() - pathZ);
-                assertTrue(distance > 0.5f,
-                    "dirt path tiles must stay clear of solid scenery: solid at "
+                float footprint = Math.max(solid.halfWidth(), solid.halfDepth()) + 0.5f;
+                assertTrue(distance > footprint,
+                    "dirt path tiles must stay fully clear of solid scenery: solid at "
                         + solid.x() + "," + solid.z() + " near tile " + pathTile);
             }
+        }
+    }
+
+    @Test
+    void vegetationAvoidsSteepCliffSlopes() {
+        SceneryPlan plan = SceneryPlan.generate(map, field, SCALE, SEED);
+
+        assertFalse(plan.getTreeAnchors().isEmpty(),
+            "the test village must grow at least some sakura trees");
+        for (Vector2 tree : plan.getTreeAnchors()) {
+            float slope = SceneryPlan.slopeAt(field, tree.x, tree.y);
+            assertTrue(slope <= SceneryPlan.MAX_PLANT_SLOPE + 0.001f,
+                "sakura must not root on a cliff wall, slope=" + slope
+                    + " at " + tree.x + "," + tree.y);
+        }
+        for (Vector2 bamboo : plan.getBambooAnchors()) {
+            float slope = SceneryPlan.slopeAt(field, bamboo.x, bamboo.y);
+            assertTrue(slope <= SceneryPlan.MAX_PLANT_SLOPE + 0.001f,
+                "bamboo must not root on a cliff wall, slope=" + slope);
         }
     }
 

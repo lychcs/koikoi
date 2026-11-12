@@ -37,6 +37,15 @@ public final class CardProjectileSystem extends IteratingSystem {
         boolean isBlocked(float x, float y);
     }
 
+    /** Terrain height query in libGDX world units (X/Z). */
+    @FunctionalInterface
+    public interface TerrainQuery {
+        float height(float worldX, float worldZ);
+    }
+
+    /** Clearance above the ground before a card counts as a terrain impact. */
+    public static final float TERRAIN_IMPACT_CLEARANCE = 0.10f;
+
     private static final Family HOSTILES = Family.all(
         HostileComponent.class, TransformComponent.class, HealthComponent.class).get();
 
@@ -46,12 +55,29 @@ public final class CardProjectileSystem extends IteratingSystem {
 
     private final ParticleBurst particles;
     private final WallQuery wallQuery;
+    private final TerrainQuery terrainQuery;
+    private final float worldScale;
     private final List<Entity> expired = new ArrayList<>();
 
     public CardProjectileSystem(ParticleBurst particles, WallQuery wallQuery) {
+        this(particles, wallQuery, null, 1f / 64f);
+    }
+
+    /**
+     * @param terrainQuery heightfield sampler in world units, or null to skip
+     *                     the ground-impact test (legacy 2D-only cards)
+     * @param worldScale   pixels-to-world conversion for the card ray height
+     */
+    public CardProjectileSystem(ParticleBurst particles, WallQuery wallQuery,
+                                TerrainQuery terrainQuery, float worldScale) {
         super(Family.all(CardProjectileComponent.class, TransformComponent.class).get(), 4);
+        if (!(worldScale > 0f)) {
+            throw new IllegalArgumentException("worldScale must be > 0 but was " + worldScale);
+        }
         this.particles = particles;
         this.wallQuery = wallQuery;
+        this.terrainQuery = terrainQuery;
+        this.worldScale = worldScale;
     }
 
     @Override
@@ -100,6 +126,19 @@ public final class CardProjectileSystem extends IteratingSystem {
                     applySingleHit(hostileEntity, health, hostile, target, card);
                 }
                 impact(target.x, target.y, card, true);
+                expired.add(entity);
+                return;
+            }
+        }
+
+        if (terrainQuery != null && card.hasWorldRay) {
+            float worldX = transform.x * worldScale;
+            float worldZ = -transform.y * worldScale;
+            float ground = terrainQuery.height(worldX, worldZ);
+            if (card.worldHeight(worldScale) <= ground + TERRAIN_IMPACT_CLEARANCE) {
+                // Dip below the hillside: burst and destroy instead of sliding
+                // along the terrain in the renderer.
+                impact(transform.x, transform.y, card, false);
                 expired.add(entity);
                 return;
             }
@@ -259,7 +298,7 @@ public final class CardProjectileSystem extends IteratingSystem {
     /**
      * Spawns the 3D impact flavour of the card: warm petal ring, cool ribbon
      * wave, heavy beast strokes or a plain parchment flash. The overworld
-     * renders it as camera-facing billboards on the heightmap.
+     * renders camera-facing billboards plus a procedural Kamon ground crest.
      */
     private void spawnWorldBurst(float x, float y, CardProjectileComponent card) {
         Entity burst = getEngine().createEntity();

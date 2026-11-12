@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Validates the procedural 3D heightmap that the first-person camera walks on. */
+/** Validates the procedural 3D heightmap that the third-person camera walks on. */
 class HeightfieldTest {
 
     private static final long SEED = 0x5EED_1A5F_0BADF00DL;

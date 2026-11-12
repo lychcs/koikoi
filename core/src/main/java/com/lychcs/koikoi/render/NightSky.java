@@ -5,7 +5,7 @@ import com.badlogic.gdx.math.Vector3;
 /**
  * Fixed celestial configuration of the ASCII night sky.
  *
- * <p>The moon sits at one world direction and is drawn by the ASCII post shader
+ * <p>The moon sits at one world direction and is drawn by the atmospheric post shader
  * as a cluster of bright terminal glyphs with procedural craters; cloud bands
  * drift slowly across the sky with {@code ~}, {@code -} and {@code .} ink. The
  * direction is shared with unit tests so the "moon must be above the horizon"
@@ -29,10 +29,10 @@ public final class NightSky {
     public static final float MOON_GREEN = 0.92f;
     public static final float MOON_BLUE = 0.74f;
 
-    /** Cool, dim ink of the drifting cloud glyphs. */
-    public static final float CLOUD_RED = 0.34f;
-    public static final float CLOUD_GREEN = 0.50f;
-    public static final float CLOUD_BLUE = 0.46f;
+    /** Muted twilight-violet ink of the drifting cloud bands (#3B1E54). */
+    public static final float CLOUD_RED = 0.20f;
+    public static final float CLOUD_GREEN = 0.11f;
+    public static final float CLOUD_BLUE = 0.28f;
 
     private NightSky() {
     }

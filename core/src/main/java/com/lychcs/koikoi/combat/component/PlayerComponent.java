@@ -54,6 +54,12 @@ public final class PlayerComponent implements Component {
     public float facingX;
     public float facingY = -1f;
 
+    /** Duration of the throw-arm flick/torso-twist animation in seconds. */
+    public static final float THROW_ANIMATION_DURATION = 0.22f;
+
+    /** Remaining throw animation; set when a card projectile spawns. */
+    public float throwAnimationRemaining;
+
     /** Grants/refreshes the Beast-Yaku lifesteal buff. */
     public void grantLifesteal(float percent, float seconds) {
         lifestealPercent = Math.max(0f, Math.min(1f, percent));
@@ -62,6 +68,10 @@ public final class PlayerComponent implements Component {
 
     /** Advances temporary combat buffs. */
     public void updateBuffs(float deltaTime) {
+        if (throwAnimationRemaining > 0f) {
+            throwAnimationRemaining = Math.max(0f,
+                throwAnimationRemaining - Math.max(0f, deltaTime));
+        }
         if (lifestealRemaining > 0f) {
             lifestealRemaining = Math.max(0f, lifestealRemaining - Math.max(0f, deltaTime));
             if (lifestealRemaining <= 0f) {

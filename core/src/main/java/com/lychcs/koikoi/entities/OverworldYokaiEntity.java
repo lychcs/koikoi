@@ -708,6 +708,11 @@ public final class OverworldYokaiEntity {
         return paused;
     }
 
+    /** Seconds of movement/animation state accumulated by {@link #update}. */
+    public float getStateTime() {
+        return stateTime;
+    }
+
     public Direction getDirection() {
         return direction;
     }

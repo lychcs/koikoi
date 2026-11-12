@@ -11,7 +11,7 @@ import com.badlogic.gdx.math.Vector3;
  * dash, cast or ultimate - independent of how many entities a system iterates.</p>
  *
  * <p>Movement is MOBA-style: a right-click stores a world-space destination in
- * {@link #moveTarget}. The first-person overworld additionally fills
+ * {@link #moveTarget}. The third-person overworld additionally fills
  * {@link #moveDirection} every frame with the camera-relative WASD direction,
  * and {@link #moveX}/{@link #moveY} remain as a legacy test/developer
  * fallback.</p>
@@ -26,7 +26,7 @@ public final class PlayerInput {
 
     /**
      * Camera-relative ground direction in 2D world space, filled by the
-     * first-person controller ({@code W} = forward, {@code D} = right).
+     * third-person controller ({@code W} = forward, {@code D} = right).
      */
     public final Vector2 moveDirection = new Vector2();
 
@@ -51,7 +51,7 @@ public final class PlayerInput {
     /** Basic card throw requested this frame (left click, or right-click on a hostile). */
     public boolean basicAttackRequested;
 
-    /** W was pressed this frame (start shuffle / lock active card). */
+    /** E/R/right-click was pressed this frame (start shuffle / lock active card). */
     public boolean cardSelectRequested;
 
     /** Companion ultimate key was pressed this frame. */
@@ -63,10 +63,16 @@ public final class PlayerInput {
     /** Aim position in world coordinates (mouse). */
     public float aimY;
 
-    /** Camera-ray origin in libGDX world units (y = eye height). */
+    /** World-pixel position of the throwing hand (set by the screen). */
+    public final Vector2 throwOrigin = new Vector2();
+
+    /** true when {@link #throwOrigin} holds a valid hand position. */
+    public boolean hasThrowOrigin;
+
+    /** Shoulder ray origin in libGDX world units (y = shoulder height). */
     public final Vector3 aimRayOrigin = new Vector3();
 
-    /** Unit camera-ray direction in libGDX world units (the crosshair line). */
+    /** Unit aim-ray direction in libGDX world units (shoulder -> crosshair point). */
     public final Vector3 aimRayDirection = new Vector3(0f, 0f, -1f);
 
     /** true when the screen filled a valid crosshair ray this frame. */

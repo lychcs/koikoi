@@ -25,7 +25,7 @@ import com.lychcs.koikoi.combat.component.TransformComponent;
  * {@link MotionComponent}; the screen forwards it to the Box2D body. A
  * right-click destination in {@link PlayerInput#moveTarget} is followed until
  * the player is within {@link #ARRIVE_THRESHOLD} world units. The
- * first-person overworld fills {@link PlayerInput#moveDirection} with the
+ * third-person overworld fills {@link PlayerInput#moveDirection} with the
  * camera-relative WASD direction, which steers walks and gives the Q dash its
  * kiting direction (for example {@code S + Q} backpedals while the crosshair
  * stays on the target). A dash consumes that destination, and the S stop
@@ -137,7 +137,7 @@ public final class PlayerControlSystem extends IteratingSystem {
         }
 
         if (!hasDirection) {
-            // First-person camera-relative WASD direction from the screen.
+            // Third-person camera-relative WASD direction from the screen.
             float planarLength2 = input.hasMoveDirection
                 ? input.moveDirection.len2() : 0f;
             if (planarLength2 > 0.0001f) {
@@ -201,6 +201,10 @@ public final class PlayerControlSystem extends IteratingSystem {
             }
 
             emitDashBurst(transform.x, transform.y);
+            if (particles != null) {
+                // Tumble-roll takeoff: a stronger dust/petal puff.
+                particles.burst(transform.x, transform.y, 6, 5);
+            }
             dashEmitTimer = DASH_EMIT_INTERVAL;
         }
 
@@ -247,8 +251,9 @@ public final class PlayerControlSystem extends IteratingSystem {
     /** Creates a cinematic little card entity flying toward the current mouse aim. */
     private void spawnCardProjectile(TransformComponent playerTransform, PlayerComponent player,
                                      CardDeckComponent deck) {
-        float originX = playerTransform.x;
-        float originY = playerTransform.y + PLAYER_CENTER_OFFSET;
+        float originX = input.hasThrowOrigin ? input.throwOrigin.x : playerTransform.x;
+        float originY = input.hasThrowOrigin ? input.throwOrigin.y
+            : playerTransform.y + PLAYER_CENTER_OFFSET;
 
         float aimDx = input.aimX - originX;
         float aimDy = input.aimY - originY;
@@ -294,10 +299,15 @@ public final class PlayerControlSystem extends IteratingSystem {
 
         Entity projectile = getEngine().createEntity();
         projectile.add(new TransformComponent().set(
-            originX + directionX * 10f,
-            originY + directionY * 10f));
+            originX + directionX * 6f,
+            originY + directionY * 6f));
         projectile.add(card);
         getEngine().addEntity(projectile);
+
+        // Snappy right-arm flick + torso twist whenever a real card leaves the
+        // hand (the component timer is read by the avatar renderer).
+        player.throwAnimationRemaining = PlayerComponent.THROW_ANIMATION_DURATION;
+
         if (Gdx.app != null) {
             Gdx.app.log("PlayerControlSystem", "Card spawned glyph=" + card.glyph
                 + " type=" + (card.deckCard == null ? "BASIC" : card.deckCard.label)
@@ -317,16 +327,25 @@ public final class PlayerControlSystem extends IteratingSystem {
                 card.damage = 14f;
                 card.areaRadius = 2.5f * gridSize;
                 card.knockbackDistance = 26f;
+                card.trailRed = 1.00f;
+                card.trailGreen = 0.55f;
+                card.trailBlue = 0.68f;
             }
             case BLUE -> {
                 card.damage = 8f;
                 card.refundCooldowns = true;
                 card.manaRefund = 30f;
+                card.trailRed = 0.55f;
+                card.trailGreen = 0.78f;
+                card.trailBlue = 1.00f;
             }
             case GOLD -> {
                 card.damage = 36f;
                 card.stunDuration = 1.25f;
                 card.knockbackDistance = 34f;
+                card.trailRed = 1.00f;
+                card.trailGreen = 0.90f;
+                card.trailBlue = 0.55f;
             }
         }
     }

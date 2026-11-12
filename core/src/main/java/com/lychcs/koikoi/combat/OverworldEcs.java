@@ -97,6 +97,18 @@ public final class OverworldEcs {
                         float gridSize,
                         HostileDefeatListener defeatListener,
                         CardProjectileSystem.WallQuery wallQuery) {
+        this(playerX, playerY, companions, stats, gridSize, defeatListener, wallQuery,
+            null, 1f / 64f);
+    }
+
+    public OverworldEcs(float playerX, float playerY,
+                        List<CompanionSpec> companions,
+                        CombatStats stats,
+                        float gridSize,
+                        HostileDefeatListener defeatListener,
+                        CardProjectileSystem.WallQuery wallQuery,
+                        CardProjectileSystem.TerrainQuery terrainQuery,
+                        float worldScale) {
         if (stats == null) {
             throw new IllegalArgumentException("stats must not be null");
         }
@@ -110,7 +122,8 @@ public final class OverworldEcs {
         if (FLOATING_ORBITS_ENABLED) {
             engine.addSystem(new CompanionSystem(input, playerEntity, particleBurst));
         }
-        engine.addSystem(new CardProjectileSystem(particleBurst, wallQuery));
+        engine.addSystem(new CardProjectileSystem(
+            particleBurst, wallQuery, terrainQuery, worldScale));
         engine.addSystem(new ProjectileSystem(particleBurst));
         engine.addSystem(new StatusSystem());
         engine.addSystem(new CardBurstSystem());

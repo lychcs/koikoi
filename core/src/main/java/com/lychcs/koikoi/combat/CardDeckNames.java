@@ -7,9 +7,9 @@ import com.lychcs.koikoi.model.Rank;
 
 /**
  * Resolves the human-readable Hanafuda card names shown for the three
- * overworld W-card slots.
+ * overworld 3P card slots.
  *
- * <p>The W deck uses three archetypes: RED (Hikari/fire), BLUE (Ribbon/refund)
+ * <p>The 3P deck uses three archetypes: RED (Hikari/fire), BLUE (Ribbon/refund)
  * and GOLD (Beast/stun). The first matching card in the player's actual deck is
  * displayed, so renamed/evolved cards stay accurate.</p>
  */
@@ -47,7 +47,7 @@ public final class CardDeckNames {
     }
 
     /**
-     * One-line FPS HUD summary of the cycling W deck.
+     * One-line HUD summary of the cycling 3P deck.
      *
      * <p>All three equipped slots are listed with the actual Hanafuda names of
      * the player's deck. While the deck shuffles or holds a locked card, the

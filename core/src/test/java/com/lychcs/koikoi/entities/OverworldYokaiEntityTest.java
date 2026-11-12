@@ -31,6 +31,16 @@ class OverworldYokaiEntityTest {
     }
 
     @Test
+    void stateTimeAdvancesWithMovementUpdates() {
+        OverworldYokaiEntity yokai = yokaiAt(100f, 100f);
+        assertEquals(0f, yokai.getStateTime(), 0.0001f);
+        yokai.update(0.05f, box -> false);
+        assertEquals(0.05f, yokai.getStateTime(), 0.001f);
+        yokai.update(0.05f, box -> false);
+        assertEquals(0.10f, yokai.getStateTime(), 0.001f);
+    }
+
+    @Test
     void knockbackMovesAwayFromTheCasterAndDecays() {
         OverworldYokaiEntity yokai = yokaiAt(100f, 100f);
         float startX = yokai.getWorldX();

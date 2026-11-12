@@ -3,12 +3,13 @@ package com.lychcs.koikoi.combat.component;
 import com.badlogic.ashley.core.Component;
 
 /**
- * Twisted-Fate-style pick-a-card state for the player's W ability.
+ * Twisted-Fate-style pick-a-card state for the player's 3P card ability.
  *
- * <p>Press W in {@link State#IDLE} to start {@link State#SHUFFLING}; the active
- * slot cycles every {@link #SHUFFLE_INTERVAL} seconds for at most
- * {@link #SHUFFLE_MAX_SECONDS}. Press W again to {@link State#LOCKED} the active
- * card for {@link #LOCKED_SECONDS}, or let the shuffle time out. A locked card is
+ * <p>Press E (or R, or right-click away from a target) in {@link State#IDLE} to
+ * start {@link State#SHUFFLING}; the active slot cycles every
+ * {@link #SHUFFLE_INTERVAL} seconds for at most {@link #SHUFFLE_MAX_SECONDS}.
+ * Press the shuffle key again to {@link State#LOCKED} the active card for
+ * {@link #LOCKED_SECONDS}, or let the shuffle time out. A locked card is
  * consumed by the next left-click card throw and always ends in a
  * {@link State#COOLDOWN} of {@link #COOLDOWN_SECONDS} seconds.</p>
  */
@@ -81,7 +82,7 @@ public final class CardDeckComponent implements Component {
         return state == State.SHUFFLING || state == State.LOCKED;
     }
 
-    /** Press W: IDLE starts a shuffle, SHUFFLING locks the highlighted card. */
+    /** Shuffle key: IDLE starts a shuffle, SHUFFLING locks the highlighted card. */
     public void press() {
         if (state == State.IDLE) {
             state = State.SHUFFLING;

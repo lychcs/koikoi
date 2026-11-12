@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFont
 public final class FontManager {
 
     private static BitmapFont pixelFont;
+    private static BitmapFont hudFont;
     private static BitmapFont titleFont;
 
     public static final Color COLOR_TEXT_MAIN = Color.valueOf("000000");
@@ -30,7 +31,11 @@ public final class FontManager {
         // 1. Standard-Schrift für Buttons, Beschreibungen & UI (z. B. 16 px)
         pixelFont = createFont(16);
 
-        // 2. Größere Schrift für Titel, Boss-Namen & Sieges-Anzeigen (z. B. 24 px)
+        // 2. HUD-Schrift mit einem zusätzlichen Pixel Laufweite, damit die
+        //    kleinen Status-/Hinweiszeilen auf 1280x720 nicht zusammenkleben.
+        hudFont = createFont(16, 1);
+
+        // 3. Größere Schrift für Titel, Boss-Namen & Sieges-Anzeigen (z. B. 24 px)
         titleFont = createFont(24);
     }
 
@@ -43,6 +48,18 @@ public final class FontManager {
      * @param size Schriftgroesse in Pixeln (muss > 0 sein)
      */
     public static BitmapFont createFont(int size) {
+        return createFont(size, 0);
+    }
+
+    /**
+     * Creates a pixel font with extra horizontal tracking. Positive
+     * {@code extraSpacing} keeps tiny HUD text legible without changing the
+     * shared button/title fonts.
+     *
+     * @param size font size in pixels (must be &gt; 0)
+     * @param extraSpacing additional pixels between glyphs (can be negative)
+     */
+    public static BitmapFont createFont(int size, int extraSpacing) {
         if (size <= 0) {
             throw new IllegalArgumentException("size must be > 0 but was " + size);
         }
@@ -51,9 +68,16 @@ public final class FontManager {
         try {
             FreeTypeFontParameter parameter = new FreeTypeFontParameter();
             parameter.size = size;
+            parameter.spaceX = extraSpacing;
             parameter.minFilter = Texture.TextureFilter.Nearest;
             parameter.magFilter = Texture.TextureFilter.Nearest;
-            return generator.generateFont(parameter);
+            BitmapFont font = generator.generateFont(parameter);
+            // Integer glyph positions + nearest sampling keep small HUD text
+            // razor-sharp while Scene2D scales the viewport.
+            font.getRegion().getTexture().setFilter(
+                Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            font.setUseIntegerPositions(true);
+            return font;
         } finally {
             // Der Generator wird danach nicht mehr gebraucht und muss freigegeben werden.
             generator.dispose();
@@ -101,6 +125,9 @@ public final class FontManager {
             // the pale-cyan blossom spark (U+00B0) of the Japanese palette.
             parameter.characters = FreeTypeFontGenerator.DEFAULT_CHARS + "░▒▓█°";
             BitmapFont font = generator.generateFont(parameter);
+            font.getRegion().getTexture().setFilter(
+                Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            font.setUseIntegerPositions(true);
             enforceMonospace(font.getData());
             return font;
         } finally {
@@ -156,6 +183,20 @@ public final class FontManager {
     }
 
     /**
+     * Liefert die HUD-Schrift mit leicht erweiterter Glyphen-Laufweite.
+     *
+     * @throws IllegalStateException wenn {@link #initialize()} nicht gelaufen ist
+     *         oder die Schrift bereits freigegeben wurde
+     */
+    public static BitmapFont getHudFont() {
+        if (hudFont == null) {
+            throw new IllegalStateException(
+                "FontManager is not initialized (or already disposed): call initialize() first.");
+        }
+        return hudFont;
+    }
+
+    /**
      * Liefert die globale Titelschrift.
      *
      * @throws IllegalStateException wenn {@link #initialize()} nicht gelaufen ist
@@ -177,6 +218,10 @@ public final class FontManager {
         if (pixelFont != null) {
             pixelFont.dispose();
             pixelFont = null;
+        }
+        if (hudFont != null) {
+            hudFont.dispose();
+            hudFont = null;
         }
         if (titleFont != null) {
             titleFont.dispose();

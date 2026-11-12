@@ -266,6 +266,29 @@ class PlayerControlSystemTest {
     }
 
     @Test
+    void cardSpawnsFromTheThrowingHand() {
+        input.hasThrowOrigin = true;
+        input.throwOrigin.set(120f, 80f);
+        input.hasAimRay = true;
+        input.aimRayOrigin.set(2f, 1.2f, -1f);
+        input.aimRayDirection.set(0f, 0f, -1f);
+        input.aimX = 600f;
+        input.aimY = 80f;
+        input.basicAttackRequested = true;
+
+        engine.update(0.016f);
+
+        TransformComponent cardTransform = firstCardTransform();
+        assertEquals(126f, cardTransform.x, 0.01f,
+            "the card must start six pixels from the throwing hand");
+        assertEquals(80f, cardTransform.y, 0.01f);
+        assertEquals(2f, firstCard().rayOriginX, 0.0001f,
+            "the 3D card ray must start at the hand");
+        assertTrue(playerComponent.throwAnimationRemaining > 0f,
+            "a real throw starts the arm-flick/torso-twist timer");
+    }
+
+    @Test
     void lockedBlueCardEnhancesThrowAndStartsDeckCooldown() {
         deck.press();
         deck.update(CardDeckComponent.SHUFFLE_INTERVAL);
@@ -305,7 +328,7 @@ class PlayerControlSystemTest {
         engine.update(CardDeckComponent.SHUFFLE_INTERVAL);
         assertEquals(CardDeckComponent.CardType.BLUE, deck.activeCard());
 
-        // A second W press freezes the currently highlighted card.
+        // A second shuffle-key press freezes the currently highlighted card.
         input.cardSelectRequested = true;
         engine.update(0.016f);
         assertEquals(CardDeckComponent.State.LOCKED, deck.state);
@@ -320,6 +343,12 @@ class PlayerControlSystemTest {
         Entity card = engine.getEntitiesFor(Family.all(CardProjectileComponent.class).get())
             .first();
         return Mappers.CARD_PROJECTILE.get(card);
+    }
+
+    private TransformComponent firstCardTransform() {
+        Entity card = engine.getEntitiesFor(Family.all(CardProjectileComponent.class).get())
+            .first();
+        return Mappers.TRANSFORM.get(card);
     }
 
     @Test

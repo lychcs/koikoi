@@ -311,6 +311,33 @@ class CardProjectileSystemTest {
     }
 
     @Test
+    void cardDivingIntoTheTerrainBurstsAndIsDestroyed() {
+        Engine engine = new Engine();
+        AtomicInteger particles = new AtomicInteger();
+        ParticleBurst burst = (x, y, dust, petals) -> particles.addAndGet(dust + petals);
+        engine.addSystem(new CardProjectileSystem(burst, (x, y) -> false,
+            (x, z) -> 2f, 1f / 64f));
+
+        CardProjectileComponent card = cardComponentAt(500f, 0f, 1000f);
+        card.hasWorldRay = true;
+        card.rayOriginY = 0.3f; // far below the 2-unit hillside
+        card.rayDirY = 0f;
+        Entity projectile = new Entity();
+        projectile.add(new TransformComponent().set(0f, 0f));
+        projectile.add(card);
+        engine.addEntity(projectile);
+
+        engine.update(0.1f);
+
+        assertFalse(engine.getEntities().contains(projectile, true),
+            "a card that dips below the terrain must be destroyed, not slide");
+        assertTrue(particles.get() > 0,
+            "terrain impact must spawn ASCII impact particles");
+        assertTrue(engine.getEntitiesFor(Family.all(CardBurstComponent.class).get()).size() > 0,
+            "terrain impact must spawn the 3D world burst");
+    }
+
+    @Test
     void cardImpactSpawnsTheMatching3DBurst() {
         Engine engine = new Engine();
         engine.addSystem(new CardProjectileSystem(noopParticles(), (x, y) -> false));

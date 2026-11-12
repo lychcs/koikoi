@@ -7,10 +7,13 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.PixmapIO;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.PolygonShape;
@@ -20,17 +23,21 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.NinePatchDrawable;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.ashley.core.Entity;
 import com.badlogic.ashley.core.Family;
 import com.lychcs.koikoi.KoiKoiGame;
 import com.lychcs.koikoi.combat.CardDeckNames;
+import com.lychcs.koikoi.combat.CardSelectBinding;
 import com.lychcs.koikoi.combat.CombatStats;
 import com.lychcs.koikoi.combat.HankoCastConfig;
 import com.lychcs.koikoi.combat.OmamoriPassives;
 import com.lychcs.koikoi.combat.OverworldEcs;
 import com.lychcs.koikoi.combat.PlayerInput;
+import com.lychcs.koikoi.combat.VelocitySmoothing;
 import com.lychcs.koikoi.combat.YakuEffectApplier;
 import com.lychcs.koikoi.combat.component.CardDeckComponent;
 import com.lychcs.koikoi.combat.component.CardBurstComponent;
@@ -55,13 +62,18 @@ import com.lychcs.koikoi.model.hanko.HankoEffect;
 import com.lychcs.koikoi.model.omamori.Omamori;
 import com.lychcs.koikoi.model.yokai.YokaiSpecies;
 import com.lychcs.koikoi.render.AsciiPostProcessor;
-import com.lychcs.koikoi.render.FirstPersonCameraController;
 import com.lychcs.koikoi.render.Heightfield;
 import com.lychcs.koikoi.render.HeightmapTerrainRenderer;
 import com.lychcs.koikoi.render.JapaneseScenery;
+import com.lychcs.koikoi.render.NatureModelRenderer;
 import com.lychcs.koikoi.render.PathPlanner;
+import com.lychcs.koikoi.render.PlayerAvatarRenderer;
 import com.lychcs.koikoi.render.SceneryPlan;
 import com.lychcs.koikoi.render.TerrainFollow;
+import com.lychcs.koikoi.render.ThirdPersonCameraController;
+import com.lychcs.koikoi.render.VillageNpcRenderer;
+import com.lychcs.koikoi.render.WorldSeasonMap;
+import com.lychcs.koikoi.render.YokaiRigRenderer;
 import com.lychcs.koikoi.run.GameSeason;
 import com.lychcs.koikoi.run.RunSession;
 import com.lychcs.koikoi.run.YakuEffectKind;
@@ -70,19 +82,21 @@ import com.lychcs.koikoi.run.YokaiEncounter;
 import com.lychcs.koikoi.run.YokaiEncounterCatalog;
 import com.lychcs.koikoi.scoring.YakuType;
 import com.lychcs.koikoi.world.AsciiMap;
-import com.lychcs.koikoi.world.AsciiMapLoader;
+import com.lychcs.koikoi.world.PhysicsSteps;
 import com.lychcs.koikoi.world.WallLayout;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * First-person 3D overworld of the ASCII action engine.
+ * Third-person 3D overworld of the ASCII action engine.
  *
  * <p>The ASCII map still defines the gameplay world: walls ({@code #}) become
  * Box2D collision bodies, {@code @} is the player spawn, {@code Y} spawns wild
@@ -90,35 +104,65 @@ import java.util.Map;
  * interactions. The combat layer (Ashley ECS, Yaku payloads, Hanko and Omamori
  * passives) is unchanged.</p>
  *
- * <p>Rendering is now fully 3D: a {@link PerspectiveCamera} (70 degree FOV,
- * near 0.1, far 300) walks the player through a procedurally generated simplex
- * noise heightmap. The scene is drawn into a framebuffer and replayed through
- * {@link AsciiPostProcessor}, which turns the luminance image into the dark
- * moss-green ASCII glyph matrix. Mouse look + WASD move the player relative to
- * the view, and {@code Q} performs a Vayne-style dash in the held WASD
- * direction. The cycling W-card deck is drawn as a bottom-centre FPS HUD.</p>
+ * <p>The overworld itself is the generated {@link WorldSeasonMap} hub world:
+ * a large square map whose neutral Sanctuary Village crossroads is surrounded
+ * by four cardinal seasonal realms (East = Haru, South = Natsu, West = Aki,
+ * North = Fuyu). Monumental border torii gates and a mountain ring separate
+ * the realms; a top compass banner announces the realm and a smooth shader
+ * blend tints ground, foliage and fog across the transition zone. Terrain,
+ * scenery, nature batches and static Box2D bodies are culled in 32-tile
+ * spatial chunks so the large map stays fast.</p>
  *
- * <p>Controls: mouse = look, WASD = camera-relative walk, Q = dash in the WASD
- * direction (crosshair direction when no key is held), LMB = throw card,
- * RMB = lock-on/chase the hostile under the crosshair, R = shuffle/lock the
- * W-card deck, F = Hanko cast, E = interact, I = inventory, ESC = release the
- * pointer, F11 = fullscreen, F12 = debug screenshot.</p>
+ * <p>Rendering is fully 3D: a {@link PerspectiveCamera} (70 degree FOV, near
+ * 0.1, far 300) orbits an over-the-shoulder rig around a visible ink-samurai
+ * avatar on a procedurally generated simplex-noise heightmap. The forward
+ * {@code ascii_world.frag} pass renders clean cel-shaded surfaces, normals and
+ * warm lantern light into an off-screen framebuffer; {@link AsciiPostProcessor}
+ * then turns that scene into a dense font-atlas terminal image with nine-tap
+ * cell averaging, a temporal accumulation buffer, cel outlines and soft bloom.
+ * Mouse look + WASD move the player relative to
+ * the view, {@code Q} performs a Vayne-style tumble in the held WASD direction,
+ * and thrown cards leave the shoulder toward the exact world point under the
+ * centre crosshair. The cycling 3P card deck is drawn as a framed bottom-centre
+ * HUD and mirrored by a coloured sigil above the avatar's head.</p>
+ *
+ * <p>Controls: mouse = look, WASD = camera-relative walk, Q = tumble/dash in the
+ * WASD direction (crosshair direction when no key is held), LMB = throw card,
+ * RMB = lock-on/chase the hostile under the crosshair (or shuffle/lock the deck
+ * when no hostile is targeted), E/R = shuffle/lock the 3P deck, F = Hanko cast,
+ * E = interact (tavern/shop/shrine), I = inventory, ESC = release the pointer,
+ * F11 = fullscreen, F12 = debug screenshot.</p>
  */
 public class OverworldScreen extends ScreenAdapter {
 
-    /** ASCII map of the currently loaded location. */
-    private static final String LOCATION_MAP_PATH = AsciiMapLoader.DEFAULT_MAP_PATH;
+    /** Side length of the generated four-season overworld in tiles. */
+    private static final int WORLD_TILES = WorldSeasonMap.DEFAULT_WORLD_TILES;
 
     /** libGDX units per ASCII pixel: one 64 px tile becomes one world unit. */
     public static final float WORLD_SCALE = 1f / 64f;
 
-    /** Vertical field of view of the first-person camera. */
+    /** Vertical field of view of the third-person camera. */
     public static final float FIELD_OF_VIEW = 70f;
     public static final float NEAR_PLANE = 0.1f;
     public static final float FAR_PLANE = 300f;
 
-    /** Eye height above the procedural ground in world units. */
-    private static final float EYE_HEIGHT = 1.65f;
+    /** Movement weight: exponential acceleration and deceleration rates (1/s). */
+    private static final float MOVE_ACCEL_RATE = 10f;
+    private static final float MOVE_DECEL_RATE = 14f;
+
+    /** Thin 3D Hanafuda projectile dimensions in world units. */
+    private static final float CARD_WIDTH = 0.24f;
+    private static final float CARD_LENGTH = 0.36f;
+    /** Rapid tumble around the card's flight axis, radians per world pixel. */
+    private static final float CARD_SPIN_PER_PIXEL = 0.032f;
+    /** Coloured trail samples, in world pixels behind the card. */
+    private static final float CARD_TRAIL_SPACING = 16f;
+    private static final int CARD_TRAIL_STEPS = 3;
+
+    /** Kamon archetype inks: vermillion sakura, azure ribbon, gold beast. */
+    private static final Color KAMON_VERMILLION = new Color(0.95f, 0.30f, 0.22f, 1f);
+    private static final Color KAMON_AZURE = new Color(0.34f, 0.68f, 0.96f, 1f);
+    private static final Color KAMON_GOLD = new Color(0.95f, 0.72f, 0.26f, 1f);
     /** Subtle head bob amplitude while walking, in world units. */
     private static final float HEAD_BOB = 0.035f;
 
@@ -129,10 +173,14 @@ public class OverworldScreen extends ScreenAdapter {
     /** Peak hill height in world units (1 unit = one 64 px tile). */
     private static final float TERRAIN_AMPLITUDE = 3.2f;
 
-    /** Aim distance ahead of the player when no hostile is under the crosshair. */
-    private static final float AIM_DISTANCE_TILES = 8f;
-    /** Minimum alignment (cosine) for crosshair target picking (~30 degrees). */
-    private static final float CROSSHAIR_MIN_DOT = 0.86f;
+    /** Furthest distance at which the crosshair resolves a 3D world point. */
+    private static final float CROSSHAIR_RAY_DISTANCE = 40f;
+    /** Height of the Yokai billboard centre used for crosshair picking. */
+    private static final float HOSTILE_CROSSHAIR_HEIGHT = 1.0f;
+    /** Radius around the camera ray that still counts as a crosshair hit. */
+    private static final float HOSTILE_CROSSHAIR_RADIUS = 0.85f;
+    /** Top of the boundary bamboo fences above the ground (camera blocker). */
+    private static final float FENCE_CAMERA_HEIGHT = 1.30f;
     /** Convergence rate of the camera / entity terrain following. */
     private static final float TERRAIN_FOLLOW_RATE = 14f;
 
@@ -155,14 +203,23 @@ public class OverworldScreen extends ScreenAdapter {
     private static final Family PROJECTILE_ENTITIES =
         Family.all(ProjectileComponent.class, TransformComponent.class).get();
 
+    /** Seconds the region banner stays bright after crossing a border torii. */
+    private static final float SEASON_BANNER_SECONDS = 4.5f;
+
     /** Terminal HUD accents. */
     private static final Color COLOR_HUD_GOLD = new Color(0.92f, 0.82f, 0.52f, 1f);
+    private static final Color COLOR_HUD_TEXT = new Color(0.88f, 0.90f, 0.84f, 1f);
+    private static final Color COLOR_HUD_MUTED = new Color(0.60f, 0.68f, 0.60f, 1f);
+    private static final Color COLOR_HUD_BACKING = new Color(0.020f, 0.028f, 0.050f, 0.82f);
+    private static final Color COLOR_HUD_EDGE = new Color(0.34f, 0.46f, 0.48f, 0.92f);
+    private static final Color COLOR_BAR_HEALTH = new Color(0.84f, 0.32f, 0.30f, 1f);
+    private static final Color COLOR_BAR_MANA = new Color(0.36f, 0.62f, 0.88f, 1f);
+    private static final Color COLOR_BAR_DASH = new Color(0.88f, 0.74f, 0.40f, 1f);
     private static final Color COLOR_CARD_ACTIVE = new Color(1.00f, 0.86f, 0.42f, 1f);
-    private static final Color COLOR_CARD_IDLE = new Color(0.42f, 0.66f, 0.46f, 1f);
+    private static final Color COLOR_CARD_IDLE = new Color(0.62f, 0.76f, 0.62f, 1f);
     private static final Color COLOR_CROSSHAIR = new Color(0.62f, 0.92f, 0.68f, 0.85f);
     private static final Color COLOR_YOKAI = new Color(0.78f, 0.88f, 0.62f, 1f);
     private static final Color COLOR_YOKAI_HIT = new Color(1.00f, 0.38f, 0.30f, 1f);
-    private static final Color COLOR_YOKAI_WOUNDED = new Color(0.95f, 0.55f, 0.34f, 1f);
     private static final Color COLOR_TAVERN = new Color(0.86f, 0.70f, 0.38f, 1f);
     private static final Color COLOR_SHOP = new Color(0.60f, 0.66f, 0.58f, 1f);
     private static final Color COLOR_SHRINE = new Color(0.86f, 0.52f, 0.52f, 1f);
@@ -173,12 +230,16 @@ public class OverworldScreen extends ScreenAdapter {
 
     /** Loaded ASCII map (pure CPU data). */
     private AsciiMap map;
+    /** Four-season hub model: geography, seasonal blend, border gates, chunks. */
+    private WorldSeasonMap worldSeasonMap;
 
     private PerspectiveCamera camera;
-    private FirstPersonCameraController look;
+    private ThirdPersonCameraController look;
+    private PlayerAvatarRenderer avatarRenderer;
     private Heightfield heightfield;
     private HeightmapTerrainRenderer terrainRenderer;
     private AsciiPostProcessor asciiPost;
+    private SceneryPlan sceneryPlan;
 
     private Player player;
     private World world;
@@ -186,11 +247,30 @@ public class OverworldScreen extends ScreenAdapter {
     private Stage uiStage;
     private Skin skin;
     private Label promptLabel;
-    private Label hudLabel;
-    private Label cardHudLabel;
-    private Label cardHudState;
     private Label crosshairLabel;
+    /** HUD-only style with one extra pixel of tracking on tiny status text. */
+    private Label.LabelStyle hudLabelStyle;
+    /** Screen-space floating [E] TALK prompt above the village NPC. */
+    private Label npcTalkLabel;
+    /** Shared 1x1 white pixel backing every flat HUD panel and bar. */
+    private Texture hudPixelTexture;
+    private TextureRegion hudPixelRegion;
+    private HudBar healthBar;
+    private HudBar manaBar;
+    private HudBar dashBar;
+    private Label healthValueLabel;
+    private Label manaValueLabel;
+    private Label dashValueLabel;
+    private Label hudStatusLabel;
+    /** Top-centre Sable-style compass rose and region banner. */
+    private Label compassLabel;
+    private Label seasonBannerLabel;
+    private WorldSeasonMap.Season lastAnnouncedSeason;
+    private float seasonBannerRemaining;
+    private Label cardStateLabel;
+    private HudCardSlot[] cardSlots;
     private InventoryOverlay inventoryOverlay;
+    private DialogueOverlay dialogueOverlay;
     private TextureAtlas gameAtlas;
 
     /** Ashley engine facade (player, hostiles, systems). */
@@ -214,6 +294,40 @@ public class OverworldScreen extends ScreenAdapter {
     private final List<OverworldYokaiEntity> yokaiEntities = new ArrayList<>();
     /** Entity-to-actor bridge for the roaming wild Yokai. */
     private final Map<Entity, OverworldYokaiEntity> hostileActors = new HashMap<>();
+    /** Procedural 3D Yokai rigs, hit frames and defeat bursts. */
+    private final YokaiRigRenderer yokaiRigRenderer = new YokaiRigRenderer();
+    /** Friendly shrine maiden / Hanafuda merchant near the temple. */
+    private final VillageNpcRenderer villageNpcRenderer = new VillageNpcRenderer();
+    private boolean villageNpcPlaced;
+    private float villageNpcWorldX;
+    private float villageNpcWorldZ;
+    private float villageNpcGround;
+    private float villageNpcYaw;
+    /** Additional sanctuary villagers around the plaza houses. */
+    private final List<VillageNpc> villagers = new ArrayList<>();
+    /** World anchor of the NPC whose talk prompt is currently shown. */
+    private float npcPromptX;
+    private float npcPromptY;
+    private float npcPromptZ;
+
+    /** One friendly villager rig with a fixed post. */
+    private static final class VillageNpc {
+        final VillageNpcRenderer renderer = new VillageNpcRenderer();
+        final float x;
+        final float z;
+        final float ground;
+        final float yaw;
+
+        VillageNpc(float x, float z, float ground, float yaw) {
+            this.x = x;
+            this.z = z;
+            this.ground = ground;
+            this.yaw = yaw;
+        }
+    }
+    private final Vector3 npcScreen = new Vector3();
+    /** Interaction radius of the friendly village NPC in world units. */
+    private static final float NPC_INTERACT_RADIUS = 2.35f;
 
     /** Cached BFS route of every chasing Yokai (reused, no per-frame allocation). */
     private final Map<OverworldYokaiEntity, ChasePath> chasePaths = new HashMap<>();
@@ -237,8 +351,25 @@ public class OverworldScreen extends ScreenAdapter {
 
     /** Collision rectangles of the map (same source as the Box2D walls). */
     private final List<Rectangle> collisionRects = new ArrayList<>();
-    /** One-time method reference: no allocation per frame. */
+    /** Static Box2D bodies grouped by 32-tile map chunk for activation culling. */
+    private final Map<CollisionChunk, List<Body>> chunkBodies = new HashMap<>();
+    /** Chunks whose static bodies are currently active. */
+    private final Set<CollisionChunk> activeCollisionChunks = new HashSet<>();
+    /** Distance at which a collision chunk stays active, in world units. */
+    private static final float COLLISION_CULL_RADIUS = 72f;
+
+    /** One 32-tile collision chunk of the playable map. */
+    private record CollisionChunk(int col, int row) {
+    }
+    /** Solid scenery footprints with their top height (camera boom blockers). */
+    private final List<SceneryPlan.Solid> cameraSolids = new ArrayList<>();
+    /** Wall runs used to keep the camera out of the woven boundary fences. */
+    private final List<WallLayout.Run> cameraWallRuns = new ArrayList<>();
+    /** One-time method references: no allocation per frame. */
     private final OverworldYokaiEntity.CollisionQuery collisionQuery = this::isBlockedInWorld;
+    private final ThirdPersonCameraController.TerrainSampler terrainSampler = this::terrainHeight;
+    private final ThirdPersonCameraController.ObstacleQuery cameraObstacleQuery =
+        this::isCameraObstructed;
 
     /** Tile size of the loaded ASCII map (Yokai roaming extents). */
     private int tileWidth;
@@ -250,8 +381,24 @@ public class OverworldScreen extends ScreenAdapter {
     private final Vector2 aimWorld = new Vector2();
     /** Camera-relative WASD direction in 2D world space. */
     private final Vector2 moveDirection = new Vector2();
-    /** Ground-plane view forward in 2D world space. */
-    private final Vector2 forwardGround = new Vector2();
+    /** Reused ground-plane forward used as the idle avatar facing. */
+    private final Vector2 avatarForward2d = new Vector2();
+    /** Smoothed body velocity for movement weight. */
+    private float smoothedVx;
+    private float smoothedVy;
+
+    /** Reused third-person rig vectors (no allocation per frame). */
+    private final Vector3 cameraTarget = new Vector3();
+    private final Vector3 cameraPose = new Vector3();
+    private final Vector3 aimDirection = new Vector3();
+    private final Vector3 aimPoint3 = new Vector3();
+    private final Vector3 handOrigin = new Vector3();
+    private final Vector3 cardRayDirection = new Vector3();
+
+    /** Reused 3D card basis and face colours (no allocation per card). */
+    private final Vector3 cardCenter = new Vector3();
+    private final Vector3 cardSide = new Vector3();
+    private final Vector3 cardLong = new Vector3();
     /** Reused billboard/decal colour. */
     private final Color effectColor = new Color();
     /** Camera-right axis in world XZ, reused for multi-part billboard offsets. */
@@ -262,6 +409,10 @@ public class OverworldScreen extends ScreenAdapter {
     private boolean mouseLookEnabled = true;
     /** true on the frame where a click only re-captured the pointer. */
     private boolean mouseRecaptured;
+
+    /** Right-click locked hostile whose feet carry the azure Kamon lock ring. */
+    private Entity lockOnTarget;
+    private float lockOnRemaining;
     /** Ignores the first mouse delta after capture (the cursor warp jump). */
     private boolean skipMouseLook = true;
 
@@ -289,7 +440,10 @@ public class OverworldScreen extends ScreenAdapter {
         this.assets = assets;
 
         // 1. Load the ASCII map: gameplay cells, spawns and interaction tiles.
-        map = AsciiMapLoader.load(LOCATION_MAP_PATH);
+        // The overworld is the generated 4-season hub world: one large square
+        // map whose centre is the Sanctuary Village crossroads.
+        worldSeasonMap = WorldSeasonMap.createHubWorld(WORLD_TILES);
+        map = worldSeasonMap.getMap();
         applyLocationMetadata();
 
         tileWidth = map.getTileSize();
@@ -302,41 +456,62 @@ public class OverworldScreen extends ScreenAdapter {
         createCollisionBodies();
         collectInteractionTiles();
 
-        // 3. Procedural 3D terrain and the first-person camera rig.
+        // 3. Procedural 3D terrain and the third-person camera rig.
         heightfield = createHeightfield();
         camera = new PerspectiveCamera(FIELD_OF_VIEW, 1280f, 720f);
         camera.near = NEAR_PLANE;
         camera.far = FAR_PLANE;
-        look = new FirstPersonCameraController();
+        look = new ThirdPersonCameraController();
+        avatarRenderer = new PlayerAvatarRenderer();
 
         // 4. Player at the '@' cell (or at the stored overworld position).
         float startX = map.tileCenterX(map.getPlayerSpawn().col());
         float startY = map.tileCenterY(map.getPlayerSpawn().row());
 
-        automaticCombatLocked = runSession.hasStoredPosition();
-        if (runSession.hasStoredPosition()) {
+        automaticCombatLocked = runSession.hasStoredPosition()
+            && runSession.getLastPlayerX() >= 0f
+            && runSession.getLastPlayerX() < mapPixelWidth
+            && runSession.getLastPlayerY() >= 0f
+            && runSession.getLastPlayerY() < mapPixelHeight;
+        if (automaticCombatLocked) {
             startX = runSession.getLastPlayerX();
             startY = runSession.getLastPlayerY();
+        } else if (runSession.hasStoredPosition()) {
+            Gdx.app.log("OverworldScreen",
+                "Stored overworld position lies outside the 4-season world; "
+                    + "spawning at the Sanctuary Village crossroads.");
         }
         player = new Player(world, startX, startY);
 
         // 5. Scene renderer (heightmap mesh + procedural Japanese village) and
-        // the ASCII post pass.
-        terrainRenderer = new HeightmapTerrainRenderer(heightfield);
+        // the atmospheric post pass.
+        terrainRenderer = new HeightmapTerrainRenderer(heightfield, assets);
+        terrainRenderer.setWorldSeasonMap(worldSeasonMap);
         SceneryPlan sceneryPlan = SceneryPlan.generate(map, heightfield, WORLD_SCALE,
-            terrainSeed(map) ^ 0x51E4_2A11_9C3DL);
+            terrainSeed(map) ^ 0x51E4_2A11_9C3DL, worldSeasonMap);
+        this.sceneryPlan = sceneryPlan;
         terrainRenderer.setScenery(new JapaneseScenery(sceneryPlan, heightfield));
+        NatureModelRenderer natureRenderer =
+            new NatureModelRenderer(sceneryPlan, assets, worldSeasonMap);
+        terrainRenderer.setNatureRenderer(natureRenderer);
+        Gdx.app.log("OverworldScreen", "Organic nature models placed: "
+            + natureRenderer.getInstanceCount() + " instances from "
+            + GameAssets.NATURE_MODELS.length + " OBJ assets, split over "
+            + natureRenderer.getChunkCount() + " spatial chunks.");
         // Every visible torii pillar, lantern and temple wall becomes solid now
         // that the scenery anchors exist.
         registerStructureCollision(sceneryPlan);
+        initializeVillageNpc();
         asciiPost = new AsciiPostProcessor();
 
         // 6. Scene2D HUD and inventory overlay.
         uiStage = new Stage(new FitViewport(1280f, 720f));
         skin = assets.getSkin();
         skin.get(Label.LabelStyle.class).font = FontManager.getFont();
+        hudLabelStyle = new Label.LabelStyle(skin.get(Label.LabelStyle.class));
+        hudLabelStyle.font = FontManager.getHudFont();
 
-        promptLabel = new Label("", skin);
+        promptLabel = new Label("", hudLabelStyle);
         promptLabel.setFontScale(0.62f);
         promptLabel.setColor(COLOR_HUD_GOLD);
 
@@ -346,6 +521,13 @@ public class OverworldScreen extends ScreenAdapter {
         promptTable.add(promptLabel);
         uiStage.addActor(promptTable);
         promptLabel.setVisible(false);
+
+        npcTalkLabel = new Label("[E] TALK", hudLabelStyle);
+        npcTalkLabel.setFontScale(0.52f);
+        npcTalkLabel.setColor(COLOR_HUD_GOLD);
+        npcTalkLabel.setSize(140f, 26f);
+        npcTalkLabel.setVisible(false);
+        uiStage.addActor(npcTalkLabel);
 
         gameAtlas = assets.getAtlas(GameAssets.GAME_ATLAS);
 
@@ -358,7 +540,7 @@ public class OverworldScreen extends ScreenAdapter {
         // 9. Yaku payloads earned in the card battle are applied now.
         applyPendingYakuEffects();
 
-        // 10. Buttons, inventory overlay and the FPS HUD.
+        // 10. Buttons, inventory overlay and the 3P HUD.
         TextButton.TextButtonStyle btnStyle = new TextButton.TextButtonStyle();
         btnStyle.up = assets.newButtonDrawable();
         btnStyle.down = ((NinePatchDrawable) btnStyle.up).tint(Color.LIGHT_GRAY);
@@ -368,12 +550,27 @@ public class OverworldScreen extends ScreenAdapter {
         NinePatchDrawable panelBg = assets.newPanelDrawable();
         inventoryOverlay = new InventoryOverlay(runSession, skin, gameAtlas, panelBg, btnStyle);
         uiStage.addActor(inventoryOverlay);
+        dialogueOverlay = new DialogueOverlay(skin, panelBg, btnStyle,
+            this::healSpiritFromDialogue, this::inspectDeckFromDialogue);
+        uiStage.addActor(dialogueOverlay);
 
         createHud();
+        if (npcTalkLabel != null) {
+            npcTalkLabel.toFront();
+        }
         updateCamera(0f);
         updateHud();
 
-        Gdx.app.log("OverworldScreen", "First-person ASCII overworld ready: map '"
+        // Prime the avatar so the first-frame card throw already starts from the
+        // correct hand position (getHandPosition falls back to this pose).
+        Vector2 avatarStart = player.body.getPosition();
+        float avatarStartX = avatarStart.x * WORLD_SCALE;
+        float avatarStartZ = -avatarStart.y * WORLD_SCALE;
+        avatarRenderer.update(0f, avatarStartX, avatarStartZ,
+            groundHeightOr(heightfield.getHeight(avatarStartX, avatarStartZ)),
+            0f, -1f, false, 0f, false, 0f, -1f, 0f, 0f, 0f, 0f);
+
+        Gdx.app.log("OverworldScreen", "Third-person ASCII overworld ready: map '"
             + map.getLocationId() + "' (" + map.getWidth() + "x" + map.getHeight()
             + " tiles), terrain " + Math.round(heightfield.getSize()) + " units @ "
             + heightfield.getVerticesPerSide() + "x" + heightfield.getVerticesPerSide()
@@ -381,37 +578,75 @@ public class OverworldScreen extends ScreenAdapter {
             + Math.round(FIELD_OF_VIEW) + " near " + NEAR_PLANE + " far " + FAR_PLANE);
     }
 
+    /**
+     * Places the friendly NPC just beside the main temple's front steps. The
+     * body faces outward toward the shrine approach; the head tracks the player.
+     */
+    private void initializeVillageNpc() {
+        villageNpcPlaced = false;
+        villagers.clear();
+        if (sceneryPlan == null) {
+            return;
+        }
+        // Sanctuary villagers stand in front of the plaza houses and share the
+        // same [E] TALK interaction as the shrine maiden.
+        float hubX = worldSeasonMap == null ? 0f : worldSeasonMap.getHubWorldX();
+        float hubZ = worldSeasonMap == null ? 0f : worldSeasonMap.getHubWorldZ();
+        for (Vector2 anchor : sceneryPlan.getVillagerAnchors()) {
+            float ground = heightfield.getHeight(anchor.x, anchor.y);
+            float yaw = (float) Math.atan2(anchor.x - hubX, anchor.y - hubZ);
+            villagers.add(new VillageNpc(anchor.x, anchor.y, ground, yaw));
+        }
+        List<Vector2> entrances = sceneryPlan.getTempleEntranceAnchors();
+        if (!entrances.isEmpty()) {
+            Vector2 entrance = entrances.get(0);
+            float approachX = 0f;
+            float approachZ = 1f;
+            if (!sceneryPlan.getTempleAnchors().isEmpty()) {
+                Vector2 temple = sceneryPlan.getTempleAnchors().get(0);
+                approachX = entrance.x - temple.x;
+                approachZ = entrance.y - temple.y;
+                float length = (float) Math.sqrt(
+                    approachX * approachX + approachZ * approachZ);
+                if (length > 0.0001f) {
+                    approachX /= length;
+                    approachZ /= length;
+                }
+            }
+            float sideX = -approachZ;
+            float sideZ = approachX;
+            villageNpcWorldX = entrance.x + sideX * 1.55f + approachX * 0.55f;
+            villageNpcWorldZ = entrance.y + sideZ * 1.55f + approachZ * 0.55f;
+            villageNpcYaw = (float) Math.atan2(-approachX, -approachZ);
+        } else if (!shrineTiles.isEmpty()) {
+            AsciiMap.Tile shrine = shrineTiles.get(0);
+            villageNpcWorldX = map.tileCenterX(shrine.col()) * WORLD_SCALE + 1.3f;
+            villageNpcWorldZ = -map.tileCenterY(shrine.row()) * WORLD_SCALE;
+            villageNpcYaw = 0f;
+        } else {
+            return;
+        }
+        villageNpcGround = heightfield.getHeight(villageNpcWorldX, villageNpcWorldZ);
+        villageNpcPlaced = true;
+        Gdx.app.log("OverworldScreen", "Village NPC (Shrine Maiden) at world="
+            + Math.round(villageNpcWorldX) + "," + Math.round(villageNpcWorldZ));
+    }
+
     // ------------------------------------------------------------------
     // HUD construction
     // ------------------------------------------------------------------
 
-    /** Builds the top-left combat readout, the crosshair and the W-card HUD. */
+    /**
+     * Builds the top-left HP/Mana/Tumble panel, the bottom-centre 3P Hanafuda
+     * deck and the fixed crosshair. All panels use a dark translucent backing
+     * box so the terminal world never bleeds through the text.
+     */
     private void createHud() {
-        hudLabel = new Label("", skin);
-        hudLabel.setFontScale(0.62f);
-        hudLabel.setColor(COLOR_HUD_GOLD);
+        createHudPixel();
 
-        Table hudTable = new Table();
-        hudTable.setFillParent(true);
-        hudTable.top().left().pad(14f);
-        hudTable.add(hudLabel);
-        uiStage.addActor(hudTable);
-
-        // Bottom-centre FPS W-card deck (Hanafuda names of the cycling slots).
-        cardHudLabel = new Label("", skin);
-        cardHudLabel.setFontScale(0.62f);
-        cardHudLabel.setColor(COLOR_CARD_IDLE);
-
-        cardHudState = new Label("", skin);
-        cardHudState.setFontScale(0.50f);
-        cardHudState.setColor(COLOR_CARD_IDLE);
-
-        Table cardTable = new Table();
-        cardTable.setFillParent(true);
-        cardTable.bottom().padBottom(34f);
-        cardTable.add(cardHudLabel).row();
-        cardTable.add(cardHudState).padTop(2f);
-        uiStage.addActor(cardTable);
+        createStatsPanel();
+        createCardPanel();
+        createCompassBanner();
 
         // Fixed crosshair: cards and Hanko casts resolve toward this line.
         crosshairLabel = new Label("+", skin);
@@ -423,6 +658,198 @@ public class OverworldScreen extends ScreenAdapter {
         crosshairTable.center();
         crosshairTable.add(crosshairLabel);
         uiStage.addActor(crosshairTable);
+    }
+
+    /** One shared white pixel for every flat HUD drawable. */
+    private void createHudPixel() {
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        try {
+            pixmap.setColor(Color.WHITE);
+            pixmap.fill();
+            hudPixelTexture = new Texture(pixmap);
+        } finally {
+            pixmap.dispose();
+        }
+        hudPixelRegion = new TextureRegion(hudPixelTexture);
+    }
+
+    /** Top-left combat readout: clear HP, Mana and Q-Tumble bars. */
+    private void createStatsPanel() {
+        healthBar = new HudBar(hudPixelRegion, COLOR_BAR_HEALTH);
+        manaBar = new HudBar(hudPixelRegion, COLOR_BAR_MANA);
+        dashBar = new HudBar(hudPixelRegion, COLOR_BAR_DASH);
+
+        healthValueLabel = hudLabel("", 0.62f, COLOR_HUD_TEXT);
+        manaValueLabel = hudLabel("", 0.62f, COLOR_HUD_TEXT);
+        dashValueLabel = hudLabel("", 0.62f, COLOR_HUD_TEXT);
+
+        Table inner = new Table();
+        inner.setBackground(pixelDrawable(COLOR_HUD_BACKING));
+        inner.pad(10f);
+        inner.top().left();
+
+        Label title = hudLabel("WANDERER", 0.66f, COLOR_HUD_GOLD);
+        inner.add(title).left().colspan(3).padBottom(6f);
+        inner.row();
+
+        addStatRow(inner, "HP", healthBar, healthValueLabel);
+        addStatRow(inner, "MANA", manaBar, manaValueLabel);
+        addStatRow(inner, "TUMBLE [Q]", dashBar, dashValueLabel);
+
+        hudStatusLabel = hudLabel("", 0.52f, COLOR_HUD_MUTED);
+        inner.add(hudStatusLabel).left().colspan(3).padTop(6f);
+
+        Table frame = new Table();
+        frame.setBackground(pixelDrawable(COLOR_HUD_EDGE));
+        frame.pad(1f);
+        frame.add(inner).grow();
+
+        Table root = new Table();
+        root.setFillParent(true);
+        root.top().left().pad(16f);
+        root.add(frame);
+        uiStage.addActor(root);
+    }
+
+    /** Adds one label + bar + value row to the stats panel. */
+    private void addStatRow(Table table, String name, HudBar bar, Label value) {
+        Label nameLabel = hudLabel(name, 0.60f, COLOR_HUD_MUTED);
+        table.add(nameLabel).left().padRight(8f).padTop(4f);
+        table.add(bar).width(168f).height(10f).padTop(4f);
+        table.add(value).right().padLeft(8f).padTop(4f);
+        table.row();
+    }
+
+    /**
+     * Minimal Sable-style top compass: the four cardinal glyphs with the active
+     * facing bracketed, followed by the current realm banner.
+     */
+    private void createCompassBanner() {
+        compassLabel = hudLabel("N   E   S   W", 0.70f, COLOR_HUD_GOLD);
+        seasonBannerLabel = hudLabel("SANCTUARY VILLAGE", 0.62f, COLOR_HUD_TEXT);
+
+        Table plate = new Table();
+        plate.setBackground(pixelDrawable(COLOR_HUD_BACKING));
+        plate.pad(7f, 18f, 7f, 18f);
+        plate.add(compassLabel).padRight(20f);
+        plate.add(seasonBannerLabel);
+
+        Table frame = new Table();
+        frame.setBackground(pixelDrawable(COLOR_HUD_EDGE));
+        frame.pad(1f);
+        frame.add(plate);
+
+        Table root = new Table();
+        root.setFillParent(true);
+        root.top().padTop(14f);
+        root.add(frame);
+        uiStage.addActor(root);
+
+        lastAnnouncedSeason = null;
+        seasonBannerRemaining = 0f;
+    }
+
+    /**
+     * Updates the compass rose from the camera facing and announces the realm
+     * under the player. Crossing a border torii brightens the banner for a few
+     * seconds; otherwise it stays as a quiet region indicator.
+     */
+    private void updateCompassBanner(float delta) {
+        if (compassLabel == null || seasonBannerLabel == null
+            || worldSeasonMap == null || player == null) {
+            return;
+        }
+        WorldSeasonMap.Cardinal facing = WorldSeasonMap.Cardinal.fromDirection(
+            camera.direction.x, camera.direction.z);
+        StringBuilder rose = new StringBuilder();
+        for (WorldSeasonMap.Cardinal cardinal : WorldSeasonMap.Cardinal.values()) {
+            if (rose.length() > 0) {
+                rose.append("   ");
+            }
+            if (cardinal == facing) {
+                rose.append('[').append(cardinal.glyph()).append(']');
+            } else {
+                rose.append(cardinal.glyph());
+            }
+        }
+        compassLabel.setText(rose);
+
+        Vector2 position = player.body.getPosition();
+        WorldSeasonMap.Season region = worldSeasonMap.regionAtWorld(
+            position.x * WORLD_SCALE, -position.y * WORLD_SCALE);
+        if (region != lastAnnouncedSeason) {
+            lastAnnouncedSeason = region;
+            seasonBannerRemaining = SEASON_BANNER_SECONDS;
+            Gdx.app.log("OverworldScreen", "Entering " + region.banner());
+        }
+        seasonBannerRemaining = Math.max(0f, seasonBannerRemaining - delta);
+        seasonBannerLabel.setText(region.banner());
+        float alpha = seasonBannerRemaining > 0f
+            ? MathUtils.clamp(0.40f + seasonBannerRemaining / SEASON_BANNER_SECONDS,
+                0f, 1f)
+            : 0.40f;
+        seasonBannerLabel.setColor(COLOR_HUD_TEXT.r, COLOR_HUD_TEXT.g,
+            COLOR_HUD_TEXT.b, alpha);
+        seasonBannerLabel.setFontScale(seasonBannerRemaining > 0f ? 0.70f : 0.62f);
+    }
+
+    /** Bottom-centre 3P Hanafuda deck with framed, type-coloured card slots. */
+    private void createCardPanel() {
+        CardDeckComponent.CardType[] types = CardDeckComponent.CardType.values();
+        cardSlots = new HudCardSlot[types.length];
+
+        Table slots = new Table();
+        for (int i = 0; i < types.length; i++) {
+            CardDeckComponent.CardType type = types[i];
+            TextureRegion cardArt = gameAtlas.findRegion(
+                HudCardSlot.cardArtRegionName(type, runSession.getCurrentSeason()));
+            cardSlots[i] = new HudCardSlot(skin, hudPixelRegion, cardArt,
+                new Color(type.red, type.green, type.blue, 1f),
+                String.valueOf(type.projectileGlyph), cardKind(type), "E");
+            slots.add(cardSlots[i]).size(214f, 104f).pad(4f);
+        }
+
+        cardStateLabel = hudLabel("", 0.58f, COLOR_CARD_IDLE);
+
+        Table inner = new Table();
+        inner.setBackground(pixelDrawable(COLOR_HUD_BACKING));
+        inner.pad(6f);
+        inner.add(slots);
+        inner.row();
+        inner.add(cardStateLabel).padTop(3f);
+
+        Table frame = new Table();
+        frame.setBackground(pixelDrawable(COLOR_HUD_EDGE));
+        frame.pad(1f);
+        frame.add(inner).grow();
+
+        Table root = new Table();
+        root.setFillParent(true);
+        root.bottom().padBottom(18f);
+        root.add(frame);
+        uiStage.addActor(root);
+    }
+
+    /** Atmospheric archetype caption of one Hanafuda card slot. */
+    private static String cardKind(CardDeckComponent.CardType type) {
+        return switch (type) {
+            case RED -> "CRIMSON PETAL";
+            case BLUE -> "AZURE RIBBON";
+            case GOLD -> "GOLD BEAST";
+        };
+    }
+
+    /** Creates a label in the shared HUD font scale and colour. */
+    private Label hudLabel(String text, float fontScale, Color color) {
+        Label label = new Label(text, hudLabelStyle);
+        label.setFontScale(fontScale);
+        label.setColor(color);
+        return label;
+    }
+
+    /** Flat, tinted 1x1 drawable for HUD backings and borders. */
+    private Drawable pixelDrawable(Color color) {
+        return new TextureRegionDrawable(hudPixelRegion).tint(new Color(color));
     }
 
 
@@ -448,7 +875,17 @@ public class OverworldScreen extends ScreenAdapter {
 
         Heightfield field = Heightfield.generate(terrainSeed(map),
             centerX - size * 0.5f, centerZ - size * 0.5f,
-            size, TERRAIN_RESOLUTION, TERRAIN_AMPLITUDE);
+            size, Math.max(TERRAIN_RESOLUTION, Math.round(size * 0.8f)),
+            TERRAIN_AMPLITUDE);
+
+        // Raise the mountain ring that separates the four seasonal realms; the
+        // four cardinal passes stay open so the paved roads climb through.
+        if (worldSeasonMap != null && worldSeasonMap.isFourSeasonWorld()) {
+            field.raiseChebyshevRing(centerX, centerZ,
+                WorldSeasonMap.MOUNTAIN_RING_DISTANCE_TILES,
+                WorldSeasonMap.MOUNTAIN_RING_THICKNESS + 2.6f, 4.2f,
+                WorldSeasonMap.ROAD_HALF_WIDTH_TILES + 2.5f);
+        }
 
         // Flatten the shrine/temple, tavern, shop and spawn clearings and smooth
         // the dirt paths before the scenery samples the terrain heights.
@@ -479,7 +916,9 @@ public class OverworldScreen extends ScreenAdapter {
             combatStats,
             tileWidth,
             this::onHostileDefeated,
-            this::isBlockedAtWorldPoint);
+            this::isBlockedAtWorldPoint,
+            (x, z) -> heightfield.getHeight(x, z),
+            WORLD_SCALE);
 
         ecs.getHankoConfig().radius = combatStats.sealRadius();
         updateHankoSelection();
@@ -692,9 +1131,16 @@ public class OverworldScreen extends ScreenAdapter {
      */
     private void updateCombatInput(float delta) {
         overworldTime += delta;
+        if (lockOnRemaining > 0f) {
+            lockOnRemaining = Math.max(0f, lockOnRemaining - delta);
+        }
+        if (lockOnRemaining <= 0f) {
+            lockOnTarget = null;
+        }
 
         PlayerInput input = ecs.getInput();
-        boolean paused = inventoryOverlay.isOpen();
+        boolean paused = inventoryOverlay.isOpen()
+            || (dialogueOverlay != null && dialogueOverlay.isOpen());
 
         // --- mouse look -----------------------------------------------------
         if (!paused && Gdx.input.isCursorCatched()) {
@@ -728,42 +1174,72 @@ public class OverworldScreen extends ScreenAdapter {
             input.hasMoveTarget = false;
         }
 
-        // --- crosshair aim --------------------------------------------------
-        look.getGroundForward(forwardGround);
-
-        // 3D crosshair ray: locked cards visualise along this camera line.
-        input.hasAimRay = true;
-        input.aimRayOrigin.set(camera.position);
-        look.getForward(input.aimRayDirection);
-
+        // --- third-person crosshair aim --------------------------------------
         Vector2 playerPosition = player.body.getPosition();
-        float aimDistance = AIM_DISTANCE_TILES * tileWidth;
-        aimWorld.set(
-            playerPosition.x + forwardGround.x * aimDistance,
-            playerPosition.y + forwardGround.y * aimDistance);
+        float aimUnitX = playerPosition.x * WORLD_SCALE;
+        float aimUnitZ = -playerPosition.y * WORLD_SCALE;
+        float aimGround = heightfield.getHeight(aimUnitX, aimUnitZ);
 
-        Entity crosshairTarget = crosshairHostile(forwardGround);
+        // Rebuild the exact camera pose of updateCamera() so the centre '+'
+        // and the rendered view always agree, even when the boom is clamped.
+        look.getTarget(aimUnitX, groundHeightOr(aimGround), aimUnitZ, cameraTarget);
+        if (player.isMoving()) {
+            cameraTarget.y += MathUtils.sin(player.getWalkPhase() * 9f) * HEAD_BOB;
+        }
+        look.computeCameraPosition(cameraTarget, terrainSampler, cameraObstacleQuery, cameraPose);
+        look.getForward(aimDirection);
+        look.resolveAimPoint(cameraPose, aimDirection, terrainSampler, cameraObstacleQuery,
+            CROSSHAIR_RAY_DISTANCE, aimPoint3);
+
+        // Crosshair target: the hostile billboard the camera ray actually
+        // crosses before terrain/walls, so no lock-on through hills.
+        float aimDistance = cameraPose.dst(aimPoint3);
+        Entity crosshairTarget = crosshairHostile(cameraPose, aimDirection, aimDistance);
         if (crosshairTarget != null) {
             TransformComponent target = Mappers.TRANSFORM.get(crosshairTarget);
             if (target != null) {
                 aimWorld.set(target.x, target.y);
+                float targetX = target.x * WORLD_SCALE;
+                float targetZ = -target.y * WORLD_SCALE;
+                aimPoint3.set(targetX,
+                    heightfield.getHeight(targetX, targetZ) + HOSTILE_CROSSHAIR_HEIGHT,
+                    targetZ);
             }
+        } else {
+            aimWorld.set(aimPoint3.x / WORLD_SCALE, -aimPoint3.z / WORLD_SCALE);
         }
         input.aimX = aimWorld.x;
         input.aimY = aimWorld.y;
 
+        // Cards leave the avatar's right hand; the last rendered pose supplies
+        // the world-space hand position (one frame of latency).
+        avatarRenderer.getHandPosition(handOrigin);
+        input.throwOrigin.set(handOrigin.x / WORLD_SCALE, -handOrigin.z / WORLD_SCALE);
+        input.hasThrowOrigin = true;
+        cardRayDirection.set(aimPoint3).sub(handOrigin);
+        if (cardRayDirection.len2() < 0.0001f) {
+            look.getForward(cardRayDirection);
+        }
+        input.hasAimRay = true;
+        input.aimRayOrigin.set(handOrigin);
+        input.aimRayDirection.set(cardRayDirection).nor();
+
         // --- card throw and lock-on ----------------------------------------
         boolean attackRequested = !paused && !mouseRecaptured
             && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT);
+        boolean rightPressed = !paused
+            && Gdx.input.isButtonJustPressed(Input.Buttons.RIGHT);
 
         // Right mouse = lock-on: attack the crosshair target when it is in card
-        // range, otherwise chase it (MOBA target movement stays available).
+        // range, otherwise chase it (MOBA target movement stays available). A
+        // right-click without a target falls through to the card shuffle below.
         if (paused) {
             input.hasMoveTarget = false;
-        } else if (Gdx.input.isButtonJustPressed(Input.Buttons.RIGHT)
-            && crosshairTarget != null) {
+        } else if (rightPressed && crosshairTarget != null) {
             TransformComponent target = Mappers.TRANSFORM.get(crosshairTarget);
             if (target != null) {
+                lockOnTarget = crosshairTarget;
+                lockOnRemaining = 3.0f;
                 aimWorld.set(target.x, target.y);
                 input.aimX = target.x;
                 input.aimY = target.y;
@@ -781,8 +1257,10 @@ public class OverworldScreen extends ScreenAdapter {
             }
         }
 
-        // Q = dash in the held WASD direction; R = W-card shuffle/lock;
-        // F = Hanko cast; E = interact. S is backpedal, not stop, in FPS mode.
+        // Q = tumble/dash in the held WASD direction; E/R/RMB = 3P card
+        // shuffle-lock; F = Hanko cast; E = interact. S is backpedal, not stop,
+        // in third person. E only shuffles when it is not standing on a tavern,
+        // shop or shrine interaction cell.
         input.dashRequested = !paused && Gdx.input.isKeyJustPressed(Input.Keys.Q);
         if (input.dashRequested) {
             String direction = hasMoveDirection
@@ -796,23 +1274,30 @@ public class OverworldScreen extends ScreenAdapter {
             Gdx.app.log("OverworldScreen", "Card throw toward aim=("
                 + Math.round(input.aimX) + "," + Math.round(input.aimY) + ")");
         }
-        input.cardSelectRequested = !paused && Gdx.input.isKeyJustPressed(Input.Keys.R);
+
+        boolean ePressed = !paused && Gdx.input.isKeyJustPressed(Input.Keys.E);
+        boolean rPressed = !paused && Gdx.input.isKeyJustPressed(Input.Keys.R);
+        input.cardSelectRequested = CardSelectBinding.shouldShuffle(
+            rPressed, ePressed, rightPressed,
+            ePressed && isNearManualTrigger(),
+            rightPressed && crosshairTarget != null);
         input.castRequested = !paused && Gdx.input.isKeyJustPressed(Input.Keys.F);
         input.time = overworldTime;
     }
 
     /**
-     * Living hostile whose direction is closest to the crosshair within the
-     * card range and inside the narrow aiming cone, or {@code null}.
+     * Living hostile whose billboard the camera ray actually crosses first,
+     * within card range and in front of the terrain/wall hit behind the
+     * crosshair. The most centred target wins, with proximity as tie-breaker.
      */
-    private Entity crosshairHostile(Vector2 forward) {
+    private Entity crosshairHostile(Vector3 rayOrigin, Vector3 rayDirection, float maxDistance) {
         if (ecs == null) {
             return null;
         }
         Vector2 origin = player.body.getPosition();
         float range = PlayerControlSystem.CARD_RANGE_TILES * Math.max(1, tileWidth);
         float range2 = range * range;
-        float bestScore = Float.NEGATIVE_INFINITY;
+        float bestScore = Float.POSITIVE_INFINITY;
         Entity best = null;
 
         for (Entity hostileEntity : ecs.getHostiles()) {
@@ -825,20 +1310,33 @@ public class OverworldScreen extends ScreenAdapter {
 
             float dx = transform.x - origin.x;
             float dy = transform.y - origin.y;
-            float distance2 = dx * dx + dy * dy;
-            if (distance2 <= 0.0001f || distance2 > range2) {
+            if (dx * dx + dy * dy > range2) {
                 continue;
             }
 
-            float distance = (float) Math.sqrt(distance2);
-            float alignment = (dx * forward.x + dy * forward.y) / distance;
-            if (alignment < CROSSHAIR_MIN_DOT) {
+            float unitX = transform.x * WORLD_SCALE;
+            float unitZ = -transform.y * WORLD_SCALE;
+            float centerY = heightfield.getHeight(unitX, unitZ) + HOSTILE_CROSSHAIR_HEIGHT;
+            float toX = unitX - rayOrigin.x;
+            float toY = centerY - rayOrigin.y;
+            float toZ = unitZ - rayOrigin.z;
+
+            // Project the billboard centre onto the 3D camera ray.
+            float along = toX * rayDirection.x + toY * rayDirection.y + toZ * rayDirection.z;
+            if (along <= 0f || along > maxDistance) {
+                continue;
+            }
+            float offsetX = toX - rayDirection.x * along;
+            float offsetY = toY - rayDirection.y * along;
+            float offsetZ = toZ - rayDirection.z * along;
+            float miss = (float) Math.sqrt(
+                offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ);
+            if (miss > HOSTILE_CROSSHAIR_RADIUS) {
                 continue;
             }
 
-            // Prefer the most centered target, breaking ties by proximity.
-            float score = alignment - distance / (range * 6f);
-            if (score > bestScore) {
+            float score = miss + along / (range * 8f);
+            if (score < bestScore) {
                 bestScore = score;
                 best = hostileEntity;
             }
@@ -877,13 +1375,29 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     /** Forwards the ECS-determined velocity onto the Box2D body. */
-    private void applyPlayerMotionToBody() {
-        if (inventoryOverlay.isOpen()) {
+    private void applyPlayerMotionToBody(float delta) {
+        if (inventoryOverlay.isOpen()
+            || (dialogueOverlay != null && dialogueOverlay.isOpen())) {
+            smoothedVx = 0f;
+            smoothedVy = 0f;
             player.body.setLinearVelocity(0f, 0f);
             return;
         }
         MotionComponent motion = ecs.getPlayerMotion();
-        player.body.setLinearVelocity(motion.vx, motion.vy);
+        PlayerComponent playerComponent = ecs.getPlayer();
+        if (playerComponent != null && playerComponent.isDashing()) {
+            // The dash is a committed burst: snap to its velocity, then let the
+            // deceleration curve carry the weight out of it.
+            smoothedVx = motion.vx;
+            smoothedVy = motion.vy;
+        } else {
+            float target2 = motion.vx * motion.vx + motion.vy * motion.vy;
+            float current2 = smoothedVx * smoothedVx + smoothedVy * smoothedVy;
+            float rate = target2 >= current2 ? MOVE_ACCEL_RATE : MOVE_DECEL_RATE;
+            smoothedVx = VelocitySmoothing.approach(smoothedVx, motion.vx, delta, rate);
+            smoothedVy = VelocitySmoothing.approach(smoothedVy, motion.vy, delta, rate);
+        }
+        player.body.setLinearVelocity(smoothedVx, smoothedVy);
     }
 
     /** Copies the post-physics Box2D position back into the ECS. */
@@ -906,7 +1420,15 @@ public class OverworldScreen extends ScreenAdapter {
     private void onHostileDefeated(Entity entity, HostileComponent hostile) {
         OverworldYokaiEntity actor = hostileActors.remove(entity);
         hostileGroundHeights.remove(entity);
+        TransformComponent transform = Mappers.TRANSFORM.get(entity);
         if (actor != null) {
+            if (transform != null) {
+                float worldX = transform.x * WORLD_SCALE;
+                float worldZ = -transform.y * WORLD_SCALE;
+                yokaiRigRenderer.spawnDefeat(worldX, worldZ,
+                    heightfield.getHeight(worldX, worldZ), actor.getSpeciesId());
+            }
+            yokaiRigRenderer.forget(actor);
             chasePaths.remove(actor);
             yokaiEntities.remove(actor);
         }
@@ -922,7 +1444,6 @@ public class OverworldScreen extends ScreenAdapter {
             }
         }
 
-        TransformComponent transform = Mappers.TRANSFORM.get(entity);
         if (transform != null && ecs != null) {
             ecs.sparks(transform.x, transform.y, 20);
         }
@@ -933,29 +1454,41 @@ public class OverworldScreen extends ScreenAdapter {
     // ------------------------------------------------------------------
 
     private void updateHud() {
-        if (hudLabel == null || ecs == null) {
+        if (healthBar == null || ecs == null) {
             return;
         }
 
         PlayerComponent playerComponent = ecs.getPlayer();
         HankoCastConfig config = ecs.getHankoConfig();
-
-        String manaBar = asciiBar(playerComponent.mana / playerComponent.maxMana, 12);
         HealthComponent playerHealth = Mappers.HEALTH.get(ecs.getPlayerEntity());
-        String healthBar = playerHealth == null ? "------------"
-            : asciiBar(playerHealth.ratio(), 12);
-        String healthValue = playerHealth == null ? "--"
-            : (int) playerHealth.current + "/" + (int) playerHealth.max;
+
+        float healthRatio = playerHealth == null ? 0f : playerHealth.ratio();
+        healthBar.setRatio(healthRatio);
+        healthValueLabel.setText(playerHealth == null ? "--/--"
+            : Math.max(0, Math.round(playerHealth.current)) + "/"
+                + Math.round(playerHealth.max));
+
+        float manaRatio = playerComponent.maxMana <= 0f
+            ? 0f : playerComponent.mana / playerComponent.maxMana;
+        manaBar.setRatio(manaRatio);
+        manaValueLabel.setText(Math.round(Math.max(0f, playerComponent.mana)) + "/"
+            + Math.round(playerComponent.maxMana));
+
+        float dashCooldown = Math.max(0.001f, playerComponent.dashCooldown);
+        float dashReady = 1f - MathUtils.clamp(
+            playerComponent.dashCooldownRemaining / dashCooldown, 0f, 1f);
+        dashBar.setRatio(dashReady);
+        dashValueLabel.setText(playerComponent.dashCooldownRemaining <= 0f
+            ? "READY" : String.format(Locale.ROOT, "%.1fs",
+                playerComponent.dashCooldownRemaining));
+
         String lifesteal = playerComponent.lifestealRemaining <= 0f ? "READY"
             : String.format(Locale.ROOT, "%.0f%% %.1fs",
-                playerComponent.lifestealPercent * 100f, playerComponent.lifestealRemaining);
-        String dash = playerComponent.dashCooldownRemaining <= 0f
-            ? "READY" : String.format(Locale.ROOT, "%.1fs", playerComponent.dashCooldownRemaining);
-        String card = playerComponent.basicAttackCooldownRemaining <= 0f
-            ? "READY" : String.format(Locale.ROOT, "%.1fs",
-                playerComponent.basicAttackCooldownRemaining);
-        CardDeckComponent deck = ecs.getPlayerDeck();
-        String wState = deck == null ? "READY" : deck.stateLabel();
+                playerComponent.lifestealPercent * 100f,
+                playerComponent.lifestealRemaining);
+        hudStatusLabel.setText("HANKO " + config.name + " [F]   LIFESTEAL " + lifesteal
+            + "   OMAMORI " + runSession.getActiveOmamoris().size() + "/"
+            + runSession.getMaxActiveOmamoris() + "   [I] INVENTORY");
 
         int aggro = 0;
         for (int i = 0; i < yokaiEntities.size(); i++) {
@@ -967,50 +1500,50 @@ public class OverworldScreen extends ScreenAdapter {
             crosshairLabel.setColor(aggro > 0 ? COLOR_YOKAI_HIT : COLOR_CROSSHAIR);
         }
 
-        Vector2 position = player.body.getPosition();
-        hudLabel.setText("HP [" + healthBar + "] " + healthValue
-            + "   LIFESTEAL " + lifesteal
-            + "   MANA [" + manaBar + "] " + (int) playerComponent.mana + "/"
-            + (int) playerComponent.maxMana
-            + "   DASH [Q] " + dash
-            + "   CARD [LMB] " + card
-            + "   LOCK-ON [RMB]"
-            + "\nHANKO " + config.name + " [F]"
-            + "   OMAMORI " + runSession.getActiveOmamoris().size() + "/"
-            + runSession.getMaxActiveOmamoris()
-            + "   [1-9] hanko   [I] inventory"
-            + "\nFP " + Gdx.graphics.getFramesPerSecond() + " fps"
-            + "   POS " + Math.round(position.x) + "," + Math.round(position.y)
-            + "   YAW " + Math.round(look.getYawDegrees()) + "deg"
-            + "   TERRAIN " + Math.round(heightfield.getSize()) + "u"
-            + "   AGGRO " + aggro);
-
-        updateCardHud(deck, runSession.getPlayerDeck());
+        updateCardHud(ecs.getPlayerDeck(), runSession.getPlayerDeck());
     }
 
     /**
-     * Bottom-centre FPS deck: the cycling W-card slots with their actual
-     * Hanafuda names. The highlighted slot uses {@code < >} brackets.
+     * Bottom-centre 3P deck: three framed Hanafuda slots, colour-coded by card
+     * archetype. The slot that is currently cycling (or holds the locked card)
+     * gets the bright border and the {@code LOCKED} badge.
      */
     private void updateCardHud(CardDeckComponent deck, Deck playerDeck) {
-        if (cardHudLabel == null) {
+        if (cardSlots == null || cardStateLabel == null) {
             return;
         }
-        cardHudLabel.setText(CardDeckNames.hudLine(deck, playerDeck));
+        CardDeckComponent.CardType[] types = CardDeckComponent.CardType.values();
         boolean cycling = deck != null && deck.showsBadge();
-        cardHudLabel.setColor(cycling ? COLOR_CARD_ACTIVE : COLOR_CARD_IDLE);
+        boolean locked = deck != null && deck.state == CardDeckComponent.State.LOCKED;
+        int activeIndex = deck == null ? -1
+            : Math.floorMod(deck.activeIndex, deck.equipped.length);
 
-        if (cardHudState != null) {
-            String state = deck == null ? "READY" : deck.stateLabel();
-            cardHudState.setText("W-CARD [" + state + "]"
-                + "   R: SHUFFLE / LOCK   |   LMB: THROW   |   Q: DASH");
-            cardHudState.setColor(cycling ? COLOR_CARD_ACTIVE : COLOR_CARD_IDLE);
+        for (int i = 0; i < cardSlots.length; i++) {
+            CardDeckComponent.CardType type = deck == null
+                ? types[i] : deck.equipped[i];
+            boolean active = cycling && i == activeIndex;
+            cardSlots[i].setState(CardDeckNames.forType(type, playerDeck),
+                active, active && locked);
         }
-    }
 
-    private static String asciiBar(float ratio, int width) {
-        int filled = Math.round(Math.max(0f, Math.min(1f, ratio)) * width);
-        return "=".repeat(filled) + "-".repeat(Math.max(0, width - filled));
+        if (deck == null) {
+            cardStateLabel.setText("3P DECK READY");
+            cardStateLabel.setColor(COLOR_CARD_IDLE);
+            return;
+        }
+
+        float remaining = switch (deck.state) {
+            case SHUFFLING -> Math.max(0f,
+                CardDeckComponent.SHUFFLE_MAX_SECONDS - deck.stateTimer);
+            case LOCKED -> Math.max(0f, deck.lockedRemaining);
+            case COOLDOWN -> Math.max(0f, deck.cooldownRemaining);
+            default -> 0f;
+        };
+        String timer = remaining > 0f
+            ? String.format(Locale.ROOT, " %.1fs", remaining) : "";
+        cardStateLabel.setText("3P " + deck.stateLabel() + timer
+            + "   [E]/[R]/[RMB] SHUFFLE-LOCK   [LMB] THROW   [Q] TUMBLE");
+        cardStateLabel.setColor(cycling ? COLOR_CARD_ACTIVE : COLOR_CARD_IDLE);
     }
 
     /**
@@ -1049,10 +1582,25 @@ public class OverworldScreen extends ScreenAdapter {
      */
     private void createCollisionBodies() {
         collisionRects.clear();
+        cameraWallRuns.clear();
+        chunkBodies.clear();
+        activeCollisionChunks.clear();
 
+        int cellsPerChunk = WorldSeasonMap.CHUNK_SIZE_TILES;
         for (WallLayout.Run run : WallLayout.scan(map)) {
             collisionRects.add(new Rectangle(run.x(), run.y(), run.width(), run.height()));
-            createStaticBody(run.x(), run.y(), run.width(), run.height());
+            cameraWallRuns.add(run);
+
+            // Split long border runs at chunk boundaries so activation culling
+            // never disables the stretch of fence the player is standing next to.
+            int start = 0;
+            while (start < run.length()) {
+                int length = Math.min(cellsPerChunk, run.length() - start);
+                float x = (run.col() + start) * (float) map.getTileSize();
+                createStaticBody(x, run.y(),
+                    length * (float) map.getTileSize(), run.height());
+                start += length;
+            }
         }
     }
 
@@ -1083,6 +1631,11 @@ public class OverworldScreen extends ScreenAdapter {
                 centerX - halfX, centerY - halfY, halfX * 2f, halfY * 2f));
         }
 
+        // Keep a copy for the third-person camera boom: the same footprints with
+        // their top heights, so the boom never clips a torii pillar or the hall.
+        cameraSolids.clear();
+        cameraSolids.addAll(plan.getSolids());
+
         Gdx.app.log("OverworldScreen", "Structure collision synced: "
             + plan.getSolids().size() + " solids, "
             + plan.getFenceAnchors().size() + " bamboo fence cells, "
@@ -1103,6 +1656,7 @@ public class OverworldScreen extends ScreenAdapter {
         shape.setAsBox(halfWidth, halfHeight);
         body.createFixture(shape, 0.0f);
         shape.dispose();
+        registerChunkBody(centerX, centerY, body);
     }
 
     private void createStaticBody(float x, float y, float width, float height) {
@@ -1117,6 +1671,57 @@ public class OverworldScreen extends ScreenAdapter {
         shape.setAsBox(width * 0.5f, height * 0.5f);
         body.createFixture(shape, 0.0f);
         shape.dispose();
+        registerChunkBody(bodyDef.position.x, bodyDef.position.y, body);
+    }
+
+    /** Groups a static body by the 32-tile collision chunk of its centre. */
+    private void registerChunkBody(float pixelX, float pixelY, Body body) {
+        float worldX = pixelX * WORLD_SCALE;
+        float worldZ = -pixelY * WORLD_SCALE;
+        int size = WorldSeasonMap.CHUNK_SIZE_TILES;
+        CollisionChunk chunk = new CollisionChunk(
+            (int) Math.floor(worldX / size), (int) Math.floor(worldZ / size));
+        chunkBodies.computeIfAbsent(chunk, key -> new ArrayList<>()).add(body);
+    }
+
+    /**
+     * Activates only the static collision bodies of the chunks near the player.
+     * Bodies further away stay in the Box2D world but are inactive, so the
+     * large world does not pay broad-phase cost for every fence post and torii
+     * pillar at once.
+     */
+    private void updateCollisionChunkCulling() {
+        if (player == null || chunkBodies.isEmpty()) {
+            return;
+        }
+        Vector2 position = player.body.getPosition();
+        float playerX = position.x * WORLD_SCALE;
+        float playerZ = -position.y * WORLD_SCALE;
+        float size = WorldSeasonMap.CHUNK_SIZE_TILES;
+        float half = size * 0.5f;
+        float radius2 = COLLISION_CULL_RADIUS * COLLISION_CULL_RADIUS;
+
+        for (Map.Entry<CollisionChunk, List<Body>> entry : chunkBodies.entrySet()) {
+            CollisionChunk chunk = entry.getKey();
+            float centerX = (chunk.col() + 0.5f) * size;
+            float centerZ = (chunk.row() + 0.5f) * size;
+            float dx = Math.max(0f, Math.abs(playerX - centerX) - half);
+            float dz = Math.max(0f, Math.abs(playerZ - centerZ) - half);
+            boolean visible = dx * dx + dz * dz <= radius2;
+            boolean active = activeCollisionChunks.contains(chunk);
+            if (visible == active) {
+                continue;
+            }
+            List<Body> bodies = entry.getValue();
+            for (int i = 0; i < bodies.size(); i++) {
+                bodies.get(i).setActive(visible);
+            }
+            if (visible) {
+                activeCollisionChunks.add(chunk);
+            } else {
+                activeCollisionChunks.remove(chunk);
+            }
+        }
     }
 
     /** Sammelt die Interaktionszellen der Karte (einmalig, keine Suche pro Frame). */
@@ -1143,6 +1748,7 @@ public class OverworldScreen extends ScreenAdapter {
         hostileGroundHeights.clear();
         chasePaths.clear();
         yokaiEntities.clear();
+        yokaiRigRenderer.clear();
 
         for (AsciiMap.YokaiSpawn spawn : map.getYokaiSpawns()) {
             YokaiEncounter encounter = resolveEncounter(spawn);
@@ -1177,6 +1783,59 @@ public class OverworldScreen extends ScreenAdapter {
                 hostileBridge(actor));
             hostileActors.put(hostile, actor);
         }
+
+        // Two gentle ambient archetypes guarantee that the lantern spirit and
+        // the heavy oni appear even on maps whose single Y cell is a kitsune.
+        spawnAmbientYokai("encounter_oni_wild", "oni", "Oni-Gashira",
+            map.getWidth() / 4, map.getHeight() / 2);
+        spawnAmbientYokai("ambient_chochin_obake", "chochin_obake", "Chōchin-Obake",
+            (map.getWidth() * 3) / 4, map.getHeight() / 3);
+    }
+
+    /** Spawns an extra hostile without an encounter-catalog reward. */
+    private void spawnAmbientYokai(String encounterId, String speciesId,
+                                   String displayName, int preferredCol, int preferredRow) {
+        // The Oni encounter is repeatable; the lantern spirit is a one-off
+        // overworld exorcism (it has no purified Shikigami reward).
+        if (!"encounter_oni_wild".equals(encounterId)
+            && runSession.isEncounterDefeated(encounterId)) {
+            return;
+        }
+        AsciiMap.Tile tile = findOpenFloorTile(preferredCol, preferredRow);
+        if (tile == null) {
+            return;
+        }
+        OverworldYokaiEntity actor = new OverworldYokaiEntity(
+            encounterId, speciesId, displayName,
+            OverworldYokaiEntity.WalkAnimations.placeholder(),
+            map.tileCenterX(tile.col()), map.tileCenterY(tile.row()),
+            tileWidth, tileHeight);
+        yokaiEntities.add(actor);
+        Entity hostile = ecs.addHostile(encounterId,
+            actor.getWorldX(), actor.getWorldY(), HOSTILE_RADIUS,
+            HOSTILE_MAX_HEALTH, hostileBridge(actor));
+        hostileActors.put(hostile, actor);
+    }
+
+    /** First plain floor tile in a square search around the preferred cell. */
+    private AsciiMap.Tile findOpenFloorTile(int preferredCol, int preferredRow) {
+        int maxRadius = Math.max(map.getWidth(), map.getHeight());
+        for (int radius = 0; radius <= maxRadius; radius++) {
+            for (int row = preferredRow - radius; row <= preferredRow + radius; row++) {
+                for (int col = preferredCol - radius; col <= preferredCol + radius; col++) {
+                    if (radius > 0
+                        && Math.abs(row - preferredRow) != radius
+                        && Math.abs(col - preferredCol) != radius) {
+                        continue;
+                    }
+                    if (map.isWalkable(col, row)
+                        && map.glyphAt(col, row) == AsciiMap.FLOOR) {
+                        return new AsciiMap.Tile(col, row);
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** Bridges ECS hostile effects onto the roaming ASCII actor. */
@@ -1386,11 +2045,13 @@ public class OverworldScreen extends ScreenAdapter {
             resize(screenWidth, screenHeight);
         }
 
-        // Inventory toggle and pointer capture (FPS mouse look).
-        if (Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+        // Inventory toggle and pointer capture (third-person mouse look).
+        if (Gdx.input.isKeyJustPressed(Input.Keys.I)
+            && (dialogueOverlay == null || !dialogueOverlay.isOpen())) {
             inventoryOverlay.toggle();
         }
-        boolean paused = inventoryOverlay.isOpen();
+        boolean paused = inventoryOverlay.isOpen()
+            || (dialogueOverlay != null && dialogueOverlay.isOpen());
         updateMouseCapture(paused);
 
         // Input snapshot and ability/hanko state.
@@ -1402,23 +2063,36 @@ public class OverworldScreen extends ScreenAdapter {
         syncPlayerIntoEcs();
         syncHostilesIntoEcs();
         ecs.update(delta);
-        applyPlayerMotionToBody();
+        applyPlayerMotionToBody(delta);
 
-        world.step(delta, 6, 2);
+        // Box2D clamps translation to 2 world units per step; in this pixel-scale
+        // world that would cap the 460 px/s dash at the 120 px/s walk speed.
+        // Substep fast frames so Q actually out-runs walking and the ghost trail
+        // spans real distance, while still resolving collisions every step.
+        int substeps = PhysicsSteps.forFrame(player.body.getLinearVelocity().len(), delta);
+        float stepDelta = delta / substeps;
+        for (int i = 0; i < substeps; i++) {
+            world.step(stepDelta, 6, 2);
+        }
 
         player.update(delta, player.body.getLinearVelocity());
         updateYokaiEntities(delta);
         syncPlayerFromBody();
         syncHostilesIntoEcs();
+        updateCollisionChunkCulling();
 
         handleInteractions();
         updateHud();
+        updateCompassBanner(delta);
         updateCamera(delta);
 
-        // 3D heightmap scene -> framebuffer -> ASCII glyph matrix -> screen.
+        // 3D heightmap scene -> native-resolution framebuffer -> atmospheric
+        // post (bloom/Washi/ink-wash outlines) + crisp ASCII magic -> screen.
         asciiPost.setTime(overworldTime);
         asciiPost.begin();
-        renderWorld();
+        renderWorld(delta);
+        // Normal/depth prepass sampled by the cel outline in ascii_post.frag.
+        terrainRenderer.renderEdge(asciiPost.getEdgeFrameBuffer(), camera);
         asciiPost.end();
 
         // Scene2D HUD sits on top of the ASCII matrix.
@@ -1436,10 +2110,10 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     /**
-     * Places the first-person camera on the heightmap above the player's feet.
-     * Box2D X/Y becomes 3D X/-Z, so north in the ASCII map stays north in 3D.
-     * The ground height is smoothed so walking up a hill feels organic instead
-     * of stair-stepped, and clamped above the surface on steep slopes.
+     * Place the third-person rig behind the player: smooth the ground height so
+     * hills do not stair-step, park the shoulder pivot 1.8 units above the feet
+     * and let the controller sweep its collision-clamped boom. Box2D X/Y
+     * becomes 3D X/-Z, so north in the ASCII map stays north in 3D.
      */
     private void updateCamera(float delta) {
         camera.viewportWidth = Math.max(1, Gdx.graphics.getWidth());
@@ -1455,11 +2129,59 @@ public class OverworldScreen extends ScreenAdapter {
         float bob = player.isMoving()
             ? MathUtils.sin(player.getWalkPhase() * 9f) * HEAD_BOB
             : 0f;
-        float eyeY = TerrainFollow.clampAboveGround(
-            cameraGroundHeight + EYE_HEIGHT + bob, ground, EYE_HEIGHT * 0.6f);
 
-        look.applyTo(camera, unitX, eyeY, unitZ);
+        look.getTarget(unitX, cameraGroundHeight, unitZ, cameraTarget);
+        cameraTarget.y += bob;
+        look.applyTo(camera, cameraTarget, terrainSampler, cameraObstacleQuery);
         asciiPost.setCamera(camera);
+    }
+
+    /** Smoothed camera ground, or the fallback before the first frame. */
+    private float groundHeightOr(float fallback) {
+        return Float.isNaN(cameraGroundHeight) ? fallback : cameraGroundHeight;
+    }
+
+    /** Ground height sampler handed to the third-person rig. */
+    private float terrainHeight(float x, float z) {
+        return heightfield.getHeight(x, z);
+    }
+
+    /**
+     * Camera-boom blocker: tall scenery solids (torii pillars, lantern spires,
+     * temple hall/roof, torches, offering box) and the woven boundary fences.
+     * The heightfield itself is handled by the controller's terrain lift.
+     */
+    private boolean isCameraObstructed(float x, float y, float z) {
+        for (int i = 0; i < cameraSolids.size(); i++) {
+            SceneryPlan.Solid solid = cameraSolids.get(i);
+            if (y > solid.topY()) {
+                continue;
+            }
+            // Inverse yaw rotation: world (dx,dz) -> structure local frame.
+            float dx = x - solid.x();
+            float dz = z - solid.z();
+            float cos = MathUtils.cos(solid.yaw());
+            float sin = MathUtils.sin(solid.yaw());
+            float localX = dx * cos - dz * sin;
+            float localZ = dx * sin + dz * cos;
+            if (Math.abs(localX) <= solid.halfWidth()
+                && Math.abs(localZ) <= solid.halfDepth()) {
+                return true;
+            }
+        }
+
+        if (y < heightfield.getHeight(x, z) + FENCE_CAMERA_HEIGHT) {
+            float pixelX = x / WORLD_SCALE;
+            float pixelY = -z / WORLD_SCALE;
+            for (int i = 0; i < cameraWallRuns.size(); i++) {
+                WallLayout.Run run = cameraWallRuns.get(i);
+                if (pixelX >= run.x() && pixelX <= run.x() + run.width()
+                    && pixelY >= run.y() && pixelY <= run.y() + run.height()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Two-way F11 toggle: fullscreen -> 1280x720 window, window -> desktop display mode. */
@@ -1519,11 +2241,14 @@ public class OverworldScreen extends ScreenAdapter {
     // 3D scene contents
     // ------------------------------------------------------------------
 
-    /** Draws the heightmap terrain, world markers, Yokai and combat effects. */
-    private void renderWorld() {
+    /** Draws the heightmap terrain, world markers, player, Yokai and effects. */
+    private void renderWorld(float delta) {
         terrainRenderer.begin(camera, overworldTime);
+        updateBillboardAxes();
         renderInteractionMarkers();
+        updateAndRenderPlayerAvatar(delta);
         renderHostiles();
+        renderVillageNpc(delta);
         renderCombatEffects();
         terrainRenderer.end();
     }
@@ -1563,10 +2288,227 @@ public class OverworldScreen extends ScreenAdapter {
         }
     }
 
-    /** Wild Yokai as high-contrast ASCII billboard assemblies on the hills. */
+    /** Renders the friendly temple NPC + villagers and positions the talk prompt. */
+    private void renderVillageNpc(float delta) {
+        if (player == null) {
+            hideNpcPrompt();
+            return;
+        }
+        Vector2 position = player.body.getPosition();
+        float playerX = position.x * WORLD_SCALE;
+        float playerZ = -position.y * WORLD_SCALE;
+        float nearest = Float.MAX_VALUE;
+        float nearestX = 0f;
+        float nearestY = 0f;
+        float nearestZ = 0f;
+
+        if (villageNpcPlaced) {
+            float dx = playerX - villageNpcWorldX;
+            float dz = playerZ - villageNpcWorldZ;
+            float distance = (float) Math.sqrt(dx * dx + dz * dz);
+            villageNpcRenderer.render(terrainRenderer, villageNpcWorldX, villageNpcWorldZ,
+                villageNpcGround, villageNpcYaw, playerX, playerZ, distance,
+                delta, overworldTime);
+            if (distance < nearest) {
+                nearest = distance;
+                nearestX = villageNpcWorldX;
+                nearestY = villageNpcGround;
+                nearestZ = villageNpcWorldZ;
+            }
+        }
+
+        for (int i = 0; i < villagers.size(); i++) {
+            VillageNpc villager = villagers.get(i);
+            float dx = playerX - villager.x;
+            float dz = playerZ - villager.z;
+            float distance = (float) Math.sqrt(dx * dx + dz * dz);
+            villager.renderer.render(terrainRenderer, villager.x, villager.z,
+                villager.ground, villager.yaw, playerX, playerZ, distance,
+                delta, overworldTime);
+            if (distance < nearest) {
+                nearest = distance;
+                nearestX = villager.x;
+                nearestY = villager.ground;
+                nearestZ = villager.z;
+            }
+        }
+
+        npcPromptX = nearestX;
+        npcPromptY = nearestY;
+        npcPromptZ = nearestZ;
+        updateNpcPrompt(nearest);
+    }
+
+    private void updateNpcPrompt(float distance) {
+        if (npcTalkLabel == null
+            || distance > NPC_INTERACT_RADIUS + 0.8f
+            || (inventoryOverlay != null && inventoryOverlay.isOpen())
+            || (dialogueOverlay != null && dialogueOverlay.isOpen())) {
+            hideNpcPrompt();
+            return;
+        }
+        npcScreen.set(npcPromptX, npcPromptY + 2.08f, npcPromptZ);
+        camera.project(npcScreen);
+        if (npcScreen.z < 0f || npcScreen.z > 1f) {
+            hideNpcPrompt();
+            return;
+        }
+        float screenWidth = Math.max(1f, camera.viewportWidth);
+        float screenHeight = Math.max(1f, camera.viewportHeight);
+        float stageWidth = uiStage.getViewport().getWorldWidth();
+        float stageHeight = uiStage.getViewport().getWorldHeight();
+        float stageX = npcScreen.x / screenWidth * stageWidth;
+        float stageY = npcScreen.y / screenHeight * stageHeight;
+        npcTalkLabel.setPosition(stageX - 70f, stageY);
+        npcTalkLabel.setVisible(true);
+    }
+
+    private void hideNpcPrompt() {
+        if (npcTalkLabel != null) {
+            npcTalkLabel.setVisible(false);
+        }
+    }
+
+    /** true when the player is within talking range of any village NPC. */
+    private boolean isNearVillageNpc() {
+        if (player == null) {
+            return false;
+        }
+        Vector2 position = player.body.getPosition();
+        float playerX = position.x * WORLD_SCALE;
+        float playerZ = -position.y * WORLD_SCALE;
+        float radius2 = NPC_INTERACT_RADIUS * NPC_INTERACT_RADIUS;
+        if (villageNpcPlaced) {
+            float dx = playerX - villageNpcWorldX;
+            float dz = playerZ - villageNpcWorldZ;
+            if (dx * dx + dz * dz <= radius2) {
+                return true;
+            }
+        }
+        for (int i = 0; i < villagers.size(); i++) {
+            VillageNpc villager = villagers.get(i);
+            float dx = playerX - villager.x;
+            float dz = playerZ - villager.z;
+            if (dx * dx + dz * dz <= radius2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Dialogue choice: restore a generous share of HP and spirit/mana. */
+    private void healSpiritFromDialogue() {
+        if (ecs == null) {
+            return;
+        }
+        HealthComponent health = Mappers.HEALTH.get(ecs.getPlayerEntity());
+        if (health != null) {
+            health.heal(health.max * 0.35f);
+        }
+        PlayerComponent playerComponent = ecs.getPlayer();
+        if (playerComponent != null) {
+            playerComponent.mana = Math.min(playerComponent.maxMana,
+                playerComponent.mana + playerComponent.maxMana * 0.25f);
+        }
+        updateHud();
+    }
+
+    /** Dialogue choice: close the conversation and open the deck/inventory. */
+    private void inspectDeckFromDialogue() {
+        if (inventoryOverlay != null && !inventoryOverlay.isOpen()) {
+            inventoryOverlay.toggle();
+            inventoryOverlay.toFront();
+        }
+    }
+
+    /**
+     * Updates and queues the procedural Y2K avatar. It faces the dash, WASD or
+     * camera-aim direction, bounces with the walk phase, leans sharply into a
+     * Q-dash and leaves a two-frame ghost trail behind the dash.
+     */
+    private void updateAndRenderPlayerAvatar(float delta) {
+        if (ecs == null || player == null || avatarRenderer == null) {
+            return;
+        }
+        Vector2 position = player.body.getPosition();
+        float worldX = position.x * WORLD_SCALE;
+        float worldZ = -position.y * WORLD_SCALE;
+        float ground = groundHeightOr(heightfield.getHeight(worldX, worldZ));
+
+        PlayerInput input = ecs.getInput();
+        PlayerComponent avatar = ecs.getPlayer();
+        boolean dashing = avatar != null && avatar.isDashing();
+
+        float faceX;
+        float faceZ;
+        if (dashing) {
+            // The dash system locked the 2D facing to the dash direction.
+            faceX = avatar.facingX;
+            faceZ = -avatar.facingY;
+        } else if (input.hasMoveDirection) {
+            faceX = input.moveDirection.x;
+            faceZ = -input.moveDirection.y;
+        } else {
+            look.getGroundForward(avatarForward2d);
+            faceX = avatarForward2d.x;
+            faceZ = -avatarForward2d.y;
+        }
+
+        float dashProgress = dashing && avatar.dashDuration > 0f
+            ? MathUtils.clamp(1f - avatar.dashRemaining / avatar.dashDuration, 0f, 1f)
+            : 0f;
+        float throwProgress = avatar == null ? 0f
+            : MathUtils.clamp(1f - avatar.throwAnimationRemaining
+                / PlayerComponent.THROW_ANIMATION_DURATION, 0f, 1f);
+
+        float dashX = avatar == null ? faceX : avatar.facingX;
+        float dashZ = avatar == null ? faceZ : -avatar.facingY;
+        Vector2 velocity = player.body.getLinearVelocity();
+        avatarRenderer.update(
+            delta, worldX, worldZ, ground, faceX, faceZ,
+            player.isMoving() || input.hasMoveDirection, player.getWalkPhase(),
+            dashing, dashX, dashZ,
+            velocity.x * WORLD_SCALE, -velocity.y * WORLD_SCALE,
+            dashProgress, throwProgress);
+        avatarRenderer.render(terrainRenderer);
+        renderCardTypeIndicator(worldX, ground, worldZ);
+    }
+
+    /**
+     * Coloured Hanafuda sigil bobbing above the wanderer's head while the 3P
+     * deck cycles or holds a locked card. Kiting players read the next card
+     * without taking their eyes off the enemies.
+     */
+    private void renderCardTypeIndicator(float worldX, float ground, float worldZ) {
+        if (ecs == null) {
+            return;
+        }
+        CardDeckComponent deck = ecs.getPlayerDeck();
+        if (deck == null || !deck.showsBadge()) {
+            return;
+        }
+        CardDeckComponent.CardType type = deck.activeCard();
+        effectColor.set(type.red, type.green, type.blue, 1f);
+        float bob = MathUtils.sin(overworldTime * 3.4f) * 0.055f;
+        float pulse = deck.state == CardDeckComponent.State.SHUFFLING
+            ? 0.34f + 0.025f * MathUtils.sin(overworldTime * 9f)
+            : 0.40f;
+        terrainRenderer.drawBillboard(worldX, ground + 2.16f + bob, worldZ,
+            pulse, pulse, effectColor);
+        effectColor.mul(0.55f, 0.55f, 0.55f, 1f);
+        terrainRenderer.drawBillboard(worldX, ground + 1.98f + bob, worldZ,
+            0.15f, 0.22f, effectColor);
+    }
+
+    /** Wild Yokai as procedural multi-part 3D rigs on the heightfield. */
     private void renderHostiles() {
+        if (player == null) {
+            return;
+        }
         float delta = Math.min(TerrainFollow.MAX_STEP_SECONDS, Gdx.graphics.getDeltaTime());
-        updateBillboardAxes();
+        Vector2 playerPosition = player.body.getPosition();
+        float playerX = playerPosition.x * WORLD_SCALE;
+        float playerZ = -playerPosition.y * WORLD_SCALE;
 
         for (Map.Entry<Entity, OverworldYokaiEntity> entry : hostileActors.entrySet()) {
             OverworldYokaiEntity actor = entry.getValue();
@@ -1583,78 +2525,17 @@ public class OverworldScreen extends ScreenAdapter {
 
             float flash = actor.isHitFlashing()
                 ? MathUtils.clamp(actor.getHitFlashRatio(), 0f, 1f) : 0f;
-            renderYokaiAssembly(worldX, worldZ, ground, actor, health, flash);
-        }
-    }
-
-    /**
-     * Draws one Yokai as a stack of camera-facing ink islands: shadow, body,
-     * head, two white eyes, horns and a health band. The assembly reads as a
-     * creature in the terminal matrix instead of a solid block.
-     */
-    private void renderYokaiAssembly(float worldX, float worldZ, float ground,
-                                     OverworldYokaiEntity actor, HealthComponent health,
-                                     float flash) {
-        // Ground shadow keeps the silhouette anchored on the terrain.
-        effectColor.set(0.035f, 0.055f, 0.040f, 1f);
-        terrainRenderer.drawGroundQuad(worldX, worldZ, 0.46f, effectColor);
-
-        // Red aggro ring while the Yokai is actively chasing the player.
-        if (actor.isAggro()) {
-            float pulse = 0.55f + 0.45f * MathUtils.sin(overworldTime * 6f);
-            effectColor.set(0.55f * pulse, 0.12f * pulse, 0.12f * pulse, 1f);
-            terrainRenderer.drawGroundQuad(worldX, worldZ, 0.68f, effectColor);
-        }
-
-        // Body: pale spirit ink, white-hot on a fresh hit.
-        effectColor.set(0.78f, 0.88f, 0.62f, 1f);
-        if (flash > 0f) {
-            effectColor.lerp(Color.WHITE, flash);
-        } else if (health != null && health.ratio() < 1f) {
-            effectColor.lerp(COLOR_YOKAI_WOUNDED, (1f - health.ratio()) * 0.6f);
-        }
-        terrainRenderer.drawBillboard(worldX, ground + 0.12f, worldZ,
-            0.92f, 0.92f, effectColor);
-
-        // Head.
-        effectColor.set(0.95f, 0.99f, 0.82f, 1f);
-        if (flash > 0f) {
-            effectColor.lerp(Color.WHITE, flash);
-        }
-        terrainRenderer.drawBillboard(worldX, ground + 1.02f, worldZ,
-            0.64f, 0.50f, effectColor);
-
-        // Eyes: two high-contrast dots offset along the camera-right axis.
-        effectColor.set(1f, 1f, 1f, 1f);
-        float eyeOffset = 0.15f;
-        float rightX = billboardRightX;
-        float rightZ = billboardRightZ;
-        terrainRenderer.drawBillboard(worldX + rightX * eyeOffset,
-            ground + 1.22f, worldZ + rightZ * eyeOffset, 0.11f, 0.11f, effectColor);
-        terrainRenderer.drawBillboard(worldX - rightX * eyeOffset,
-            ground + 1.22f, worldZ - rightZ * eyeOffset, 0.11f, 0.11f, effectColor);
-
-        // Horns: two small tilted strokes above the head.
-        effectColor.set(0.88f, 0.94f, 0.72f, 1f);
-        if (flash > 0f) {
-            effectColor.lerp(Color.WHITE, flash);
-        }
-        terrainRenderer.drawBillboard(worldX + rightX * 0.22f,
-            ground + 1.48f, worldZ + rightZ * 0.22f, 0.10f, 0.30f, effectColor, 0.42f);
-        terrainRenderer.drawBillboard(worldX - rightX * 0.22f,
-            ground + 1.48f, worldZ - rightZ * 0.22f, 0.10f, 0.30f, effectColor, -0.42f);
-
-        // Health band above the Yokai once it took damage.
-        if (health != null && health.ratio() < 1f) {
-            float ratio = MathUtils.clamp(health.ratio(), 0f, 1f);
-            effectColor.set(0.95f, 0.30f, 0.28f, 1f);
-            terrainRenderer.drawBillboard(worldX, ground + 1.78f, worldZ,
-                0.80f * ratio + 0.06f, 0.06f, effectColor);
+            yokaiRigRenderer.render(terrainRenderer, actor, health,
+                worldX, worldZ, ground, playerX, playerZ,
+                billboardRightX, billboardRightZ, flash, delta, overworldTime);
         }
     }
 
     /** Seals, cards, bursts, auras, sparks and particles in 3D. */
     private void renderCombatEffects() {
+        yokaiRigRenderer.renderDefeatBursts(terrainRenderer,
+            Math.min(TerrainFollow.MAX_STEP_SECONDS, Gdx.graphics.getDeltaTime()));
+        renderLockOnRing();
         renderSealDecals();
         renderFlyingCards();
         renderCardBursts();
@@ -1663,8 +2544,33 @@ public class OverworldScreen extends ScreenAdapter {
     }
 
     // ------------------------------------------------------------------
-    // Seals: Hanko ground decals + spinning Karma rune sigils
+    // Seals: procedural Kamon crests on ground zones and lock-on targets
     // ------------------------------------------------------------------
+
+    /**
+     * Azure Kamon lock-on ring under the right-click target. It shares the
+     * polar crest shader with Karma zones, but always selects the eight-spoke
+     * wheel motif via its cool colour.
+     */
+    private void renderLockOnRing() {
+        if (lockOnTarget == null || lockOnRemaining <= 0f) {
+            return;
+        }
+        HealthComponent health = Mappers.HEALTH.get(lockOnTarget);
+        TransformComponent transform = Mappers.TRANSFORM.get(lockOnTarget);
+        if ((health != null && health.isDead()) || transform == null) {
+            lockOnTarget = null;
+            return;
+        }
+        float fade = MathUtils.clamp(lockOnRemaining / 3.0f, 0f, 1f);
+        float pulse = 0.75f + 0.25f * MathUtils.sin(overworldTime * 8f);
+        effectColor.set(KAMON_AZURE.r * fade * pulse, KAMON_AZURE.g * fade * pulse,
+            KAMON_AZURE.b * fade * pulse, 1f);
+        float worldX = transform.x * WORLD_SCALE;
+        float worldZ = -transform.y * WORLD_SCALE;
+        terrainRenderer.drawKamonSeal(worldX, worldZ, 0.55f, effectColor,
+            overworldTime * 0.25f);
+    }
 
     private void renderSealDecals() {
         for (Entity entity : ecs.getEngine().getEntitiesFor(SEAL_ENTITIES)) {
@@ -1679,42 +2585,33 @@ public class OverworldScreen extends ScreenAdapter {
             float radiusUnits = seal.currentRadius() * WORLD_SCALE;
             float worldX = transform.x * WORLD_SCALE;
             float worldZ = -transform.y * WORLD_SCALE;
-            float ground = heightfield.getHeight(worldX, worldZ);
 
-            effectColor.set(seal.red * fade * pulse,
-                seal.green * fade * pulse, seal.blue * fade * pulse, 1f);
-            terrainRenderer.drawGroundQuad(worldX, worldZ,
-                Math.max(0.12f, radiusUnits * 0.9f), effectColor);
-
-            // Karma rune fields carry glyphs: float a spinning sigil billboard
-            // over the ground decal so the seal reads in first person.
-            if (fade > 0.05f && isRuneSeal(seal.label)) {
-                float size = MathUtils.clamp(radiusUnits * 0.75f, 0.45f, 2.8f);
-                terrainRenderer.drawBillboard(worldX, ground + size * 0.35f, worldZ,
-                    size, size, effectColor, seal.age * 2.4f);
-            }
+            // Karma rune fields read as vermillion sakura crests; Hanko seals
+            // keep their configured ink colour.
+            boolean karma = seal.label != null && seal.label.indexOf('*') >= 0;
+            float sealRed = karma ? KAMON_VERMILLION.r : seal.red;
+            float sealGreen = karma ? KAMON_VERMILLION.g : seal.green;
+            float sealBlue = karma ? KAMON_VERMILLION.b : seal.blue;
+            effectColor.set(sealRed * fade * pulse,
+                sealGreen * fade * pulse, sealBlue * fade * pulse, 1f);
+            // The procedural Kamon crest replaces the old glyph ring entirely:
+            // concentric rings, radial ticks and a sakura/wheel motif are drawn
+            // in polar space by kamon_seal.frag.
+            float phase = seal.age * 0.22f + worldX * 0.07f + worldZ * 0.11f;
+            terrainRenderer.drawKamonSeal(worldX, worldZ,
+                Math.max(0.12f, radiusUnits * 0.9f), effectColor, phase);
         }
-    }
-
-    /** Karma fields use rotated rune ink; Hanko seals use plain names. */
-    private static boolean isRuneSeal(String label) {
-        if (label == null) {
-            return false;
-        }
-        for (int i = 0; i < label.length(); i++) {
-            char glyph = label.charAt(i);
-            if (glyph == '*' || glyph == '+' || glyph == 'x' || glyph == '/'
-                || glyph == '\\' || glyph == '|') {
-                return true;
-            }
-        }
-        return false;
     }
 
     // ------------------------------------------------------------------
     // Flying cards: billboards travelling along the crosshair ray
     // ------------------------------------------------------------------
 
+    /**
+     * Thin, rapidly tumbling 3D Hanafuda cards with a type-coloured trail.
+     * The simulation destroys cards that dip into the terrain or hit a wall,
+     * so this renderer never clamps (slides) a card along a hillside.
+     */
     private void renderFlyingCards() {
         for (Entity entity : ecs.getEngine().getEntitiesFor(CARD_ENTITIES)) {
             CardProjectileComponent card = Mappers.CARD_PROJECTILE.get(entity);
@@ -1725,24 +2622,128 @@ public class OverworldScreen extends ScreenAdapter {
 
             float worldX = transform.x * WORLD_SCALE;
             float worldZ = -transform.y * WORLD_SCALE;
-            float ground = heightfield.getHeight(worldX, worldZ);
-
-            // Locked cards launched by R + LMB follow the camera ray; the
-            // height comes from the ray pitch and is clamped above the hills.
             float height = card.hasWorldRay
                 ? card.worldHeight(WORLD_SCALE)
-                : ground + 0.9f;
-            height = TerrainFollow.clampAboveGround(height, ground, 0.22f);
+                : heightfield.getHeight(worldX, worldZ) + 0.9f;
 
-            float roll = overworldTime * 4.2f + card.travelled * 0.015f;
+            float speed = (float) Math.sqrt(card.vx * card.vx + card.vy * card.vy);
+            if (speed < 0.0001f) {
+                continue;
+            }
+            float dirX = card.vx / speed;
+            float dirY = card.vy / speed;
+
             effectColor.set(card.red, card.green, card.blue, 1f);
-            terrainRenderer.drawBillboard(worldX, height - 0.36f, worldZ,
-                0.58f, 0.72f, effectColor, roll);
+            drawCard(worldX, height, worldZ, dirX, dirY, card, 0, effectColor);
 
-            // Soft ground glow anchors the card on the hillside.
-            effectColor.mul(0.42f, 0.42f, 0.42f, 1f);
-            terrainRenderer.drawGroundQuad(worldX, worldZ, 0.24f, effectColor);
+            // One continuous tapered sumi-brush ribbon behind the card. It is
+            // a procedural shader strip, not a glyph afterimage.
+            float ribbonBack = Math.min(CARD_TRAIL_SPACING * CARD_TRAIL_STEPS,
+                card.travelled);
+            if (ribbonBack > 1f) {
+                float tailX = worldX - dirX * ribbonBack * WORLD_SCALE;
+                float tailZ = worldZ + dirY * ribbonBack * WORLD_SCALE;
+                float tailY = card.hasWorldRay
+                    ? card.worldHeightAt(card.travelled - ribbonBack, WORLD_SCALE)
+                    : height;
+                effectColor.set(card.trailRed * 0.58f, card.trailGreen * 0.58f,
+                    card.trailBlue * 0.58f, 1f);
+                terrainRenderer.drawInkRibbon(tailX, tailY, tailZ,
+                    worldX, height, worldZ, 0.13f, effectColor);
+            }
+
+            // Type-coloured afterimages behind the card.
+            for (int i = 1; i <= CARD_TRAIL_STEPS; i++) {
+                float back = CARD_TRAIL_SPACING * i;
+                if (card.travelled <= back) {
+                    break;
+                }
+                float trailX = worldX - dirX * back * WORLD_SCALE;
+                float trailZ = worldZ + dirY * back * WORLD_SCALE;
+                float trailY = card.hasWorldRay
+                    ? card.worldHeightAt(card.travelled - back, WORLD_SCALE)
+                    : height;
+                float fade = 0.72f - i * 0.17f;
+                effectColor.set(card.trailRed * fade, card.trailGreen * fade,
+                    card.trailBlue * fade, fade);
+                drawCard(trailX, trailY, trailZ, dirX, dirY, card, i, effectColor);
+            }
         }
+    }
+
+    /**
+     * Procedural Hanafuda card plate. Its long axis follows the flight and its
+     * face tumbles end-over-end around the width axis (Twisted Fate style).
+     */
+    private void drawCard(float x, float y, float z, float dirX, float dirY,
+                          CardProjectileComponent card, int trailIndex, Color color) {
+        float flightX = dirX;
+        float flightZ = -dirY;
+        float flightY = card.hasWorldRay ? card.rayDirY : 0f;
+        float flightLength = (float) Math.sqrt(
+            flightX * flightX + flightY * flightY + flightZ * flightZ);
+        if (flightLength < 0.0001f) {
+            return;
+        }
+        flightX /= flightLength;
+        flightY /= flightLength;
+        flightZ /= flightLength;
+
+        // Width axis = flight x worldUp; face normal = width x flight.
+        float sideX = -flightZ;
+        float sideZ = flightX;
+        float sideLength = (float) Math.sqrt(sideX * sideX + sideZ * sideZ);
+        if (sideLength < 0.0001f) {
+            sideX = 1f;
+            sideZ = 0f;
+        } else {
+            sideX /= sideLength;
+            sideZ /= sideLength;
+        }
+        float normalX = -sideZ * flightY;
+        float normalY = sideZ * flightX - sideX * flightZ;
+        float normalZ = sideX * flightY;
+        float normalLength = (float) Math.sqrt(
+            normalX * normalX + normalY * normalY + normalZ * normalZ);
+        if (normalLength < 0.0001f) {
+            normalX = 0f;
+            normalY = 1f;
+            normalZ = 0f;
+        } else {
+            normalX /= normalLength;
+            normalY /= normalLength;
+            normalZ /= normalLength;
+        }
+
+        float spin = (card.travelled - trailIndex * CARD_TRAIL_SPACING)
+            * CARD_SPIN_PER_PIXEL;
+        float cos = MathUtils.cos(spin);
+        float sin = MathUtils.sin(spin);
+        float longX = flightX * cos + normalX * sin;
+        float longY = flightY * cos + normalY * sin;
+        float longZ = flightZ * cos + normalZ * sin;
+        float faceX = normalX * cos - flightX * sin;
+        float faceY = normalY * cos - flightY * sin;
+        float faceZ = normalZ * cos - flightZ * sin;
+
+        // Secondary drill roll around the card's flight axis.
+        float roll = spin * 0.35f;
+        float rollCos = MathUtils.cos(roll);
+        float rollSin = MathUtils.sin(roll);
+        float rolledSideX = sideX * rollCos + faceX * rollSin;
+        float rolledSideY = faceY * rollSin;
+        float rolledSideZ = sideZ * rollCos + faceZ * rollSin;
+
+        float scale = Math.max(0.55f, 1f - trailIndex * 0.14f);
+        cardCenter.set(x, y, z);
+        cardSide.set(rolledSideX, rolledSideY, rolledSideZ);
+        cardLong.set(longX, longY, longZ);
+        float width = CARD_WIDTH * scale;
+        float length = CARD_LENGTH * scale;
+        // Procedural Hanafuda face: sumi border, inner archetype motif and a
+        // small ink signature, drawn directly in 3D without an atlas.
+        terrainRenderer.drawHanafudaCard(cardCenter, cardSide, cardLong,
+            width, length, color);
     }
 
     // ------------------------------------------------------------------
@@ -1768,7 +2769,16 @@ public class OverworldScreen extends ScreenAdapter {
             float worldZ = -transform.y * WORLD_SCALE;
             float ground = heightfield.getHeight(worldX, worldZ);
             float glow = 0.35f + 0.65f * alpha;
-            effectColor.set(burst.red * glow, burst.green * glow, burst.blue * glow, 1f);
+            switch (burst.style) {
+                case PETAL -> effectColor.set(KAMON_VERMILLION.r * glow,
+                    KAMON_VERMILLION.g * glow, KAMON_VERMILLION.b * glow, 1f);
+                case RIBBON -> effectColor.set(KAMON_AZURE.r * glow,
+                    KAMON_AZURE.g * glow, KAMON_AZURE.b * glow, 1f);
+                case BEAST -> effectColor.set(KAMON_GOLD.r * glow,
+                    KAMON_GOLD.g * glow, KAMON_GOLD.b * glow, 1f);
+                default -> effectColor.set(burst.red * glow, burst.green * glow,
+                    burst.blue * glow, 1f);
+            }
 
             switch (burst.style) {
                 case PETAL -> renderPetalBurst(burst, worldX, worldZ, radius);
@@ -1798,7 +2808,8 @@ public class OverworldScreen extends ScreenAdapter {
             terrainRenderer.drawBillboard(px, py, pz, size, size,
                 effectColor, (float) angle);
         }
-        terrainRenderer.drawGroundQuad(worldX, worldZ, radius * 0.85f, effectColor);
+        terrainRenderer.drawKamonSeal(worldX, worldZ, radius * 0.85f,
+            effectColor, burst.spin / (float) (Math.PI * 2.0));
     }
 
     /** Cool Ribbon burst: a horizontal wave of wide ink strokes. */
@@ -1810,7 +2821,8 @@ public class OverworldScreen extends ScreenAdapter {
             terrainRenderer.drawBillboard(px, py, worldZ, 0.55f, 0.20f,
                 effectColor, burst.spin + i * 0.35f);
         }
-        terrainRenderer.drawGroundQuad(worldX, worldZ, Math.max(0.2f, radius), effectColor);
+        terrainRenderer.drawKamonSeal(worldX, worldZ, Math.max(0.2f, radius),
+            effectColor, burst.spin / (float) (Math.PI * 2.0));
     }
 
     /** Heavy Beast burst: three tall, tumbling horn/beast strokes. */
@@ -1824,7 +2836,8 @@ public class OverworldScreen extends ScreenAdapter {
             terrainRenderer.drawBillboard(px, py, pz, 0.34f, 0.85f,
                 effectColor, (float) angle + 1.25f);
         }
-        terrainRenderer.drawGroundQuad(worldX, worldZ, Math.max(0.2f, radius), effectColor);
+        terrainRenderer.drawKamonSeal(worldX, worldZ, Math.max(0.2f, radius),
+            effectColor, burst.spin / (float) (Math.PI * 2.0));
     }
 
     /** White-ink card hit flash: a hot cross of billboards at the enemy. */
@@ -1842,31 +2855,21 @@ public class OverworldScreen extends ScreenAdapter {
         terrainRenderer.drawGroundQuad(worldX, worldZ, radius * 0.7f + 0.12f, effectColor);
     }
 
-    /** Karma rune ring: rotating green ink glyphs stamped on the ground. */
+    /** Karma rune ring: a procedural Kamon crest stamped on the ground. */
     private void renderRuneBurst(CardBurstComponent burst, float worldX, float worldZ,
                                  float radius) {
-        float glyphSize = 0.14f + 0.18f * burst.alpha();
-        int runes = 10;
-        for (int i = 0; i < runes; i++) {
-            double angle = burst.spin + i * (Math.PI * 2.0 / runes);
-            float px = worldX + (float) Math.cos(angle) * radius;
-            float pz = worldZ + (float) Math.sin(angle) * radius;
-            float py = heightfield.getHeight(px, pz) + 0.06f;
-            terrainRenderer.drawBillboard(px, py, pz, glyphSize, glyphSize,
-                effectColor, (float) angle);
-        }
-        float ground = heightfield.getHeight(worldX, worldZ);
-        float seal = Math.max(0.30f, radius * 0.5f);
-        terrainRenderer.drawBillboard(worldX, ground + 0.10f, worldZ, seal, seal,
-            effectColor, burst.spin * 1.6f);
-        terrainRenderer.drawGroundQuad(worldX, worldZ, radius * 0.9f, effectColor);
+        // Kamon geometry is generated in polar coordinates by the shader; the
+        // burst's spin becomes the seal's per-instance phase offset.
+        terrainRenderer.drawKamonSeal(worldX, worldZ,
+            Math.max(0.20f, radius * 0.9f), effectColor,
+            burst.spin / (float) (Math.PI * 2.0));
     }
 
     // ------------------------------------------------------------------
     // Beast-Yaku lifesteal aura
     // ------------------------------------------------------------------
 
-    /** Pulsing red aura drawn around the player while lifesteal is active. */
+    /** Pulsing gold Beast Kamon aura drawn around the player while lifesteal is active. */
     private void renderLifestealAura() {
         PlayerComponent playerComponent = ecs.getPlayer();
         if (playerComponent == null || playerComponent.lifestealRemaining <= 0f) {
@@ -1880,9 +2883,11 @@ public class OverworldScreen extends ScreenAdapter {
         float pulse = 0.55f + 0.45f * MathUtils.sin(overworldTime * 8f);
         float strength = MathUtils.clamp(
             playerComponent.lifestealPercent * 2.5f, 0.4f, 1f) * pulse;
-        effectColor.set(0.92f * strength, 0.26f * strength, 0.30f * strength, 1f);
+        effectColor.set(KAMON_GOLD.r * strength, KAMON_GOLD.g * strength,
+            KAMON_GOLD.b * strength, 1f);
 
-        terrainRenderer.drawGroundQuad(worldX, worldZ, 0.85f + pulse * 0.2f, effectColor);
+        terrainRenderer.drawKamonSeal(worldX, worldZ, 0.85f + pulse * 0.2f,
+            effectColor, overworldTime * 0.3f);
         float auraHeight = ground + 0.35f + pulse * 0.55f;
         for (int i = 0; i < 4; i++) {
             double angle = overworldTime * 1.6 + i * (Math.PI * 0.5);
@@ -1955,9 +2960,11 @@ public class OverworldScreen extends ScreenAdapter {
      * Tavernentuer ({@code T}), Shop ({@code S}) und Schrein ({@code H}).
      */
     private void handleInteractions() {
-        if (inventoryOverlay.isOpen()) {
+        if (inventoryOverlay.isOpen()
+            || (dialogueOverlay != null && dialogueOverlay.isOpen())) {
             promptLabel.setVisible(false);
             crosshairLabel.setVisible(false);
+            hideNpcPrompt();
             return;
         }
         crosshairLabel.setVisible(true);
@@ -1968,27 +2975,38 @@ public class OverworldScreen extends ScreenAdapter {
         boolean ePressed = Gdx.input.isKeyJustPressed(Input.Keys.E);
         boolean nearAnyManualTrigger = false;
 
+        // --- 0. FRIENDLY TEMPLE NPC: opens the merchant conversation. ---
+        if (isNearVillageNpc()) {
+            promptLabel.setText(" Press [E] : Talk to Shrine Maiden ");
+            promptLabel.setVisible(true);
+            if (ePressed && dialogueOverlay != null && !dialogueOverlay.isOpen()) {
+                dialogueOverlay.open();
+                dialogueOverlay.toFront();
+                promptLabel.setVisible(false);
+                hideNpcPrompt();
+                Gdx.app.log("OverworldScreen",
+                    "Opening shrine-maiden dialogue at the temple entrance.");
+            }
+            return;
+        }
+
         // --- 1. WILDES YOKAI: Kontakt ueber die AKTUELLE Entity-Position. ---
         OverworldYokaiEntity contactedYokai = findContactedYokai();
-        if (contactedYokai != null && !automaticCombatLocked) {
-            YokaiEncounter contactedEncounter =
-                YokaiEncounterCatalog.findById(contactedYokai.getEncounterId());
-            if (contactedEncounter == null) {
-                Gdx.app.error("OverworldScreen", "No encounter defined for contact with Yokai '"
-                    + contactedYokai.getEncounterId() + "'. No battle started.");
-            } else {
-                // Sofort sperren, damit bis zum verzoegerten Screen-Wechsel kein zweiter
-                // Kampf eingeplant werden kann. Die Sperre endet erst, wenn der Spieler das
-                // Yokai wieder verlassen hat (kein Sofort-Retrigger nach der Rueckkehr).
-                automaticCombatLocked = true;
+        YokaiEncounter contactedEncounter = contactedYokai == null ? null
+            : YokaiEncounterCatalog.findById(contactedYokai.getEncounterId());
+        if (contactedYokai != null && contactedEncounter != null
+            && !automaticCombatLocked) {
+            // Sofort sperren, damit bis zum verzoegerten Screen-Wechsel kein zweiter
+            // Kampf eingeplant werden kann. Die Sperre endet erst, wenn der Spieler das
+            // Yokai wieder verlassen hat (kein Sofort-Retrigger nach der Rueckkehr).
+            automaticCombatLocked = true;
 
-                runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
-                promptLabel.setVisible(false);
+            runSession.setLastPlayerPosition(playerPos.x, playerPos.y);
+            promptLabel.setVisible(false);
 
-                ((KoiKoiGame) Gdx.app.getApplicationListener())
-                    .changeScreen(new GameScreen(runSession, assets, contactedEncounter));
-                return;
-            }
+            ((KoiKoiGame) Gdx.app.getApplicationListener())
+                .changeScreen(new GameScreen(runSession, assets, contactedEncounter));
+            return;
         }
 
         // --- 2. TAVERNENTUER: startet den bestehenden Kartenkampf (GameScreen). ---
@@ -2054,6 +3072,16 @@ public class OverworldScreen extends ScreenAdapter {
         }
     }
 
+    /** True when {@code E} would open the tavern, shop or shrine under the player. */
+    private boolean isNearManualTrigger() {
+        Vector2 position = player.body.getPosition();
+        interactionBox.set(position.x - 24f, position.y - 12f, 48f, 48f);
+        return firstOverlapping(tavernTiles) != null
+            || firstOverlapping(shopTiles) != null
+            || firstOverlapping(shrineTiles) != null
+            || isNearVillageNpc();
+    }
+
     /** Erste Interaktionszelle, deren Kachel die Interaktionsbox beruehrt (oder {@code null}). */
     private AsciiMap.Tile firstOverlapping(List<AsciiMap.Tile> tiles) {
         for (int i = 0; i < tiles.size(); i++) {
@@ -2099,10 +3127,23 @@ public class OverworldScreen extends ScreenAdapter {
             ecs.clear();
             ecs = null;
         }
+        yokaiRigRenderer.clear();
+        if (dialogueOverlay != null) {
+            dialogueOverlay.dispose();
+            dialogueOverlay = null;
+        }
+        villageNpcPlaced = false;
+        sceneryPlan = null;
         if (uiStage != null) {
             uiStage.dispose();
             uiStage = null;
         }
+        // The HUD owns its 1x1 backing pixel; the stage only borrowed it.
+        if (hudPixelTexture != null) {
+            hudPixelTexture.dispose();
+            hudPixelTexture = null;
+        }
+        hudPixelRegion = null;
 
         // 3. Pure data of this screen setup.
         hostileActors.clear();
@@ -2113,11 +3154,19 @@ public class OverworldScreen extends ScreenAdapter {
         tavernTiles.clear();
         shopTiles.clear();
         shrineTiles.clear();
-        hudLabel = null;
-        cardHudLabel = null;
-        cardHudState = null;
+        healthBar = null;
+        manaBar = null;
+        dashBar = null;
+        healthValueLabel = null;
+        manaValueLabel = null;
+        dashValueLabel = null;
+        hudStatusLabel = null;
+        cardStateLabel = null;
+        cardSlots = null;
         crosshairLabel = null;
         promptLabel = null;
+        npcTalkLabel = null;
+        hudLabelStyle = null;
 
         // Skin, atlas, panel/button textures are borrowed (owner: GameAssets)
         // and must never be disposed here.

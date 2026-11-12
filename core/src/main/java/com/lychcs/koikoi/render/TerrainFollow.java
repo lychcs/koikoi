@@ -1,7 +1,7 @@
 package com.lychcs.koikoi.render;
 
 /**
- * Smooth terrain-following helpers for the first-person camera and 3D entities.
+ * Smooth terrain-following helpers for the third-person camera and 3D entities.
  *
  * <p>Sampling the heightfield directly every frame makes the camera snap on
  * every terrain vertex. These helpers ease the current height towards the

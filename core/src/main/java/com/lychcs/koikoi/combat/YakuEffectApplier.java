@@ -124,7 +124,7 @@ public final class YakuEffectApplier {
             0.40f, 0.95f, 0.50f);
     }
 
-    /** Ribbon: mana refund, W-card reset and companion cooldown relief. */
+    /** Ribbon: mana refund, 3P-card reset and companion cooldown relief. */
     public void applyResourceRefund() {
         applyResourceRefund(Float.NaN, Float.NaN);
     }

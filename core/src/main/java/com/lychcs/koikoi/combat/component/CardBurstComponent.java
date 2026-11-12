@@ -6,11 +6,11 @@ import com.badlogic.ashley.core.Component;
  * Short-lived 3D impact effect of a thrown card.
  *
  * <p>The projectile system spawns one burst at every card impact. The overworld
- * renders it as camera-facing billboards (and a ground ring) on the heightmap:
- * petal blossoms for the Hikari card, a horizontal ribbon wave for the Ribbon
- * card, heavy beast strokes for the Beast card, and a small parchment flash for
- * a basic throw. Radii are kept in world pixels, matching the 2D combat data;
- * the screen converts them with its world scale.</p>
+ * renders camera-facing billboards plus a procedural Kamon ground crest on the
+ * heightmap: petal blossoms for the Hikari card, a horizontal ribbon wave for
+ * the Ribbon card, heavy beast strokes for the Beast card, and a small parchment
+ * flash for a basic throw. Radii are kept in world pixels, matching the 2D
+ * combat data; the screen converts them with its world scale.</p>
  */
 public final class CardBurstComponent implements Component {
 

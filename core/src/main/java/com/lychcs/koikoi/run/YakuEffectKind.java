@@ -7,7 +7,7 @@ public enum YakuEffectKind {
     KARMA_FIELD,
     /** Temporary on-hit healing as a percentage of card damage. */
     LIFESTEAL,
-    /** Mana refund plus an instant W-card cooldown reset. */
+    /** Mana refund plus an instant 3P-card cooldown reset. */
     RESOURCE_REFUND,
     /** AoE slow/status spread with petal particles. */
     PETAL_SPREAD

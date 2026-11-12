@@ -5,7 +5,7 @@ package com.lychcs.koikoi.render;
  *
  * <p>The field covers a square patch of world space (libGDX units, 1 unit =
  * one 64 px map tile) and stores one height per grid vertex. Height queries
- * are bilinearly interpolated, so the first-person camera, billboards and seal
+ * are bilinearly interpolated, so the third-person camera, billboards and seal
  * decals all follow the same smooth surface the terrain mesh is built from.</p>
  *
  * <p>Terrain is generated with fractal simplex noise ({@link SimplexNoise}) and
@@ -241,6 +241,49 @@ public final class Heightfield {
                 float smooth = t * t * (3f - 2f * t);
                 float jagged = 0.78f + 0.44f * hash01(col, row);
                 heights[row * perSide + col] += rimHeight * smooth * jagged;
+            }
+        }
+        recomputeBounds();
+    }
+
+    /**
+     * Raises a square mountain ring (Chebyshev distance from the hub) with four
+     * narrow cardinal gaps, so the four seasonal realms are separated by a
+     * visible ridge but stay connected through the paved passes.
+     *
+     * @param centerX      world X of the hub centre
+     * @param centerZ      world Z of the hub centre
+     * @param radius       Chebyshev distance of the ridge crest in world units
+     * @param width        ridge width in world units
+     * @param height       peak raise in world units
+     * @param gateHalfWidth half width of the four cardinal passes
+     */
+    public void raiseChebyshevRing(float centerX, float centerZ,
+                                   float radius, float width, float height,
+                                   float gateHalfWidth) {
+        if (!(radius > 0f) || !(width > 0f) || !(height > 0f)) {
+            return;
+        }
+        int perSide = resolution + 1;
+        float halfWidth = width * 0.5f;
+        for (int row = 0; row < perSide; row++) {
+            float z = getZ(row);
+            float dz = z - centerZ;
+            for (int col = 0; col < perSide; col++) {
+                float x = getX(col);
+                float dx = x - centerX;
+                if (Math.abs(dx) <= gateHalfWidth || Math.abs(dz) <= gateHalfWidth) {
+                    continue; // narrow cardinal pass
+                }
+                float chebyshev = Math.max(Math.abs(dx), Math.abs(dz));
+                float edge = Math.abs(chebyshev - radius);
+                if (edge >= halfWidth) {
+                    continue;
+                }
+                float t = 1f - edge / halfWidth;
+                float smooth = t * t * (3f - 2f * t);
+                float jagged = 0.82f + 0.36f * hash01(col, row);
+                heights[row * perSide + col] += height * smooth * jagged;
             }
         }
         recomputeBounds();
